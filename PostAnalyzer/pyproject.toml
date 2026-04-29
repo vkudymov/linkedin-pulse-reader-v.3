@@ -1,0 +1,24 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "post-analyzer"
+version = "0.1.0"
+description = "A small, source-agnostic library for filtering posts and generating comments via an injected LLM client."
+requires-python = ">=3.10"
+license = { text = "MIT" }
+authors = [{ name = "PostAnalyzer" }]
+dependencies = []
+
+[project.optional-dependencies]
+test = ["pytest>=8"]
+
+[tool.setuptools]
+package-dir = { "" = "src" }
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
