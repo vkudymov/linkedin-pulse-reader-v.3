@@ -1,0 +1,5 @@
+[
+  {"id": 1, "title": "Пост A", "tag": "news", "active": true},
+  {"id": 2, "title": "Пост B", "tag": "tech", "active": false},
+  {"id": 3, "title": "Пост C", "tag": "news", "active": true}
+]
