@@ -1,0 +1,36 @@
+---
+description: Step-by-step LinkedIn feed RCA and stability guardrails
+alwaysApply: true
+---
+
+# LinkedIn Feed Stability Rule
+
+## Workflow
+- Run RCA in single-stage iterations only (no all-at-once analysis).
+- After each stage, stop and wait for user confirmation ("continue").
+- Do not revisit already confirmed stages unless explicitly requested.
+- Prefer minimal targeted fixes; avoid broad refactors.
+
+## Stage Order
+1. Page Load / Navigation
+2. Scroll Logic
+3. DOM / Selectors
+4. Async / Timing
+5. Data Extraction
+6. Retry / Stability
+
+## Critical Guardrails
+- If feed readiness times out and post anchors count is zero, escalate as failure.
+- In scroll loops, treat progress as data growth (`after_len > before_len`), not just scroll movement.
+- Trigger retry on repeated empty-feed / empty-read states.
+- Add local retry (2-3 attempts) for `post_url` extraction after copy-link action.
+- If primary text anchor is absent, use selector fallback for `read_posts`.
+- Avoid noisy container matches unless container has post-like signals.
+
+## Required Diagnostics
+- Log `url_source` (`dom|menu|none`), `url_found`, `container_key`, and `attempt`.
+- Log per-iteration `before_len`, `after_len`, and stagnation counters.
+
+## Good vs Bad
+- Bad: Continue parsing right after readiness timeout with zero anchors.
+- Good: Fail fast, retry once, then parse only when anchors/data appear.

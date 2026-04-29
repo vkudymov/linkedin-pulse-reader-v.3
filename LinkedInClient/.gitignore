@@ -1,0 +1,20 @@
+.DS_Store
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+.venv/
+venv/
+dist/
+build/
+*.egg-info/
+
+# Local runner artifacts (never commit real cookies)
+run/cookies.json
+run/posts.json
+run/artifacts/
+
