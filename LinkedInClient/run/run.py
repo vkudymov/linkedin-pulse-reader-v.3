@@ -1,10 +1,9 @@
 from __future__ import annotations
 
 import argparse
-import json
 import sys
+from contextlib import suppress
 from pathlib import Path
-from typing import Any
 
 # EN: Repo-local runner. We add ./src to sys.path so this script can be Run/Debugged
 #     directly from Cursor without requiring `pip install -e .`.
@@ -20,53 +19,17 @@ from linkedin_client.browser import BrowserConfig
 from linkedin_client.exceptions import LoginRequiredError
 
 
-def _load_cookies(path: Path) -> list[dict[str, Any]] | None:
-    # EN: Cookies are stored as Playwright's JSON list (array of cookie objects).
-    # RU: Cookies хранятся в формате Playwright (JSON-массив объектов cookies).
-    if not path.exists():
-        return None
-    raw = json.loads(path.read_text(encoding="utf-8"))
-    if raw is None:
-        return None
-    if not isinstance(raw, list):
-        raise ValueError(f"Expected JSON array of cookies in {path}")
-    return raw
-
-
-def _save_cookies(path: Path, cookies: list[dict[str, Any]]) -> None:
-    # EN: Never commit real cookies. `.gitignore` excludes run/cookies.json by default.
-    # RU: Никогда не коммитьте реальные cookies. `.gitignore` исключает run/cookies.json по умолчанию.
-    path.write_text(json.dumps(cookies, ensure_ascii=False, indent=2), encoding="utf-8")
-
-
-def _save_posts(path: Path, posts: list[Any]) -> None:
-    # EN: Post is a dataclass; store a JSON-friendly view for quick inspection.
-    # RU: Post — dataclass; сохраняем JSON-представление для быстрой проверки результатов.
-    payload: list[dict[str, Any]] = []
-    for p in posts:
-        author = getattr(p, "author", None)
-        payload.append(
-            {
-                "urn": getattr(p, "urn", None),
-                "post_url": getattr(p, "post_url", None),
-                "published_at_text": getattr(p, "published_at_text", None),
-                "content": getattr(p, "content", None),
-                "reactions_count": getattr(p, "reactions_count", None),
-                "comments_count": getattr(p, "comments_count", None),
-                "media_urls": list(getattr(p, "media_urls", []) or []),
-                "author": (
-                    None
-                    if author is None
-                    else {
-                        "name": getattr(author, "name", None),
-                        "headline": getattr(author, "headline", None),
-                        "profile_url": getattr(author, "profile_url", None),
-                        "urn": getattr(author, "urn", None),
-                    }
-                ),
-            }
-        )
-    path.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
+# File persistence for cookies.json/posts.json is intentionally disabled in this
+# test runner. The application-level storage logic lives in ../../run_demo.py.
+#
+# def _load_cookies(path: Path) -> list[dict[str, Any]] | None:
+#     ...
+#
+# def _save_cookies(path: Path, cookies: list[dict[str, Any]]) -> None:
+#     ...
+#
+# def _save_posts(path: Path, posts: list[Any]) -> None:
+#     ...
 
 
 def _maybe_start_trace(client: LinkedInClient, trace_path: Path | None) -> None:
@@ -87,51 +50,35 @@ def _maybe_stop_trace(client: LinkedInClient, trace_path: Path | None) -> None:
 def _manual_login_and_save_cookies(
     *,
     cfg: LinkedInClientConfig,
-    cookies_path: Path,
     trace_path: Path | None,
 ) -> list[dict[str, Any]]:
     # EN: Manual authentication flow. User enters login/password in the opened Chromium window.
-    #     When LinkedIn redirects to /feed, we extract cookies and persist them to run/cookies.json.
+    #     When LinkedIn redirects to /feed, we extract cookies and return them to the caller.
     # RU: Ручная авторизация. Пользователь вводит логин/пароль в открытом окне Chromium.
-    #     Когда LinkedIn редиректит на /feed — извлекаем cookies и сохраняем в run/cookies.json.
+    #     Когда LinkedIn редиректит на /feed — извлекаем cookies и возвращаем вызывающему коду.
     print("Authentication required. Please log in in the opened browser window...")
     with LinkedInClient(cookies=None, config=cfg) as client:
         _maybe_start_trace(client, trace_path)
         try:
             refreshed = client.login_and_get_cookies()
-            cookies_path.parent.mkdir(parents=True, exist_ok=True)
-            _save_cookies(cookies_path, refreshed)
-            print(f"Saved {len(refreshed)} cookies to {cookies_path}.")
+            # cookies.json persistence is handled by ../../run_demo.py.
+            print(f"Received {len(refreshed)} cookies.")
             return refreshed
         finally:
             _maybe_stop_trace(client, trace_path)
 
 
 def main() -> int:
-    cookies_path_default = REPO_ROOT / "run" / "cookies.json"
-    posts_path_default = REPO_ROOT / "run" / "posts.json"
     artifacts_dir_default = REPO_ROOT / "run" / "artifacts"
 
     ap = argparse.ArgumentParser(
         description="Local runner for LinkedInClient (Cursor Run/Debug friendly)."
     )
     ap.add_argument(
-        "--cookies",
-        type=Path,
-        default=cookies_path_default,
-        help="Path to cookies JSON (Playwright cookie list).",
-    )
-    ap.add_argument(
         "--limit",
         type=int,
         default=30,
         help="How many posts to fetch (used by fetch-posts and default run).",
-    )
-    ap.add_argument(
-        "--posts-out",
-        type=Path,
-        default=posts_path_default,
-        help="Where to save fetched posts JSON.",
     )
     ap.add_argument(
         "--headless", action="store_true", help="Run Chromium in headless mode."
@@ -169,8 +116,7 @@ def main() -> int:
 
     args = ap.parse_args()
 
-    cookies_path: Path = args.cookies
-    cookies = _load_cookies(cookies_path)
+    cookies = None
 
     cfg = LinkedInClientConfig(
         browser=BrowserConfig(headless=args.headless, timeout_ms=args.timeout_ms)
@@ -181,18 +127,12 @@ def main() -> int:
     if cmd == "login":
         # EN: Interactive login only; does not fetch posts.
         # RU: Только интерактивный логин; посты не загружает.
-        if cookies_path.exists() and not args.force:
-            raise SystemExit(
-                f"{cookies_path} already exists. Use 'login --force' to overwrite."
-            )
-
         with LinkedInClient(cookies=None, config=cfg) as client:
             _maybe_start_trace(client, args.trace)
             try:
                 refreshed = client.login_and_get_cookies()
-                cookies_path.parent.mkdir(parents=True, exist_ok=True)
-                _save_cookies(cookies_path, refreshed)
-                print(f"Saved {len(refreshed)} cookies to {cookies_path}.")
+                # cookies.json persistence is handled by ../../run_demo.py.
+                print(f"Received {len(refreshed)} cookies.")
             finally:
                 _maybe_stop_trace(client, args.trace)
 
@@ -203,9 +143,6 @@ def main() -> int:
         # RU: Быстрая проверка: открывает страницу и печатает, на фиде ли мы (best-effort).
         with LinkedInClient(cookies=cookies, config=cfg) as client:
             print("logged_in:", client.is_logged_in())
-            refreshed = client.get_cookies()
-            cookies_path.parent.mkdir(parents=True, exist_ok=True)
-            _save_cookies(cookies_path, refreshed)
         return 0
 
     if cmd == "fetch-posts":
@@ -220,7 +157,7 @@ def main() -> int:
         # RU: Если cookies отсутствуют — сначала делаем интерактивный логин.
         if not cookies:
             cookies = _manual_login_and_save_cookies(
-                cfg=cfg, cookies_path=cookies_path, trace_path=args.trace
+                cfg=cfg, trace_path=args.trace
             )
 
         try:
@@ -229,23 +166,14 @@ def main() -> int:
                 try:
                     posts = client.fetch_posts(limit=args.limit)
                     print(f"Fetched {len(posts)} posts.")
-                    args.posts_out.parent.mkdir(parents=True, exist_ok=True)
-                    _save_posts(args.posts_out, posts)
-                    print(f"Saved posts JSON to {args.posts_out}.")
-
-                    refreshed = client.get_cookies()
-                    cookies_path.parent.mkdir(parents=True, exist_ok=True)
-                    _save_cookies(cookies_path, refreshed)
-                    print(f"Saved {len(refreshed)} cookies to {cookies_path}.")
+                    # posts.json/cookies.json persistence is handled by ../../run_demo.py.
                 except Exception:
                     if args.screenshot_on_error:
                         artifacts_dir_default.mkdir(parents=True, exist_ok=True)
                         path = artifacts_dir_default / "error.png"
-                        try:
+                        with suppress(Exception):
                             client.page.screenshot(path=str(path), full_page=True)
                             print(f"Saved screenshot to {path}.")
-                        except Exception:
-                            pass
                     raise
                 finally:
                     _maybe_stop_trace(client, args.trace)
@@ -254,19 +182,12 @@ def main() -> int:
             # EN: Cookies were provided but are not valid anymore. Re-login and retry once.
             # RU: Cookies были, но стали невалидными. Делаем логин и повторяем один раз.
             cookies = _manual_login_and_save_cookies(
-                cfg=cfg, cookies_path=cookies_path, trace_path=args.trace
+                cfg=cfg, trace_path=args.trace
             )
             with LinkedInClient(cookies=cookies, config=cfg) as client:
                 posts = client.fetch_posts(limit=args.limit)
                 print(f"Fetched {len(posts)} posts.")
-                args.posts_out.parent.mkdir(parents=True, exist_ok=True)
-                _save_posts(args.posts_out, posts)
-                print(f"Saved posts JSON to {args.posts_out}.")
-
-                refreshed = client.get_cookies()
-                cookies_path.parent.mkdir(parents=True, exist_ok=True)
-                _save_cookies(cookies_path, refreshed)
-                print(f"Saved {len(refreshed)} cookies to {cookies_path}.")
+                # posts.json/cookies.json persistence is handled by ../../run_demo.py.
             return 0
 
     raise SystemExit(f"Unknown command: {cmd}")

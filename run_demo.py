@@ -12,8 +12,8 @@ from typing import Any
 
 ROOT = Path(__file__).resolve().parent
 LINKEDIN_SRC = ROOT / "LinkedInClient" / "src"
-COOKIES_PATH = ROOT / "LinkedInClient" / "run" / "cookies.json"
-POSTS_PATH = ROOT / "LinkedInClient" / "run" / "posts.json"
+COOKIES_PATH = ROOT / "cookies.json"
+POSTS_PATH = ROOT / "posts.json"
 
 if str(LINKEDIN_SRC) not in sys.path:
     sys.path.insert(0, str(LINKEDIN_SRC))
