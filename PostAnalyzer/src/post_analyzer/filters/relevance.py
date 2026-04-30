@@ -12,6 +12,12 @@ from ..llm import LLMClient
 class RelevanceResult:
     relevant: bool
     error: str | None = None
+    score: int | None = None
+    content_type: str | None = None
+    main_topics: list[str] | None = None
+    reason: str | None = None
+    selection_reason: str | None = None
+    analysis: dict[str, Any] | None = None
 
 
 class RelevanceFilter:
@@ -41,7 +47,7 @@ class RelevanceFilter:
         except Exception as e:
             preview = (raw or "").strip().replace("\n", " ")
             if len(preview) > 200:
-                preview = preview[:200] + "…"
+                preview = f"{preview[:200]}…"
             return RelevanceResult(
                 relevant=False,
                 error=f"Invalid relevance response: {e}. Raw: {preview!r}",

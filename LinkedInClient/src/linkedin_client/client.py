@@ -282,6 +282,10 @@ class LinkedInClient:
 
                 def merge(posts: list[Post]) -> None:
                     for p in posts:
+                        # Skip posts without readable text content (best-effort feed cards, ads, etc.).
+                        content = (p.content or "").strip()
+                        if not content:
+                            continue
                         key = _post_key(p)
                         if not key or key in seen:
                             continue
@@ -295,6 +299,9 @@ class LinkedInClient:
                         created_at = item.get("created_at")
                         text = item.get("text")
                         post_url = item.get("post_url")
+
+                        if not isinstance(text, str) or not text.strip():
+                            continue
 
                         p = Post(
                             author=(Author(name=author_name) if author_name else None),

@@ -3,7 +3,7 @@ from __future__ import annotations
 from typing import Any
 
 from .config import PostAnalyzerConfig
-from .filters.relevance import RelevanceFilter
+from .filters.relevance import RelevanceFilter, RelevanceResult
 from .llm import LLMClient
 from .llm_manager import LLMProviderManager
 from .log import logger
@@ -22,11 +22,12 @@ class LLMPostSelector:
         analyzer_config: PostAnalyzerConfig,
         llm_manager: LLMProviderManager | None = None,
         llm_client: LLMClient | None = None,
+        relevance_filter: Any | None = None,
     ) -> None:
         self._analyzer_config = analyzer_config
         self._llm_manager = llm_manager
         self._llm_client = llm_client
-        self._filter: RelevanceFilter | None = None
+        self._filter: Any | None = relevance_filter
 
     def _initialize(self) -> None:
         if self._filter is not None:
@@ -57,8 +58,19 @@ class LLMPostSelector:
 
         selected: list[dict[str, Any]] = []
         for post in posts:
-            res = self._filter.check(post)
+            res: RelevanceResult = self._filter.check(post)
             if res.error is None and res.relevant:
+                analysis = res.analysis
+                if analysis is not None or res.score is not None:
+                    post["relevance_analysis"] = {
+                        "relevant": res.relevant,
+                        "score": res.score,
+                        "content_type": res.content_type,
+                        "main_topics": res.main_topics,
+                        "reason": res.reason,
+                        "selection_reason": res.selection_reason,
+                        "analysis": analysis,
+                    }
                 selected.append(post)
         return selected
 
