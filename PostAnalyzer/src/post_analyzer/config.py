@@ -13,6 +13,11 @@ class PostAnalyzerConfig:
     comment_system_prompt: str | None
     comment_user_prompt: str
 
+    # Optional file-based prompt for comment generation (used by LLMPostSelector).
+    # If None, comment generation is disabled for selector path.
+    comment_prompt_path: str | None = None
+    comment_target_language: str = "ru"
+
     def format_relevance_user(self, *, text: str, post_url: str) -> str:
         return self.relevance_user_prompt.format(text=text, post_url=post_url)
 
@@ -132,11 +137,13 @@ def _env_bool(name: str, *, default: bool) -> bool:
     if raw is None:
         return default
     raw = raw.strip().lower()
-    if raw in {"1", "true", "yes", "y", "on"}:
-        return True
-    if raw in {"0", "false", "no", "n", "off"}:
-        return False
-    return default
+    return (
+        True
+        if raw in {"1", "true", "yes", "y", "on"}
+        else False
+        if raw in {"0", "false", "no", "n", "off"}
+        else default
+    )
 
 
 def _env_float(name: str, *, default: float) -> float:

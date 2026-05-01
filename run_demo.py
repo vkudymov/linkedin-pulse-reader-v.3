@@ -46,6 +46,7 @@ def save_json(path: Path, data: Any) -> None:
     path.write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
 
 def default_post_analyzer_config() -> PostAnalyzerConfig:
+    comment_prompt_path = ROOT / "PostAnalyzer" / "prompts" / "linkedin_comment_generation.prompt"
     return PostAnalyzerConfig(
         relevance_system_prompt=(
             "Return strict JSON only. Use schema: {\"relevant\": true|false}."
@@ -56,6 +57,8 @@ def default_post_analyzer_config() -> PostAnalyzerConfig:
         ),
         comment_system_prompt=None,
         comment_user_prompt="unused: {post_url} {text}",
+        comment_prompt_path=str(comment_prompt_path),
+        comment_target_language=os.getenv("POST_ANALYZER_COMMENT_LANGUAGE", "ru"),
     )
 
 def to_analyzer_row(post: dict[str, Any]) -> dict[str, Any]:
