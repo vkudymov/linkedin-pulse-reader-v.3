@@ -10,7 +10,10 @@ EN: Library orchestration module.
     (browser/auth/navigation/loading/parsing) remain swappable and testable.
 """
 
+import re
+from contextlib import suppress
 from typing import Any
+from urllib.parse import urlparse
 
 from playwright.sync_api import Page
 
@@ -24,41 +27,27 @@ from .navigation import FeedNavigator
 from .parsing import PostParser
 from .models.post import Author, Post
 
+_ACTIVITY_RE = re.compile(r"urn:li:activity:(\d+)")
+
 
 def _post_key(post: Post) -> str:
     # Canonicalize across sources:
     # the same feed item may be observed once with `urn` and later only with `post_url`.
     # If both contain the activity id, use it as a stable dedupe key.
-    try:
-        import re
+    if (urn_s := (post.urn or "").strip()) and (m := _ACTIVITY_RE.search(urn_s)):
+        return f"activity:{m.group(1)}"
 
-        _ACT_RE = re.compile(r"urn:li:activity:(\d+)")
-        urn_s = (post.urn or "").strip()
-        if urn_s:
-            m = _ACT_RE.search(urn_s)
-            if m:
-                return f"activity:{m.group(1)}"
-
-        url_s = (post.post_url or "").strip()
-        if url_s:
-            m = _ACT_RE.search(url_s)
-            if m:
-                return f"activity:{m.group(1)}"
-    except Exception:
-        pass
+    if (url_s := (post.post_url or "").strip()) and (m := _ACTIVITY_RE.search(url_s)):
+        return f"activity:{m.group(1)}"
 
     if post.id:
         return f"id:{post.id}"
     if post.post_url:
-        try:
-            from urllib.parse import urlparse
-
+        with suppress(Exception):
             pu = urlparse(post.post_url)
             if pu.scheme and pu.netloc:
                 norm = f"{pu.scheme}://{pu.netloc}{pu.path}".lower().rstrip("/")
                 return f"url:{norm}"
-        except Exception:
-            pass
         return f"url:{post.post_url}"
 
     author = post.author.name if post.author else ""
@@ -238,17 +227,15 @@ class LinkedInClient:
         from .parsing.read_posts import read_posts as _read_posts
 
         raw = _read_posts(self.page, limit)
-        out: list[dict[str, str | None]] = []
-        for item in raw:
-            out.append(
-                {
-                    "author": item.get("author"),
-                    "created_at": item.get("created_at"),
-                    "text": item.get("text"),
-                    "post_url": item.get("post_url"),
-                }
-            )
-        return out
+        return [
+            {
+                "author": item.get("author"),
+                "created_at": item.get("created_at"),
+                "text": item.get("text"),
+                "post_url": item.get("post_url"),
+            }
+            for item in raw
+        ]
 
     def fetch_posts(self, *, limit: int = 10) -> list[Post]:
         """
@@ -321,7 +308,9 @@ class LinkedInClient:
                 merge(parser.parse_posts(self.page, limit=parse_budget))
                 # Run the second reader only when still below target to avoid duplicate heavy UI flows.
                 if len(results) < limit:
-                    merge_read_posts(self.read_posts(limit=min(parse_budget, limit * 2)))
+                    merge_read_posts(
+                        self.read_posts(limit=min(parse_budget, limit * 2))
+                    )
 
                 if len(results) >= limit:
                     return results[:limit]
@@ -332,15 +321,15 @@ class LinkedInClient:
                     scrolled = scroller.scroll_batch(page=self.page)
 
                     # EN/RU: Small settle window for lazy-load to attach.
-                    try:
+                    with suppress(Exception):
                         self.page.wait_for_load_state("networkidle", timeout=1500)
-                    except Exception:
-                        pass
                     self.page.wait_for_timeout(250)
 
                     merge(parser.parse_posts(self.page, limit=parse_budget))
                     if len(results) < limit:
-                        merge_read_posts(self.read_posts(limit=min(parse_budget, limit * 2)))
+                        merge_read_posts(
+                            self.read_posts(limit=min(parse_budget, limit * 2))
+                        )
 
                     if len(results) >= limit:
                         return results[:limit]
