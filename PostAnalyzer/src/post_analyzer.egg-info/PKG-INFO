@@ -1,0 +1,12 @@
+Metadata-Version: 2.4
+Name: post-analyzer
+Version: 0.1.0
+Summary: A small, source-agnostic library for filtering posts and generating comments via an injected LLM client.
+Author: PostAnalyzer
+License: MIT
+Requires-Python: >=3.10
+Provides-Extra: test
+Requires-Dist: pytest>=8; extra == "test"
+Provides-Extra: structured
+Requires-Dist: openai>=1; extra == "structured"
+Requires-Dist: httpx>=0.27; extra == "structured"
