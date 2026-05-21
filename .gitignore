@@ -2,3 +2,7 @@ cookies.json
 posts.json
 selected_posts.json
 .env
+.venv/
+__pycache__/
+*.pyc
+.pytest_cache/
