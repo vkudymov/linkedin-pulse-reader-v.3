@@ -4,9 +4,11 @@
 from __future__ import annotations
 
 import argparse
+import json
 import logging
 import os
 import sys
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
@@ -14,6 +16,28 @@ ROOT = Path(__file__).resolve().parent
 LINKEDIN_SRC = ROOT / "LinkedInClient" / "src"
 POST_ANALYZER_SRC = ROOT / "PostAnalyzer" / "src"
 STORAGE_SRC = ROOT / "Storage" / "src"
+POSTS_PATH = ROOT / "posts.json"
+SELECTED_POSTS_PATH = ROOT / "selected_posts.json"
+ENV_PATH = ROOT / ".env"
+
+
+def _load_dotenv(path: Path) -> None:
+    if not path.exists():
+        return
+    for raw_line in path.read_text(encoding="utf-8").splitlines():
+        line = raw_line.strip()
+        if not line or line.startswith("#"):
+            continue
+        if "=" not in line:
+            continue
+        key, value = line.split("=", 1)
+        key = key.strip()
+        value = value.strip().strip('"').strip("'")
+        if key and key not in os.environ:
+            os.environ[key] = value
+
+
+_load_dotenv(ENV_PATH)
 
 if str(LINKEDIN_SRC) not in sys.path:
     sys.path.insert(0, str(LINKEDIN_SRC))
@@ -45,6 +69,18 @@ def log_supabase_target() -> None:
         log.info("Supabase storage enabled. Target host=%s", host or "<missing>")
     except Exception:
         log.info("Supabase storage enabled.")
+
+
+def make_run_timestamp() -> str:
+    return datetime.now().astimezone().isoformat()
+
+
+def write_run_snapshot(path: Path, *, run_at: str, posts: list[dict[str, Any]]) -> None:
+    payload: dict[str, Any] = {"run_at": run_at, "count": len(posts), "posts": posts}
+    path.write_text(
+        json.dumps(payload, ensure_ascii=False, indent=2),
+        encoding="utf-8",
+    )
 
 
 def default_post_analyzer_config() -> PostAnalyzerConfig:
@@ -127,9 +163,15 @@ def fetch_and_store_posts(
         fresh_cookies = client.get_cookies()
         accounts.update_cookies(account_id=account_id, cookies_json=fresh_cookies)
 
+    run_at = make_run_timestamp()
     payload = [post_to_dict(post) for post in posts]
     upserted = posts_repo.upsert_posts(linkedin_account_id=account_id, posts=payload)
     log.info("Upserted %s posts to Supabase (account=%s)", upserted, account_id)
+    try:
+        write_run_snapshot(POSTS_PATH, run_at=run_at, posts=payload)
+        log.info("Wrote %s (%s posts)", POSTS_PATH, len(payload))
+    except Exception as e:
+        log.warning("Failed to write %s: %s", POSTS_PATH, e)
 
     analyzer_input = [to_analyzer_row(p) for p in payload]
     try:
@@ -175,7 +217,11 @@ def fetch_and_store_posts(
         if mgr is not None
         else LLMPostSelector(analyzer_config=default_post_analyzer_config())
     )
-    selected = selector.select(analyzer_input)
+    try:
+        selected = selector.select(analyzer_input)
+    except Exception as e:
+        selected = []
+        log.warning("Selector failed; continuing without selected posts snapshot: %s", e)
     log.info("Selected %s relevant posts via LLM", len(selected))
 
     for post in selected:
@@ -199,6 +245,12 @@ def fetch_and_store_posts(
                 else None
             ),
         )
+
+    try:
+        write_run_snapshot(SELECTED_POSTS_PATH, run_at=run_at, posts=selected)
+        log.info("Wrote %s (%s posts)", SELECTED_POSTS_PATH, len(selected))
+    except Exception as e:
+        log.warning("Failed to write %s: %s", SELECTED_POSTS_PATH, e)
 
 
 def main() -> None:
