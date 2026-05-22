@@ -43,7 +43,7 @@ class RelevanceFilter:
             return RelevanceResult(relevant=False, error=f"LLM relevance check failed: {e}")
 
         try:
-            relevant = _parse_relevance_json(raw)
+            return _parse_relevance_result(raw)
         except Exception as e:
             preview = (raw or "").strip().replace("\n", " ")
             if len(preview) > 200:
@@ -53,10 +53,8 @@ class RelevanceFilter:
                 error=f"Invalid relevance response: {e}. Raw: {preview!r}",
             )
 
-        return RelevanceResult(relevant=relevant, error=None)
 
-
-def _parse_relevance_json(raw: str) -> bool:
+def _parse_relevance_result(raw: str) -> RelevanceResult:
     try:
         payload = json.loads(raw)
     except json.JSONDecodeError as e:  # pragma: no cover
@@ -67,7 +65,15 @@ def _parse_relevance_json(raw: str) -> bool:
 
     value = payload.get("relevant", payload.get("is_relevant"))
     if isinstance(value, bool):
-        return value
+        reason = payload.get("reason")
+        selection_reason = payload.get("selection_reason")
+        return RelevanceResult(
+            relevant=value,
+            error=None,
+            reason=reason if isinstance(reason, str) else None,
+            selection_reason=selection_reason if isinstance(selection_reason, str) else None,
+            analysis=payload,
+        )
 
     raise ValueError("Expected boolean field 'relevant' (or 'is_relevant').")
 

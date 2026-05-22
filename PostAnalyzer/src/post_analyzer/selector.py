@@ -67,56 +67,72 @@ class LLMPostSelector:
             self._comment_prompt_template = load_prompt_template(Path(prompt_path))
         return self._comment_prompt_template
 
-    def select(self, posts: list[dict[str, Any]]) -> list[dict[str, Any]]:
-        """Return only posts that passed LLM relevance check."""
+    def analyze(self, posts: list[dict[str, Any]]) -> list[dict[str, Any]]:
+        """Annotate every post with relevance result and optional LLM reason."""
         self._initialize()
         assert self._filter is not None
 
-        selected: list[dict[str, Any]] = []
         for post in posts:
             res: RelevanceResult = self._filter.check(post)
-            if res.error is None and res.relevant:
-                analysis = res.analysis
-                if analysis is not None or res.score is not None:
-                    post["relevance_analysis"] = {
-                        "relevant": res.relevant,
-                        "score": res.score,
-                        "content_type": res.content_type,
-                        "main_topics": res.main_topics,
-                        "reason": res.reason,
-                        "selection_reason": res.selection_reason,
-                        "analysis": analysis,
-                    }
+            accepted = res.error is None and res.relevant
+            post["result"] = "принято" if accepted else "отклонено"
+            post["reason"] = _result_reason(res)
+            if res.error is not None:
+                post["analysis_error"] = res.error
 
-                if self._analyzer_config.comment_prompt_path is not None:
-                    assert self._llm_manager is not None
-                    try:
-                        template = self._get_comment_prompt_template()
-                        text = post.get("text") if isinstance(post, dict) else None
-                        post_text = text if isinstance(text, str) else ""
-                        ctx = CommentPromptContext(
-                            post_text=post_text,
-                            content_type=(res.content_type or "общий"),
-                            main_topics=list(res.main_topics or []),
-                            target_language=self._analyzer_config.comment_target_language,
-                        )
-                        user = fill_comment_prompt(template, ctx=ctx)
-                        raw = self._llm_manager.complete(
-                            system=(
-                                self._analyzer_config.comment_system_prompt
-                                or "Сгенерируй комментарий. Только текст, без markdown и пояснений."
-                            ),
-                            user=user,
-                        )
-                        if not (comment := (raw or "").strip()):
-                            post["comment"] = None
-                            post["comment_error"] = "LLM returned an empty comment."
-                        else:
-                            post["comment"] = comment
-                    except Exception as e:  # noqa: BLE001 - library boundary normalize to string
+            analysis = res.analysis
+            if analysis is not None or res.score is not None or res.reason is not None:
+                post["relevance_analysis"] = {
+                    "relevant": res.relevant,
+                    "score": res.score,
+                    "content_type": res.content_type,
+                    "main_topics": res.main_topics,
+                    "reason": res.reason,
+                    "selection_reason": res.selection_reason,
+                    "analysis": analysis,
+                }
+
+            if accepted and self._analyzer_config.comment_prompt_path is not None:
+                assert self._llm_manager is not None
+                try:
+                    template = self._get_comment_prompt_template()
+                    text = post.get("text") if isinstance(post, dict) else None
+                    post_text = text if isinstance(text, str) else ""
+                    ctx = CommentPromptContext(
+                        post_text=post_text,
+                        content_type=(res.content_type or "общий"),
+                        main_topics=list(res.main_topics or []),
+                        target_language=self._analyzer_config.comment_target_language,
+                    )
+                    user = fill_comment_prompt(template, ctx=ctx)
+                    raw = self._llm_manager.complete(
+                        system=(
+                            self._analyzer_config.comment_system_prompt
+                            or "Сгенерируй комментарий. Только текст, без markdown и пояснений."
+                        ),
+                        user=user,
+                    )
+                    if not (comment := (raw or "").strip()):
                         post["comment"] = None
-                        post["comment_error"] = f"LLM comment generation failed: {e}"
+                        post["comment_error"] = "LLM returned an empty comment."
+                    else:
+                        post["comment"] = comment
+                except Exception as e:  # noqa: BLE001 - library boundary normalize to string
+                    post["comment"] = None
+                    post["comment_error"] = f"LLM comment generation failed: {e}"
 
-                selected.append(post)
-        return selected
+        return posts
+
+    def select(self, posts: list[dict[str, Any]]) -> list[dict[str, Any]]:
+        """Return only posts that passed LLM relevance check."""
+        analyzed = self.analyze(posts)
+        return [post for post in analyzed if post.get("result") == "принято"]
+
+
+def _result_reason(res: RelevanceResult) -> str | None:
+    if res.error is not None:
+        return res.error
+    if res.relevant:
+        return res.selection_reason or res.reason
+    return res.reason or res.selection_reason
 

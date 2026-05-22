@@ -48,7 +48,7 @@ if str(STORAGE_SRC) not in sys.path:
 
 from linkedin_client import LinkedInClient, LinkedInClientConfig  # type: ignore[import-not-found]  # noqa: E402
 from linkedin_client.browser import BrowserConfig  # type: ignore[import-not-found]  # noqa: E402
-from linkedin_client.exceptions import LoginRequiredError  # type: ignore[import-not-found]  # noqa: E402
+from linkedin_client.exceptions import FeedLoadError, LoginRequiredError  # type: ignore[import-not-found]  # noqa: E402
 
 from post_analyzer import LLMPostSelector, PostAnalyzerConfig  # type: ignore[import-not-found]  # noqa: E402
 
@@ -85,11 +85,11 @@ def default_post_analyzer_config() -> PostAnalyzerConfig:
     )
     return PostAnalyzerConfig(
         relevance_system_prompt=(
-            'Return strict JSON only. Use schema: {"relevant": true|false}.'
+            'Return strict JSON only. Use schema: {"relevant": true|false, "reason": "short explanation"}.'
         ),
         relevance_user_prompt=(
             "Post URL:\n{post_url}\n\nPost text:\n{text}\n\n"
-            'Reply with strict JSON only: {{"relevant": true|false}}'
+            'Reply with strict JSON only: {{"relevant": true|false, "reason": "short explanation"}}'
         ),
         comment_system_prompt=None,
         comment_user_prompt="unused: {post_url} {text}",
@@ -131,6 +131,23 @@ def post_to_dict(post: Any) -> dict[str, Any]:
     }
 
 
+def copy_analysis_fields(
+    *,
+    payload_post: dict[str, Any],
+    analyzed_post: dict[str, Any],
+) -> None:
+    for field in (
+        "result",
+        "reason",
+        "relevance_analysis",
+        "analysis_error",
+        "comment",
+        "comment_error",
+    ):
+        if field in analyzed_post:
+            payload_post[field] = analyzed_post[field]
+
+
 def login_and_get_cookies(cfg: LinkedInClientConfig) -> list[dict[str, Any]]:
     log.info("Cookies missing or expired. Log in in the opened browser window.")
     with LinkedInClient(config=cfg) as client:
@@ -158,6 +175,15 @@ def fetch_and_store_posts(
 
     run_at = make_run_timestamp()
     payload = [post_to_dict(post) for post in posts]
+    for idx, post in enumerate(payload, start=1):
+        post["result"] = "не проверено"
+        post["reason"] = None
+        log.info(
+            "Post %s/%s: state=read source_key=%s",
+            idx,
+            limit,
+            compute_source_key(post),
+        )
     upserted = posts_repo.upsert_posts(linkedin_account_id=account_id, posts=payload)
     log.info("Upserted %s posts to Supabase (account=%s)", upserted, account_id)
     try:
@@ -211,20 +237,53 @@ def fetch_and_store_posts(
         else LLMPostSelector(analyzer_config=default_post_analyzer_config())
     )
     selection_succeeded = True
+    analyzed_by_key: dict[str, dict[str, Any]] = {}
     try:
-        selected = selector.select(analyzer_input)
+        analyzed_posts = selector.analyze(analyzer_input)
+        analyzed_by_key = {
+            compute_source_key(post): post
+            for post in analyzed_posts
+            if isinstance(post, dict)
+        }
+        for post in payload:
+            analyzed_post = analyzed_by_key.get(compute_source_key(post))
+            if analyzed_post is not None:
+                copy_analysis_fields(payload_post=post, analyzed_post=analyzed_post)
+        selected = [
+            post
+            for post in analyzed_posts
+            if isinstance(post, dict) and post.get("result") == "принято"
+        ]
     except Exception as e:
         selection_succeeded = False
         selected = []
+        reason = f"Selector failed: {e}"
+        for post in payload:
+            post["result"] = "ошибка анализа"
+            post["reason"] = reason
+            post["analysis_error"] = reason
         log.warning("Selector failed; continuing without selected posts snapshot: %s", e)
     log.info("Selected %s relevant posts via LLM", len(selected))
 
+    post_numbers_by_key = {
+        compute_source_key(post): idx for idx, post in enumerate(payload, start=1)
+    }
+    selected_by_key: dict[str, dict[str, Any]] = {}
     for post in selected:
         if not isinstance(post, dict):
             continue
+        source_key = compute_source_key(post)
+        selected_by_key[source_key] = post
+        post_number = post_numbers_by_key.get(source_key, "?")
+        log.info(
+            "Post %s/%s: state=analyze result=принято source_key=%s",
+            post_number,
+            limit,
+            source_key,
+        )
         posts_repo.update_analysis(
             linkedin_account_id=account_id,
-            source_key=compute_source_key(post),
+            source_key=source_key,
             is_relevant=True,
             comment_text=(
                 post.get("comment") if isinstance(post.get("comment"), str) else None
@@ -243,23 +302,41 @@ def fetch_and_store_posts(
 
     # Mark posts from this fetch that were not selected as irrelevant (same source_key as upsert).
     if selection_succeeded:
-        selected_keys = {
-            compute_source_key(post)
-            for post in selected
-            if isinstance(post, dict)
-        }
         for post in payload:
             source_key = compute_source_key(post)
-            if source_key in selected_keys:
+            if source_key in selected_by_key:
                 continue
+            post_number = post_numbers_by_key.get(source_key, "?")
+            log.info(
+                "Post %s/%s: state=analyze result=отклонено source_key=%s",
+                post_number,
+                limit,
+                source_key,
+            )
             posts_repo.update_analysis(
                 linkedin_account_id=account_id,
                 source_key=source_key,
                 is_relevant=False,
                 comment_text=None,
-                analysis_error=None,
-                analysis_payload=None,
+                analysis_error=(
+                    analyzed_by_key[source_key].get("analysis_error")
+                    if isinstance(analyzed_by_key.get(source_key), dict)
+                    and isinstance(analyzed_by_key[source_key].get("analysis_error"), str)
+                    else None
+                ),
+                analysis_payload=(
+                    analyzed_by_key[source_key].get("relevance_analysis")
+                    if isinstance(analyzed_by_key.get(source_key), dict)
+                    and isinstance(analyzed_by_key[source_key].get("relevance_analysis"), dict)
+                    else None
+                ),
             )
+
+    try:
+        write_run_snapshot(POSTS_PATH, run_at=run_at, posts=payload)
+        log.info("Updated %s with analysis results", POSTS_PATH)
+    except Exception as e:
+        log.warning("Failed to update %s with analysis results: %s", POSTS_PATH, e)
 
     try:
         write_run_snapshot(SELECTED_POSTS_PATH, run_at=run_at, posts=selected)
@@ -343,6 +420,9 @@ def main() -> None:
             cfg=cfg,
             limit=args.limit,
         )
+    except FeedLoadError as e:
+        log.error("%s", e)
+        raise SystemExit(1) from None
     except Exception:
         log.exception("LinkedInClient demo failed")
         raise

@@ -10,11 +10,13 @@ EN: Navigation to LinkedIn feed and auth-redirect detection.
     `LoginRequiredError`.
 """
 
+from contextlib import suppress
 from dataclasses import dataclass
 
+from playwright.sync_api import Error as PlaywrightError
 from playwright.sync_api import Page, TimeoutError as PlaywrightTimeoutError
 
-from ..exceptions import LoginRequiredError
+from ..exceptions import FeedLoadError, LoginRequiredError
 
 
 @dataclass(frozen=True, slots=True)
@@ -42,18 +44,21 @@ class FeedNavigator:
             except PlaywrightTimeoutError:
                 # Fallback: LinkedIn may keep the document "loading" for a long time.
                 # We only need the navigation to commit; readiness is handled by waiter/selectors.
-                page.goto(self.feed_url, wait_until="commit")
+                try:
+                    page.goto(self.feed_url, wait_until="commit")
+                except PlaywrightError as e:
+                    raise FeedLoadError(_feed_open_error_message(e)) from e
+            except PlaywrightError as e:
+                raise FeedLoadError(_feed_open_error_message(e)) from e
 
         # LinkedIn may serve authwall/login UI for /feed without changing the URL immediately.
         # Wait briefly for either feed layout or login markers, then decide.
-        try:
+        with suppress(Exception):
             page.wait_for_selector(
                 "main[role='main'], div.application-outlet, "
                 "input#username, input[name='session_key'], input[name='session_password']",
                 timeout=10_000,
             )
-        except Exception:
-            pass
 
         if self._looks_like_login_page(page) or self._looks_like_checkpoint_page(page):
             raise LoginRequiredError(
@@ -85,12 +90,10 @@ class FeedNavigator:
         RU: LinkedIn может отдавать страницу логина даже на /feed (URL не всегда меняется).
         EN: LinkedIn may serve a login page even on /feed (URL does not always change).
         """
-        try:
+        with suppress(Exception):
             title = (page.title() or "").lower()
             if "sign in" in title or "login" in title:
                 return True
-        except Exception:
-            pass
 
         try:
             # Login form markers (avoid user content / PII).
@@ -126,6 +129,15 @@ def _safe_url(url: str) -> str:
         return f"{p.scheme}://{p.netloc}{p.path}"
     except Exception:
         return url
+
+
+def _feed_open_error_message(error: Exception) -> str:
+    detail = str(error).splitlines()[0] if str(error).strip() else type(error).__name__
+    return (
+        "LinkedIn feed did not open: https://www.linkedin.com/feed/. "
+        "Check internet connection, VPN/proxy, and that LinkedIn opens in a regular browser. "
+        f"Playwright error: {detail}"
+    )
 
 
 def _safe_title(page: Page) -> str:
