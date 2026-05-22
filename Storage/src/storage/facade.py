@@ -7,7 +7,11 @@ from .domain.pulse import FeedPostRepository, LinkedInAccountRepository
 
 
 class PulseStorage:
-    """Small facade for the current LinkedIn Pulse storage domain."""
+    """
+    Facade for the current LinkedIn Pulse storage domain.
+
+    Expects SUPABASE_SERVICE_ROLE_KEY in worker/demo runs (RLS bypass for ingestion).
+    """
 
     def __init__(self, client: Any | None = None) -> None:
         self.client = client or create_supabase_client()

@@ -46,6 +46,7 @@ class FeedPostRow(TypedDict):
 class FeedPostUpsert(TypedDict):
     linkedin_account_id: str
     source_key: str
+    fetched_at: str
     post_url: str
     urn: NotRequired[str | None]
     author_json: NotRequired[dict[str, Any] | None]

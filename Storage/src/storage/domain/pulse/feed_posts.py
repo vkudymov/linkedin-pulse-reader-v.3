@@ -14,14 +14,20 @@ class FeedPostRepository:
     def __init__(self, client: Any) -> None:
         self._client = client
 
+    # Upsert key matches DB constraint feed_posts_account_source_unique.
     def upsert_posts(
         self,
         *,
         linkedin_account_id: str,
         posts: list[dict[str, Any]],
     ) -> int:
+        fetched_at = datetime.now(timezone.utc).isoformat()
         rows: list[FeedPostUpsert] = [
-            _to_upsert_row(linkedin_account_id=linkedin_account_id, post=post)
+            _to_upsert_row(
+                linkedin_account_id=linkedin_account_id,
+                post=post,
+                fetched_at=fetched_at,
+            )
             for post in posts
             if isinstance(post, Mapping)
         ]
@@ -49,6 +55,7 @@ class FeedPostRepository:
         analysis_error: str | None,
         analysis_payload: dict[str, Any] | None,
     ) -> None:
+        # Updates one row by (linkedin_account_id, source_key); does not touch post body fields.
         now = datetime.now(timezone.utc).isoformat()
         payload: dict[str, Any] = {
             "is_relevant": is_relevant,
@@ -83,6 +90,12 @@ class FeedPostRepository:
 
 
 def compute_source_key(post: Mapping[str, Any]) -> str:
+    """
+    Stable id for upsert and analysis updates.
+
+    Must stay in sync between ingest (upsert_posts) and run_demo (update_analysis).
+    Prefer urn/post_url; fallback hash avoids collisions only for posts without ids.
+    """
     urn = post.get("urn")
     if isinstance(urn, str) and (s := urn.strip()):
         return s
@@ -104,7 +117,12 @@ def compute_source_key(post: Mapping[str, Any]) -> str:
     return f"fallback:{digest}"
 
 
-def _to_upsert_row(*, linkedin_account_id: str, post: Mapping[str, Any]) -> FeedPostUpsert:
+def _to_upsert_row(
+    *,
+    linkedin_account_id: str,
+    post: Mapping[str, Any],
+    fetched_at: str,
+) -> FeedPostUpsert:
     source_key = compute_source_key(post)
 
     post_url_val = post.get("post_url")
@@ -129,6 +147,7 @@ def _to_upsert_row(*, linkedin_account_id: str, post: Mapping[str, Any]) -> Feed
     row: FeedPostUpsert = {
         "linkedin_account_id": linkedin_account_id,
         "source_key": source_key,
+        "fetched_at": fetched_at,
         "post_url": post_url,
         "urn": urn_val,
         "author_json": author_json,

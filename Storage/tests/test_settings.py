@@ -5,7 +5,7 @@ import os
 import pytest
 
 from storage.errors import StorageConfigError
-from storage.settings import SupabaseSettings
+from storage import SupabaseSettings
 
 
 def test_from_env_rejects_localhost_by_default(monkeypatch: pytest.MonkeyPatch) -> None:

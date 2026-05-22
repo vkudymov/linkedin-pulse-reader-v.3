@@ -8,7 +8,7 @@ import json
 import logging
 import os
 import sys
-from datetime import datetime, timezone
+from datetime import datetime
 from pathlib import Path
 from typing import Any
 
@@ -54,10 +54,6 @@ from post_analyzer import LLMPostSelector, PostAnalyzerConfig  # type: ignore[im
 
 logging.basicConfig(level=logging.INFO, format="%(levelname)s: %(message)s")
 log = logging.getLogger(__name__)
-
-
-def _env_truthy(name: str) -> bool:
-    return os.getenv(name, "").strip().lower() in {"1", "true", "yes", "y", "on"}
 
 
 def log_supabase_target() -> None:
@@ -143,17 +139,14 @@ def login_and_get_cookies(cfg: LinkedInClientConfig) -> list[dict[str, Any]]:
 
 def fetch_and_store_posts(
     *,
+    storage: Any,
     account_id: str,
     cookies: list[dict[str, Any]],
     cfg: LinkedInClientConfig,
     limit: int,
 ) -> None:
-    from storage import (  # type: ignore[import-not-found]
-        PulseStorage,
-        compute_source_key,
-    )
+    from storage import compute_source_key  # type: ignore[import-not-found]
 
-    storage = PulseStorage()
     accounts = storage.linkedin_accounts
     posts_repo = storage.feed_posts
 
@@ -217,9 +210,11 @@ def fetch_and_store_posts(
         if mgr is not None
         else LLMPostSelector(analyzer_config=default_post_analyzer_config())
     )
+    selection_succeeded = True
     try:
         selected = selector.select(analyzer_input)
     except Exception as e:
+        selection_succeeded = False
         selected = []
         log.warning("Selector failed; continuing without selected posts snapshot: %s", e)
     log.info("Selected %s relevant posts via LLM", len(selected))
@@ -246,6 +241,26 @@ def fetch_and_store_posts(
             ),
         )
 
+    # Mark posts from this fetch that were not selected as irrelevant (same source_key as upsert).
+    if selection_succeeded:
+        selected_keys = {
+            compute_source_key(post)
+            for post in selected
+            if isinstance(post, dict)
+        }
+        for post in payload:
+            source_key = compute_source_key(post)
+            if source_key in selected_keys:
+                continue
+            posts_repo.update_analysis(
+                linkedin_account_id=account_id,
+                source_key=source_key,
+                is_relevant=False,
+                comment_text=None,
+                analysis_error=None,
+                analysis_payload=None,
+            )
+
     try:
         write_run_snapshot(SELECTED_POSTS_PATH, run_at=run_at, posts=selected)
         log.info("Wrote %s (%s posts)", SELECTED_POSTS_PATH, len(selected))
@@ -271,15 +286,23 @@ def main() -> None:
 
     from storage import PulseStorage  # type: ignore[import-not-found]
 
+    # STORAGE_USER_ID = auth.users.id; service role links rows to that user.
     user_id = os.environ["STORAGE_USER_ID"]
     account_label = os.getenv("STORAGE_ACCOUNT_LABEL")
 
     storage = PulseStorage()
     accounts = storage.linkedin_accounts
     rows = accounts.list_by_user(user_id=user_id)
-    chosen = next(
-        (a for a in rows if account_label and a.get("label") == account_label), None
-    ) or (rows[0] if rows else None)
+    if account_label:
+        chosen = next((a for a in rows if a.get("label") == account_label), None)
+        if chosen is None and rows:
+            log.info(
+                "No linkedin_account with label=%r among %s account(s); creating a new one.",
+                account_label,
+                len(rows),
+            )
+    else:
+        chosen = rows[0] if rows else None
 
     account_id: str
     cookies: list[dict[str, Any]]
@@ -304,13 +327,21 @@ def main() -> None:
 
     try:
         fetch_and_store_posts(
-            account_id=account_id, cookies=cookies, cfg=cfg, limit=args.limit
+            storage=storage,
+            account_id=account_id,
+            cookies=cookies,
+            cfg=cfg,
+            limit=args.limit,
         )
     except LoginRequiredError:
         log.info("Stored cookies are expired. Re-login and retry once.")
         fresh = login_and_get_cookies(cfg)
         fetch_and_store_posts(
-            account_id=account_id, cookies=fresh, cfg=cfg, limit=args.limit
+            storage=storage,
+            account_id=account_id,
+            cookies=fresh,
+            cfg=cfg,
+            limit=args.limit,
         )
     except Exception:
         log.exception("LinkedInClient demo failed")

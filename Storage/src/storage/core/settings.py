@@ -16,6 +16,8 @@ _LOCAL_HOSTS: set[str] = {"localhost", "127.0.0.1", "0.0.0.0", "host.docker.inte
 
 @dataclass(frozen=True, slots=True)
 class SupabaseSettings:
+    """Runtime credentials; service role key is for worker ingestion only."""
+
     url: str
     key: str
     user_jwt: str | None = None

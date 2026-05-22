@@ -9,6 +9,8 @@ from .models import LinkedInAccountCreate, LinkedInAccountRow
 
 
 class LinkedInAccountRepository:
+    """One row per LinkedIn session; cookies_json is the browser session state."""
+
     def __init__(self, client: Any) -> None:
         self._client = client
 
