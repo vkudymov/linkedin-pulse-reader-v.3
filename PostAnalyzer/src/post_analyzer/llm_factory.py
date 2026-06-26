@@ -4,6 +4,7 @@ import json
 import urllib.error
 import urllib.request
 from dataclasses import dataclass
+from urllib.parse import urlparse
 
 from .config import LLMProviderSettings
 from .llm import LLMClient
@@ -30,14 +31,15 @@ class OpenAIChatClient:
 
     @classmethod
     def from_settings(cls, s: LLMProviderSettings) -> OpenAIChatClient:
-        if not s.api_key:
-            raise LLMConfigError("OpenAI provider requires an API key.")
         if not s.model:
             raise LLMConfigError("OpenAI provider requires a model name.")
+        base_url = (s.base_url or "https://api.openai.com/v1").rstrip("/")
+        if not s.api_key and not _is_local_base_url(base_url):
+            raise LLMConfigError("OpenAI provider requires an API key.")
         return cls(
-            api_key=s.api_key,
+            api_key=s.api_key or "",
             model=s.model,
-            base_url=(s.base_url or "https://api.openai.com/v1").rstrip("/"),
+            base_url=base_url,
             timeout_s=s.timeout_s,
         )
 
@@ -57,14 +59,15 @@ class OpenAIChatClient:
             "temperature": 0,
         }
 
+        headers = {"Content-Type": "application/json"}
+        if self.api_key:
+            headers["Authorization"] = f"Bearer {self.api_key}"
+
         req = urllib.request.Request(
             url,
             method="POST",
             data=json.dumps(body).encode("utf-8"),
-            headers={
-                "Authorization": f"Bearer {self.api_key}",
-                "Content-Type": "application/json",
-            },
+            headers=headers,
         )
 
         try:
@@ -161,4 +164,12 @@ class FakeLLMClient:
         if "comment" in u:
             return "Thanks for sharing—interesting point!"
         return "ok"
+
+
+def _is_local_base_url(base_url: str) -> bool:
+    try:
+        hostname = (urlparse(base_url).hostname or "").strip().lower()
+    except Exception:
+        return False
+    return hostname in {"127.0.0.1", "localhost"}
 

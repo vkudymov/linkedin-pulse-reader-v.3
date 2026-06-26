@@ -95,9 +95,17 @@ def _load_provider_settings_from_env(
 
     if provider == "openai":
         api_key = os.getenv("POST_ANALYZER_OPENAI_API_KEY") or os.getenv("OPENAI_API_KEY")
-        base_url = os.getenv("POST_ANALYZER_OPENAI_BASE_URL") or os.getenv("OPENAI_BASE_URL")
+        base_url = (
+            os.getenv("POST_ANALYZER_OPENAI_BASE_URL")
+            or os.getenv("OPENAI_BASE_URL")
+            or "http://127.0.0.1:1234/v1"
+        )
         if model is None:
-            model = os.getenv("POST_ANALYZER_OPENAI_MODEL") or os.getenv("OPENAI_MODEL")
+            model = (
+                os.getenv("POST_ANALYZER_OPENAI_MODEL")
+                or os.getenv("OPENAI_MODEL")
+                or "deepseek-coder-v2-lite-instruct"
+            )
         return LLMProviderSettings(
             provider="openai",
             mode=mode,  # type: ignore[arg-type]

@@ -3,6 +3,7 @@ from __future__ import annotations
 from dataclasses import replace
 from threading import RLock
 from typing import Any
+from urllib.parse import urlparse
 
 from .config import LLMManagerSettings, LLMProviderSettings, load_llm_manager_settings_from_env
 from .llm import LLMClient
@@ -235,8 +236,11 @@ class LLMProviderManager:
             return
 
         if s.provider == "openai":
-            if not s.api_key:
-                raise LLMConfigError("OpenAI: missing api_key (set OPENAI_API_KEY or POST_ANALYZER_OPENAI_API_KEY).")
+            if not s.api_key and not _is_local_base_url(s.base_url):
+                raise LLMConfigError(
+                    "OpenAI: missing api_key (set OPENAI_API_KEY or POST_ANALYZER_OPENAI_API_KEY). "
+                    "Key is optional only for localhost base_url (LM Studio)."
+                )
             if not s.model:
                 raise LLMConfigError("OpenAI: missing model (set POST_ANALYZER_LLM_MODEL / OPENAI_MODEL).")
             return
@@ -247,4 +251,14 @@ class LLMProviderManager:
             return
 
         raise LLMConfigError(f"Unsupported provider: {s.provider!r}")
+
+
+def _is_local_base_url(base_url: str | None) -> bool:
+    if not base_url:
+        return False
+    try:
+        hostname = (urlparse(base_url).hostname or "").strip().lower()
+    except Exception:
+        return False
+    return hostname in {"127.0.0.1", "localhost"}
 

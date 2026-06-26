@@ -203,31 +203,30 @@ def fetch_and_store_posts(
         desc = mgr.describe()
 
         if desc.get("provider") == "fake" and desc.get("mode") == "fake":
-            ollama_base_url = (
-                os.getenv("POST_ANALYZER_OLLAMA_BASE_URL")
-                or os.getenv("OLLAMA_BASE_URL")
-                or os.getenv("OLLAMA_HOST")
-                or "http://localhost:11434"
+            lmstudio_base_url = (
+                os.getenv("POST_ANALYZER_OPENAI_BASE_URL")
+                or os.getenv("OPENAI_BASE_URL")
+                or "http://127.0.0.1:1234/v1"
             )
-            ollama_model = (
+            lmstudio_model = (
                 os.getenv("POST_ANALYZER_LLM_MODEL")
-                or os.getenv("POST_ANALYZER_OLLAMA_MODEL")
-                or os.getenv("OLLAMA_MODEL")
-                or "llama3.1:8b"
+                or os.getenv("POST_ANALYZER_OPENAI_MODEL")
+                or os.getenv("OPENAI_MODEL")
+                or "deepseek-coder-v2-lite-instruct"
             )
             mgr.switch(
                 primary=LLMProviderSettings(
-                    provider="ollama",
+                    provider="openai",
                     mode="real",
-                    model=ollama_model,
-                    base_url=ollama_base_url,
+                    model=lmstudio_model,
+                    base_url=lmstudio_base_url,
                 ),
                 fallback=None,
             )
     except Exception:
         log.error(
-            "LLM is not configured. Set POST_ANALYZER_LLM_PROVIDER=ollama (or openai) "
-            "and ensure Ollama is running on http://localhost:11434."
+            "LLM is not configured. Set POST_ANALYZER_LLM_PROVIDER=openai (or ollama) "
+            "and ensure LM Studio is running on http://127.0.0.1:1234."
         )
         mgr = None
 

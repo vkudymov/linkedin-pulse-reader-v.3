@@ -52,10 +52,29 @@ def test_manager_init_fake_success():
 
 def test_validation_error_openai_missing_key():
     settings = LLMManagerSettings(
-        primary=LLMProviderSettings(provider="openai", mode="real", model="gpt-test", api_key=None)
+        primary=LLMProviderSettings(
+            provider="openai",
+            mode="real",
+            model="gpt-test",
+            api_key=None,
+            base_url="https://api.openai.com/v1",
+        )
     )
     with pytest.raises(LLMConfigError):
         _ = LLMProviderManager(settings=settings, factory=DummyFactory())
+
+
+def test_openai_allows_missing_key_for_local_base_url():
+    settings = LLMManagerSettings(
+        primary=LLMProviderSettings(
+            provider="openai",
+            mode="real",
+            model="deepseek-coder-v2-lite-instruct",
+            api_key=None,
+            base_url="http://127.0.0.1:1234/v1",
+        )
+    )
+    _ = LLMProviderManager(settings=settings, factory=DummyFactory())
 
 
 def test_switch_success_with_healthcheck():
