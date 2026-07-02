@@ -9,7 +9,9 @@ from typing import Any, Dict, List, Optional, Protocol
 
 
 class BaseAsyncLLMClient(Protocol):
-    async def generate(self, prompt: str, system_prompt: Optional[str] = None) -> str: ...
+    async def generate(
+        self, prompt: str, system_prompt: Optional[str] = None
+    ) -> str: ...
 
     async def generate_json(
         self,
@@ -171,7 +173,7 @@ def create_async_llm_client(
 ) -> BaseAsyncLLMClient:
     p = provider.lower().strip()
     m = mode.lower().strip()
-    
+
     if p == "openai":
         if m == "fake":
             return FakeAsyncLLMClient(model=model or "fake-openai", timeout=timeout)
@@ -222,7 +224,9 @@ class PostRelevanceAnalyzer:
 
     def _load_prompt(self) -> str:
         if self._prompt_template is None:
-            self._prompt_template = self._prompt_file.read_text(encoding="utf-8").strip()
+            self._prompt_template = self._prompt_file.read_text(
+                encoding="utf-8"
+            ).strip()
         return self._prompt_template
 
     def _build_prompt(self, post_text: str) -> str:
@@ -332,4 +336,3 @@ def _extract_json_text(text: str) -> str:
     if start != -1 and end != -1 and end > start:
         return text[start : end + 1]
     return text
-

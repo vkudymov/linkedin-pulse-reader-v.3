@@ -1,0 +1,29 @@
+# LinkedIn Pulse Reader (Monorepo)
+
+Репозиторий разделён на две части:
+
+- `frontend/` — Next.js UI (регистрация/вход, просмотр найденных постов)
+- `backend/` — Python worker (сбор постов, запись в Supabase, анализ через LLM)
+
+## Быстрый старт
+
+### 1) Frontend
+
+```bash
+cd frontend
+cp .env.local.example .env.local
+npm install
+npm run dev
+```
+
+### 2) Backend
+
+```bash
+cd backend
+python3 -m pip install -e LinkedInClient -e PostAnalyzer -e Storage
+python run_demo.py --limit 10
+```
+
+## Supabase
+
+Схема БД находится в `backend/supabase/migrations/`.

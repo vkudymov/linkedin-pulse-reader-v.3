@@ -5,9 +5,10 @@
       "name": "Run run_demo.py",
       "type": "python",
       "request": "launch",
-      "program": "${workspaceFolder}/run_demo.py",
+      "program": "${workspaceFolder}/backend/run_demo.py",
       "console": "integratedTerminal",
-      "envFile": "${workspaceFolder}/.env",
+      "envFile": "${workspaceFolder}/backend/.env",
+      "cwd": "${workspaceFolder}/backend",
       "args": []
     }
   ]
