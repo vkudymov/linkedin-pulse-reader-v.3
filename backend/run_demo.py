@@ -355,8 +355,9 @@ def main() -> None:
     log.info(
         "Starting LinkedInClient demo: limit=%s headless=%s", args.limit, args.headless
     )
+    login_timeout_ms = int(os.getenv("LINKEDIN_AUTH_TIMEOUT_MS", "300000"))
     cfg = LinkedInClientConfig(
-        browser=BrowserConfig(headless=args.headless, timeout_ms=60_000)
+        browser=BrowserConfig(headless=args.headless, timeout_ms=login_timeout_ms)
     )
     log_supabase_target()
 

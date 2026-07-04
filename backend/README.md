@@ -12,7 +12,7 @@
 
 ```bash
 cd backend
-python3 -m pip install -e LinkedInClient -e PostAnalyzer -e Storage
+python3 -m pip install -e LinkedInClient -e PostAnalyzer -e Storage -e api
 ```
 
 ## Переменные окружения
@@ -30,8 +30,70 @@ STORAGE_ACCOUNT_LABEL="default"
 
 ## Запуск
 
+### Demo-скрипт (worker-пайплайн)
+
 ```bash
 cd backend
 python run_demo.py --limit 10
+```
+
+### HTTP API для LinkedIn login (backend only)
+
+API поднимает интерактивный Playwright Chromium и сохраняет cookies в Supabase `linkedin_accounts` для **текущего пользователя** (определяется по Supabase JWT).
+
+Дополнительно к переменным выше:
+
+```bash
+SUPABASE_ANON_KEY="<anon-key>"          # для проверки Bearer JWT через Supabase Auth
+LINKEDIN_AUTH_TIMEOUT_MS="300000"      # 5 минут на OAuth/2FA/checkpoint
+PLAYWRIGHT_CHANNEL="chrome"           # помогает для Google/Apple (если установлен Chrome)
+PLAYWRIGHT_USER_DATA_DIR="./.playwright-profile"  # persistent Chrome profile (важно для Google)
+API_HOST="127.0.0.1"
+API_PORT="8000"
+```
+
+Если Google показывает ошибку вида “This browser or app may not be secure”, обычно помогает:
+- `PLAYWRIGHT_CHANNEL="chrome"`
+- `PLAYWRIGHT_USER_DATA_DIR` (persistent профиль)
+
+Чтобы начать “с чистого листа”, остановите API и удалите папку профиля (по умолчанию `backend/.playwright-profile/`), затем запустите API снова.
+
+Запуск:
+
+```bash
+cd backend
+uvicorn pulse_api.main:app --app-dir api/src --reload --host 127.0.0.1 --port 8000
+```
+
+Эндпоинты:
+- `POST /v1/linkedin/login` — старт login-сессии (`email` / `google` / `apple`)
+- `GET /v1/linkedin/login/{session_id}` — статус (polling)
+- `DELETE /v1/linkedin/login/{session_id}` — отмена (best-effort, закрывает браузер через cancel flag)
+
+Пример (вместо `$SUPABASE_ACCESS_TOKEN` используйте access token текущего пользователя Supabase):
+
+```bash
+curl -X POST "http://127.0.0.1:8000/v1/linkedin/login" \
+  -H "Authorization: Bearer $SUPABASE_ACCESS_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"method":"google","label":"default"}'
+```
+
+Email/phone + password (best-effort автозаполнение; при 2FA/checkpoint нужно будет доделать руками в том же окне):
+
+```bash
+curl -X POST "http://127.0.0.1:8000/v1/linkedin/login" \
+  -H "Authorization: Bearer $SUPABASE_ACCESS_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"method":"email","identifier":"user@example.com","password":"secret","label":"default"}'
+```
+
+Apple ID:
+
+```bash
+curl -X POST "http://127.0.0.1:8000/v1/linkedin/login" \
+  -H "Authorization: Bearer $SUPABASE_ACCESS_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"method":"apple","label":"default"}'
 ```
 

@@ -12,10 +12,10 @@ EN: Manual login fallback.
 
 from dataclasses import dataclass
 
-from playwright.sync_api import BrowserContext, Page, TimeoutError as PlaywrightTimeoutError
+from playwright.sync_api import BrowserContext, Page
 
-from ..exceptions import LoginTimeoutError
 from .cookies import extract_cookies
+from .wait import SessionWaitConfig, wait_for_session
 
 
 @dataclass(frozen=True, slots=True)
@@ -36,14 +36,7 @@ class ManualLoginFlow:
 
     def run(self, page: Page, context: BrowserContext) -> LoginResult:
         page.goto(self.LOGIN_URL, wait_until="domcontentloaded")
-
-        try:
-            page.wait_for_url("**/feed/**", timeout=self._timeout_ms)
-        except PlaywrightTimeoutError as e:
-            raise LoginTimeoutError(
-                "Manual login did not complete in time. "
-                "Complete authentication in the opened browser window."
-            ) from e
+        wait_for_session(page, cfg=SessionWaitConfig(timeout_ms=self._timeout_ms))
 
         # We intentionally do not validate feed readiness here; downstream navigation/waiting
         # will re-stabilize. At this point LinkedIn has redirected to feed, so cookies are usable.

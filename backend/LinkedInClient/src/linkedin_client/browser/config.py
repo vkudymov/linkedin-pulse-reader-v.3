@@ -24,3 +24,14 @@ class BrowserConfig:
 
     slow_mo_ms: int | None = None
 
+    # Prefer real Chrome for social auth (Google/Apple) where Chromium automation can be blocked.
+    # Example: "chrome", "msedge". When not available, the library falls back to default chromium.
+    channel: str | None = None
+
+    # Extra launch args passed to Playwright. Keep optional to avoid breaking defaults.
+    launch_args: list[str] | None = None
+
+    # When set, Playwright will use a persistent browser profile (user-data-dir).
+    # This is important for Google OAuth flows that block automated ephemeral contexts.
+    user_data_dir: str | None = None
+

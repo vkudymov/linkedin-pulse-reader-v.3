@@ -1,0 +1,40 @@
+[build-system]
+requires = ["hatchling>=1.21.0"]
+build-backend = "hatchling.build"
+
+[project]
+name = "pulse-api"
+version = "0.1.0"
+description = "Backend API for LinkedIn Pulse Reader (LinkedIn auth via Playwright)."
+requires-python = ">=3.11"
+license = { text = "Proprietary" }
+authors = [{ name = "Pulse API" }]
+dependencies = [
+  "fastapi>=0.110.0",
+  "pydantic-settings>=2.0.0",
+  "supabase>=2.0.0",
+  "uvicorn[standard]>=0.22.0",
+]
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/pulse_api"]
+
+[tool.ruff]
+target-version = "py311"
+line-length = 100
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B", "SIM"]
+
+[tool.mypy]
+python_version = "3.11"
+strict = true
+warn_return_any = true
+warn_unused_ignores = true
+no_implicit_optional = true
+disallow_any_generics = true
+disallow_subclassing_any = true
+disallow_untyped_defs = true
+disallow_incomplete_defs = true
+check_untyped_defs = true
+strict_equality = true

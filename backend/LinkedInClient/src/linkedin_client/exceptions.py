@@ -31,6 +31,14 @@ class LoginTimeoutError(LinkedInClientError):
     """Raised when manual login did not complete within the configured timeout."""
 
 
+class LoginCheckpointError(LinkedInClientError):
+    """Raised when LinkedIn requires checkpoint / verification to proceed."""
+
+
+class LoginCancelledError(LinkedInClientError):
+    """Raised when the interactive login flow was cancelled by the caller."""
+
+
 class FeedLoadError(LinkedInClientError):
     """Raised when the LinkedIn feed could not be loaded or stabilized."""
 

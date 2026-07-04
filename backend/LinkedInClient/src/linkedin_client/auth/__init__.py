@@ -9,6 +9,7 @@ EN: Auth boundary.
 """
 
 from .cookies import Cookie, Cookies, extract_cookies, inject_cookies
+from .methods import LoginMethod
 
-__all__ = ["Cookie", "Cookies", "extract_cookies", "inject_cookies"]
+__all__ = ["Cookie", "Cookies", "LoginMethod", "extract_cookies", "inject_cookies"]
 

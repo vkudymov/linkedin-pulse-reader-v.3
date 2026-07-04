@@ -1,11 +1,41 @@
 from __future__ import annotations
 
 import json
+import re
+import time
 from dataclasses import dataclass
+from pathlib import Path
 from typing import Any, Mapping
 
 from ..config import PostAnalyzerConfig
 from ..llm import LLMClient
+
+_DEBUG_LOG_PATH = Path(
+    "/Users/vladimirkudymov/Work/linkedin-pulse-reader-v.3/.cursor/debug-5dd403.log"
+)
+
+
+# region agent log
+def _dbg_log(*, run_id: str, hypothesis_id: str, location: str, message: str, data: dict[str, Any]) -> None:
+    try:
+        payload = {
+            "sessionId": "5dd403",
+            "runId": run_id,
+            "hypothesisId": hypothesis_id,
+            "location": location,
+            "message": message,
+            "data": data,
+            "timestamp": int(time.time() * 1000),
+        }
+        _DEBUG_LOG_PATH.parent.mkdir(parents=True, exist_ok=True)
+        with _DEBUG_LOG_PATH.open("a", encoding="utf-8") as f:
+            f.write(json.dumps(payload, ensure_ascii=False) + "\n")
+    except Exception:
+        # Best-effort debug logging only.
+        return
+
+
+# endregion
 
 
 @dataclass(frozen=True, slots=True)
@@ -40,7 +70,27 @@ class RelevanceFilter:
                 user=self._config.format_relevance_user(text=text, post_url=post_url),
             )
         except Exception as e:  # noqa: BLE001 - library boundary: normalize to string
+            _dbg_log(
+                run_id="pre-fix",
+                hypothesis_id="H3",
+                location="post_analyzer/filters/relevance.py:llm_complete",
+                message="LLM relevance complete failed",
+                data={"error": str(e).splitlines()[0], "post_url": str(post_url)[:200]},
+            )
             return RelevanceResult(relevant=False, error=f"LLM relevance check failed: {e}")
+
+        _dbg_log(
+            run_id="pre-fix",
+            hypothesis_id="H1",
+            location="post_analyzer/filters/relevance.py:raw_response",
+            message="Got raw relevance response",
+            data={
+                "raw_len": len(raw or ""),
+                "raw_has_fence": "```" in (raw or ""),
+                "raw_preview": (raw or "").strip().replace("\n", " ")[:120],
+                "post_url": str(post_url)[:200],
+            },
+        )
 
         try:
             return _parse_relevance_result(raw)
@@ -48,6 +98,18 @@ class RelevanceFilter:
             preview = (raw or "").strip().replace("\n", " ")
             if len(preview) > 200:
                 preview = f"{preview[:200]}…"
+            _dbg_log(
+                run_id="pre-fix",
+                hypothesis_id="H2",
+                location="post_analyzer/filters/relevance.py:parse_failed",
+                message="Failed to parse relevance response",
+                data={
+                    "error": str(e).splitlines()[0],
+                    "raw_has_fence": "```" in (raw or ""),
+                    "raw_preview": preview,
+                    "post_url": str(post_url)[:200],
+                },
+            )
             return RelevanceResult(
                 relevant=False,
                 error=f"Invalid relevance response: {e}. Raw: {preview!r}",
@@ -55,9 +117,50 @@ class RelevanceFilter:
 
 
 def _parse_relevance_result(raw: str) -> RelevanceResult:
+    raw_s = raw or ""
+    _dbg_log(
+        run_id="pre-fix",
+        hypothesis_id="H1",
+        location="post_analyzer/filters/relevance.py:_parse_relevance_result",
+        message="Parsing relevance JSON",
+        data={
+            "raw_len": len(raw_s),
+            "raw_strip_start": raw_s.lstrip()[:20],
+            "raw_strip_end": raw_s.rstrip()[-20:],
+            "raw_has_fence": "```" in raw_s,
+        },
+    )
+
+    json_text = _coerce_json_text(raw_s)
+    if json_text != raw_s:
+        _dbg_log(
+            run_id="post-fix",
+            hypothesis_id="H1",
+            location="post_analyzer/filters/relevance.py:_coerce_json_text",
+            message="Coerced relevance response into JSON text",
+            data={
+                "before_len": len(raw_s),
+                "after_len": len(json_text),
+                "before_has_fence": "```" in raw_s,
+                "after_has_fence": "```" in json_text,
+                "after_preview": json_text.strip().replace("\n", " ")[:120],
+            },
+        )
+
     try:
-        payload = json.loads(raw)
-    except json.JSONDecodeError as e:  # pragma: no cover
+        payload = json.loads(json_text)
+    except json.JSONDecodeError as e:
+        _dbg_log(
+            run_id="post-fix",
+            hypothesis_id="H1",
+            location="post_analyzer/filters/relevance.py:json_decode_error",
+            message="json.loads failed after coercion",
+            data={
+                "error": str(e).splitlines()[0],
+                "json_preview": json_text.strip().replace("\n", " ")[:160],
+                "json_has_fence": "```" in json_text,
+            },
+        )
         raise ValueError("Expected strict JSON.") from e
 
     if not isinstance(payload, dict):
@@ -76,4 +179,71 @@ def _parse_relevance_result(raw: str) -> RelevanceResult:
         )
 
     raise ValueError("Expected boolean field 'relevant' (or 'is_relevant').")
+
+
+_FENCE_RE = re.compile(r"^\s*```[a-zA-Z0-9_-]*\s*([\s\S]*?)\s*```\s*$")
+
+
+def _coerce_json_text(raw: str) -> str:
+    """
+    Accept strict JSON wrapped in Markdown fences or surrounded by minor extra text.
+
+    We still only parse a single JSON object. This is a tolerance layer for LLM outputs,
+    while keeping the downstream schema checks strict.
+    """
+    s = (raw or "").strip()
+    if not s:
+        return s
+
+    if (m := _FENCE_RE.match(s)) is not None:
+        s = (m.group(1) or "").strip()
+
+    # Some models return: ```json { ... } ``` on one line with extra spaces.
+    if s.startswith("```") and "```" in s[3:]:
+        first = s.find("```")
+        last = s.rfind("```")
+        if last > first:
+            inner = s[first + 3 : last]
+            # Drop possible language tag at start of inner.
+            inner = inner.lstrip()
+            if "\n" in inner:
+                first_line, rest = inner.split("\n", 1)
+                if len(first_line) <= 16 and all(ch.isalnum() or ch in "-_" for ch in first_line.strip()):
+                    inner = rest
+            s = inner.strip()
+
+    # If there's still extra text, extract the first JSON object by brace matching.
+    extracted = _extract_first_json_object(s)
+    return extracted if extracted is not None else s
+
+
+def _extract_first_json_object(s: str) -> str | None:
+    start = s.find("{")
+    if start < 0:
+        return None
+
+    depth = 0
+    in_str = False
+    esc = False
+    for i in range(start, len(s)):
+        ch = s[i]
+        if in_str:
+            if esc:
+                esc = False
+            elif ch == "\\":
+                esc = True
+            elif ch == '"':
+                in_str = False
+            continue
+
+        if ch == '"':
+            in_str = True
+            continue
+        if ch == "{":
+            depth += 1
+        elif ch == "}":
+            depth -= 1
+            if depth == 0:
+                return s[start : i + 1].strip()
+    return None
 

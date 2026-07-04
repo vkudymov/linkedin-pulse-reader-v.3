@@ -12,13 +12,16 @@ EN: Library orchestration module.
 
 import re
 from contextlib import suppress
+from collections.abc import Callable
 from typing import Any
 from urllib.parse import urlparse
 
 from playwright.sync_api import Page
 
 from .auth.cookies import Cookies, extract_cookies, inject_cookies
-from .auth.login import ManualLoginFlow
+from .auth.email_password import EmailPasswordLoginFlow, EmailPasswordLoginParams
+from .auth.methods import LoginMethod
+from .auth.social import SocialLoginFlow, SocialLoginParams
 from .browser import BrowserConfig, BrowserManager
 from .config import LinkedInClientConfig
 from .exceptions import BrowserLifecycleError, FeedLoadError, LinkedInClientError
@@ -171,10 +174,22 @@ class LinkedInClient:
     def page(self) -> Page:
         return self._browser.handle.page
 
-    def login_and_get_cookies(self) -> list[dict]:
+    def login_and_get_cookies(
+        self,
+        *,
+        method: LoginMethod = LoginMethod.email,
+        identifier: str | None = None,
+        password: str | None = None,
+        cancelled: Callable[[], bool] | None = None,
+        on_checkpoint: Callable[[], None] | None = None,
+    ) -> list[dict]:
         """
-        RU: Интерактивное восстановление сессии (UI -> cookies).
+        RU: Интерактивная аутентификация (UI -> cookies).
             Возвращаем cookies наружу, чтобы вызывающее приложение могло их сохранить.
+            Варианты:
+              - email/phone + password (best-effort автозаполнение)
+              - Google
+              - Apple ID
 
         EN: Interactive session recovery (UI -> cookies).
             Cookies are returned to the caller for external persistence.
@@ -190,10 +205,34 @@ class LinkedInClient:
         if self._manual_login_completed:
             return extract_cookies(self._browser.handle.context)
 
-        flow = ManualLoginFlow(timeout_ms=self._client_cfg.browser.timeout_ms)
-        result = flow.run(page=self.page, context=self._browser.handle.context)
+        # Ensure we're on the LinkedIn login page before starting a UI flow.
+        with suppress(Exception):
+            self.page.goto("https://www.linkedin.com/login", wait_until="domcontentloaded")
+
+        timeout_ms = self._client_cfg.browser.timeout_ms
+        ctx = self._browser.handle.context
+
+        if method == LoginMethod.email:
+            flow = EmailPasswordLoginFlow(
+                timeout_ms=timeout_ms,
+                params=EmailPasswordLoginParams(identifier=identifier, password=password),
+                cancelled=cancelled,
+                on_checkpoint=on_checkpoint,
+            )
+            flow.run(page=self.page, context=ctx)
+        elif method in (LoginMethod.google, LoginMethod.apple):
+            flow = SocialLoginFlow(
+                timeout_ms=timeout_ms,
+                params=SocialLoginParams(method=method),
+                cancelled=cancelled,
+                on_checkpoint=on_checkpoint,
+            )
+            flow.run(page=self.page, context=ctx)
+        else:
+            raise LinkedInClientError(f"Unsupported login method: {method!r}")
+
         self._manual_login_completed = True
-        return result.cookies
+        return extract_cookies(ctx)
 
     def get_cookies(self) -> list[dict]:
         """
