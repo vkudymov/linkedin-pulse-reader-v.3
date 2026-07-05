@@ -15,7 +15,9 @@ from dataclasses import dataclass
 
 from playwright.sync_api import Locator, Page
 
-from ..models.post import Author, Post
+from ..models.post import Author, Post, merge_authors
+from ..debug_agent_log import agent_dbg_log
+from .author_extract import extract_author_fields, pick_post_container
 from .post_url import get_post_url
 
 
@@ -147,6 +149,17 @@ class PostParser:
         post_url = self._try_get_post_url(container_used)
 
         author = self._try_get_author(container_used)
+        tb = container_used.locator("[data-testid='expandable-text-box']").first
+        try:
+            if tb.count() > 0:
+                upgraded = pick_post_container(tb)
+                upgraded_author = self._try_get_author(upgraded)
+                author = merge_authors(author, upgraded_author)
+                if upgraded_author is not None:
+                    container_used = upgraded
+        except Exception:
+            pass
+
         content = self._try_get_content(container_used)
         published_at_text = self._try_get_published_text(container_used)
 
@@ -192,31 +205,35 @@ class PostParser:
         return None
 
     def _try_get_author(self, container: Locator) -> Author | None:
-        name_selectors = [
-            "span.update-components-actor__name",
-            "span.feed-shared-actor__name",
-        ]
-        name = _first_text(container, name_selectors)
-        if not name:
+        fields = extract_author_fields(container)
+        name = fields.get("name")
+        if not isinstance(name, str) or not name.strip():
             return None
 
-        profile_url = None
-        try:
-            link = container.locator("a[href*='/in/'], a[href*='/company/']").first
-            if link.count() > 0:
-                profile_url = link.get_attribute("href")
-        except Exception:
-            profile_url = None
-
-        headline = _first_text(
-            container,
-            [
-                "span.update-components-actor__description",
-                "span.feed-shared-actor__description",
-            ],
+        headline_val = fields.get("headline")
+        profile_val = fields.get("profile_url")
+        urn_val = fields.get("urn")
+        author = Author(
+            name=name,
+            headline=headline_val if isinstance(headline_val, str) else None,
+            profile_url=profile_val if isinstance(profile_val, str) else None,
+            urn=urn_val if isinstance(urn_val, str) else None,
         )
-
-        return Author(name=name, headline=headline, profile_url=profile_url)
+        # region agent log
+        agent_dbg_log(
+            run_id="post-fix",
+            hypothesis_id="H5",
+            location="post_parser.py:_try_get_author",
+            message="PostParser author built",
+            data={
+                "has_name": bool(author.name),
+                "has_headline": bool(author.headline),
+                "has_profile_url": bool(author.profile_url),
+                "has_urn": bool(author.urn),
+            },
+        )
+        # endregion
+        return author
 
     def _try_get_content(self, container: Locator) -> str | None:
         return _first_text(

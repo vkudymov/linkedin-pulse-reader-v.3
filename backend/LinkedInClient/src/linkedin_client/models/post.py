@@ -25,6 +25,19 @@ class Author:
         object.__setattr__(self, "extra", MappingProxyType(dict(self.extra)))
 
 
+def merge_authors(a: Author | None, b: Author | None) -> Author | None:
+    if a is None:
+        return b
+    if b is None:
+        return a
+    return Author(
+        name=a.name or b.name,
+        headline=a.headline or b.headline,
+        profile_url=a.profile_url or b.profile_url,
+        urn=a.urn or b.urn,
+    )
+
+
 @dataclass(frozen=True, slots=True)
 class Post:
     """

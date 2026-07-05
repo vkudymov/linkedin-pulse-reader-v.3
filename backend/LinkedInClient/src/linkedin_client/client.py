@@ -28,9 +28,44 @@ from .exceptions import BrowserLifecycleError, FeedLoadError, LinkedInClientErro
 from .loading import FeedWaiter, HumanScroller
 from .navigation import FeedNavigator
 from .parsing import PostParser
-from .models.post import Author, Post
+from .debug_agent_log import agent_dbg_log
+from .models.post import Author, Post, merge_authors
 
 _ACTIVITY_RE = re.compile(r"urn:li:activity:(\d+)")
+
+
+def _author_from_read_item(item: dict[str, Any]) -> Author | None:
+    raw = item.get("author")
+    if isinstance(raw, dict):
+        name = raw.get("name")
+        if not isinstance(name, str) or not name.strip():
+            return None
+        headline = raw.get("headline")
+        profile_url = raw.get("profile_url")
+        urn = raw.get("urn")
+        return Author(
+            name=name.strip(),
+            headline=headline if isinstance(headline, str) and headline.strip() else None,
+            profile_url=(
+                profile_url if isinstance(profile_url, str) and profile_url.strip() else None
+            ),
+            urn=urn if isinstance(urn, str) and urn.strip() else None,
+        )
+    if isinstance(raw, str) and raw.strip():
+        return Author(name=raw.strip())
+    return None
+
+
+def _urn_from_read_item(item: dict[str, Any]) -> str | None:
+    urn = item.get("urn")
+    if isinstance(urn, str) and urn.strip():
+        return urn.strip()
+    post_url = item.get("post_url")
+    if isinstance(post_url, str):
+        m = re.search(r"urn:li:(activity|ugcPost):(\d+)", post_url)
+        if m:
+            return f"urn:li:{m.group(1)}:{m.group(2)}"
+    return None
 
 
 def _post_key(post: Post) -> str:
@@ -59,6 +94,77 @@ def _post_key(post: Post) -> str:
     if len(content) > 120:
         content = content[:120]
     return f"fallback:{author}|{published}|{content}"
+
+
+def _urn_from_post_url(post_url: str | None) -> str | None:
+    if not isinstance(post_url, str) or not post_url.strip():
+        return None
+    m = re.search(r"urn:li:(activity|ugcPost):(\d+)", post_url)
+    if m:
+        return f"urn:li:{m.group(1)}:{m.group(2)}"
+    return None
+
+
+def _enrich_post(existing: Post, incoming: Post) -> Post:
+    urn = existing.urn or incoming.urn
+    if not urn:
+        urn = _urn_from_post_url(existing.post_url) or _urn_from_post_url(incoming.post_url)
+
+    post_url = existing.post_url or incoming.post_url
+    if not post_url and urn:
+        post_url = f"https://www.linkedin.com/feed/update/{urn}"
+
+    return Post(
+        id=existing.id or incoming.id,
+        urn=urn,
+        post_url=post_url,
+        author=merge_authors(existing.author, incoming.author),
+        content=existing.content or incoming.content,
+        published_at_text=existing.published_at_text or incoming.published_at_text,
+        reactions_count=(
+            existing.reactions_count
+            if existing.reactions_count is not None
+            else incoming.reactions_count
+        ),
+        comments_count=(
+            existing.comments_count
+            if existing.comments_count is not None
+            else incoming.comments_count
+        ),
+        media_urls=existing.media_urls or incoming.media_urls,
+    )
+
+
+def _upsert_post(results: list[Post], seen: set[str], post: Post) -> bool:
+    """Insert or enrich an existing post keyed by `_post_key`. Returns True if inserted."""
+    key = _post_key(post)
+    if not key:
+        return False
+
+    for idx, existing in enumerate(results):
+        if _post_key(existing) != key:
+            continue
+        enriched = _enrich_post(existing, post)
+        results[idx] = enriched
+        # region agent log
+        agent_dbg_log(
+            run_id="post-fix",
+            hypothesis_id="H6",
+            location="client.py:_upsert_post",
+            message="Enriched existing post from secondary source",
+            data={
+                "has_author": enriched.author is not None,
+                "has_headline": bool(enriched.author and enriched.author.headline),
+                "has_profile_url": bool(enriched.author and enriched.author.profile_url),
+                "has_post_urn": bool(enriched.urn),
+            },
+        )
+        # endregion
+        return False
+
+    seen.add(key)
+    results.append(post)
+    return True
 
 
 class LinkedInClient:
@@ -248,7 +354,7 @@ class LinkedInClient:
             )
         return extract_cookies(self._browser.handle.context)
 
-    def read_posts(self, *, limit: int = 10) -> list[dict[str, str | None]]:
+    def read_posts(self, *, limit: int = 10) -> list[dict[str, Any]]:
         """
         RU: Прочитать посты из текущей страницы feed (без скролла).
             Скроллинг/дозагрузка выполняются другими модулями. Этот метод только читает DOM.
@@ -272,6 +378,7 @@ class LinkedInClient:
                 "created_at": item.get("created_at"),
                 "text": item.get("text"),
                 "post_url": item.get("post_url"),
+                "urn": item.get("urn"),
             }
             for item in raw
         ]
@@ -308,48 +415,54 @@ class LinkedInClient:
 
                 def merge(posts: list[Post]) -> None:
                     for p in posts:
-                        # Skip posts without readable text content (best-effort feed cards, ads, etc.).
                         content = (p.content or "").strip()
                         if not content:
                             continue
-                        key = _post_key(p)
-                        if not key or key in seen:
-                            continue
+                        _upsert_post(results, seen, p)
 
-                        seen.add(key)
-                        results.append(p)
-
-                def merge_read_posts(raw_posts: list[dict[str, str | None]]) -> None:
+                def merge_read_posts(raw_posts: list[dict[str, Any]]) -> None:
                     for item in raw_posts:
-                        author_name = item.get("author")
                         created_at = item.get("created_at")
                         text = item.get("text")
                         post_url = item.get("post_url")
+                        author = _author_from_read_item(item)
+                        urn = _urn_from_read_item(item)
 
                         if not isinstance(text, str) or not text.strip():
                             continue
 
+                        # region agent log
+                        agent_dbg_log(
+                            run_id="post-fix",
+                            hypothesis_id="H1",
+                            location="client.py:merge_read_posts",
+                            message="Creating Author from read_posts item",
+                            data={
+                                "has_author": author is not None,
+                                "has_headline": bool(author and author.headline),
+                                "has_profile_url": bool(author and author.profile_url),
+                                "has_author_urn": bool(author and author.urn),
+                                "has_post_urn": bool(urn),
+                                "item_keys": sorted(item.keys()),
+                            },
+                        )
+                        # endregion
+
                         p = Post(
-                            author=(Author(name=author_name) if author_name else None),
+                            author=author,
                             content=text,
                             published_at_text=created_at,
                             post_url=post_url,
+                            urn=urn,
                         )
-                        key = _post_key(p)
-                        if not key or key in seen:
-                            continue
-
-                        seen.add(key)
-                        results.append(p)
+                        _upsert_post(results, seen, p)
 
                 parse_budget = min(max(limit * 5, 50), 250)
 
                 merge(parser.parse_posts(self.page, limit=parse_budget))
-                # Run the second reader only when still below target to avoid duplicate heavy UI flows.
-                if len(results) < limit:
-                    merge_read_posts(
-                        self.read_posts(limit=min(parse_budget, limit * 2))
-                    )
+                merge_read_posts(
+                    self.read_posts(limit=min(parse_budget, limit * 2))
+                )
 
                 if len(results) >= limit:
                     return results[:limit]
@@ -365,10 +478,9 @@ class LinkedInClient:
                     self.page.wait_for_timeout(250)
 
                     merge(parser.parse_posts(self.page, limit=parse_budget))
-                    if len(results) < limit:
-                        merge_read_posts(
-                            self.read_posts(limit=min(parse_budget, limit * 2))
-                        )
+                    merge_read_posts(
+                        self.read_posts(limit=min(parse_budget, limit * 2))
+                    )
 
                     if len(results) >= limit:
                         return results[:limit]

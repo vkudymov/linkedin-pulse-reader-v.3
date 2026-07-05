@@ -10,8 +10,13 @@ EN: Minimal helper to read posts from the LinkedIn feed using Playwright Locator
 
 from typing import Any
 
+import re
+
 from playwright.sync_api import Locator, Page
 
+from linkedin_client.debug_agent_log import agent_dbg_log
+
+from .author_extract import extract_author_fields, pick_post_container
 from .post_url import get_post_url
 
 # Primary anchor (as requested): this is where LinkedIn renders feed post text.
@@ -22,10 +27,6 @@ _TEXT_BLOCK_FALLBACK_SELECTORS: tuple[str, ...] = (
     "div.feed-shared-update-v2__description",
 )
 
-_AUTHOR_SELECTORS: tuple[str, ...] = (
-    "span.update-components-actor__name",
-    "span.feed-shared-actor__name",
-)
 _CREATED_AT_SELECTORS: tuple[str, ...] = (
     "span.update-components-actor__sub-description",
     "span.feed-shared-actor__sub-description",
@@ -40,6 +41,25 @@ _SEE_MORE_SELECTORS: tuple[str, ...] = (
     "button:has-text('See more')",
     "button:has-text('see more')",
 )
+
+_POST_URN_RE = re.compile(r"urn:li:(activity|ugcPost):(\d+)")
+
+
+def _post_urn(container: Locator, post_url: str | None) -> str | None:
+    try:
+        for attr in ("data-urn", "data-id"):
+            val = container.get_attribute(attr)
+            if isinstance(val, str):
+                urn = val.strip()
+                if urn and "urn:li:" in urn and "aggregate" not in urn:
+                    return urn
+    except Exception:
+        pass
+    if post_url:
+        m = _POST_URN_RE.search(post_url)
+        if m:
+            return f"urn:li:{m.group(1)}:{m.group(2)}"
+    return None
 
 
 def _maybe_inner_text(locator: Locator) -> str | None:
@@ -123,28 +143,7 @@ def _container_key(container: Locator) -> str | None:
 
 
 def _pick_post_container(text_box: Locator) -> Locator:
-    """
-    Given a text box locator, find the closest post container via XPath ancestors.
-    This avoids hard dependency on a single feed container class.
-    """
-    candidates = (
-        "xpath=ancestor::*[@role='article'][1]",
-        "xpath=ancestor::*[@role='listitem'][1]",
-        "xpath=ancestor::*[@data-urn][1]",
-        "xpath=ancestor::*[@data-id][1]",
-        "xpath=ancestor::article[@data-urn][1]",
-        "xpath=ancestor::div[contains(@class,'feed-shared-update-v2')][1]",
-        "xpath=ancestor::div[contains(@class,'occludable-update')][1]",
-    )
-    for sel in candidates:
-        loc = text_box.locator(sel).first
-        try:
-            if loc.count() > 0:
-                return loc
-        except Exception:
-            continue
-    # Last resort: try a generic ancestor div; still allows text extraction from the box itself.
-    return text_box.locator("xpath=ancestor::div[1]").first
+    return pick_post_container(text_box)
 
 
 def _first_text(container: Locator, selectors: tuple[str, ...]) -> str | None:
@@ -163,7 +162,13 @@ def read_posts(page: Page, limit: int) -> list[dict[str, Any]]:
     Read up to `limit` posts from the currently opened LinkedIn feed page.
 
     Output format per post:
-      {"author": str | None, "created_at": str | None, "text": str | None}
+      {
+        "author": {"name", "headline", "profile_url", "urn"} | None,
+        "created_at": str | None,
+        "text": str | None,
+        "post_url": str | None,
+        "urn": str | None,
+      }
 
     Notes:
     - Best-effort by design: missing elements do not raise; missing values become None.
@@ -175,7 +180,6 @@ def read_posts(page: Page, limit: int) -> list[dict[str, Any]]:
     _wait_for_posts_best_effort(page, timeout_ms=5000)
     _stabilize_post_count_best_effort(page, samples=2, pause_ms=250)
 
-    selector_used = _TEXT_BOX_SELECTOR
     text_boxes = page.locator(_TEXT_BOX_SELECTOR)
     try:
         total = text_boxes.count()
@@ -190,7 +194,6 @@ def read_posts(page: Page, limit: int) -> list[dict[str, Any]]:
             except Exception:
                 continue
             if c > 0:
-                selector_used = sel
                 text_boxes = loc
                 total = c
                 break
@@ -212,17 +215,34 @@ def read_posts(page: Page, limit: int) -> list[dict[str, Any]]:
 
         # Best-effort: try expanding collapsed text if present.
         _try_expand_text(c)
-        author = _first_text(c, _AUTHOR_SELECTORS)
+        author_fields = extract_author_fields(c)
+        author_name = (
+            author_fields.get("name")
+            if isinstance(author_fields.get("name"), str)
+            else None
+        )
+        # region agent log
+        agent_dbg_log(
+            run_id="post-fix",
+            hypothesis_id="H1",
+            location="read_posts.py:author_fields",
+            message="read_posts author fields",
+            data={
+                "index": i,
+                "name": bool(author_name),
+                "headline": bool(author_fields.get("headline")),
+                "profile_url": bool(author_fields.get("profile_url")),
+                "urn": bool(author_fields.get("urn")),
+            },
+        )
+        # endregion
         created_at = _first_text(c, _CREATED_AT_SELECTORS)
         text = _maybe_inner_text(tb)
-        # Source of truth: UI flow “… → Copy link … → read URL”.
-        # Legacy DOM/href and old menu heuristics are kept below for reference (TODO remove).
         post_url = get_post_url(c)
+        urn = _post_urn(c, post_url)
 
-        # If we don't have an urn/id key, derive a weak fallback key to reduce duplicates
-        # caused by DOM re-rendering during reads.
         if not key:
-            a = (author or "").strip()
+            a = (author_name or "").strip()
             d = (created_at or "").strip()
             t = (text or "").replace("\n", " ").strip()
             if len(t) > 120:
@@ -236,10 +256,11 @@ def read_posts(page: Page, limit: int) -> list[dict[str, Any]]:
             seen.add(key)
         results.append(
             {
-                "author": author,
+                "author": author_fields if author_name else None,
                 "created_at": created_at,
                 "text": text,
                 "post_url": post_url,
+                "urn": urn,
             }
         )
 
