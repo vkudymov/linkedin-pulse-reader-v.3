@@ -14,8 +14,6 @@ import re
 
 from playwright.sync_api import Locator, Page
 
-from linkedin_client.debug_agent_log import agent_dbg_log
-
 from .author_extract import extract_author_fields, pick_post_container
 from .post_url import get_post_url
 
@@ -221,21 +219,6 @@ def read_posts(page: Page, limit: int) -> list[dict[str, Any]]:
             if isinstance(author_fields.get("name"), str)
             else None
         )
-        # region agent log
-        agent_dbg_log(
-            run_id="post-fix",
-            hypothesis_id="H1",
-            location="read_posts.py:author_fields",
-            message="read_posts author fields",
-            data={
-                "index": i,
-                "name": bool(author_name),
-                "headline": bool(author_fields.get("headline")),
-                "profile_url": bool(author_fields.get("profile_url")),
-                "urn": bool(author_fields.get("urn")),
-            },
-        )
-        # endregion
         created_at = _first_text(c, _CREATED_AT_SELECTORS)
         text = _maybe_inner_text(tb)
         post_url = get_post_url(c)

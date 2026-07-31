@@ -10,6 +10,7 @@ EN: Library orchestration module.
     (browser/auth/navigation/loading/parsing) remain swappable and testable.
 """
 
+import logging
 import re
 from contextlib import suppress
 from collections.abc import Callable
@@ -28,10 +29,26 @@ from .exceptions import BrowserLifecycleError, FeedLoadError, LinkedInClientErro
 from .loading import FeedWaiter, HumanScroller
 from .navigation import FeedNavigator
 from .parsing import PostParser
-from .debug_agent_log import agent_dbg_log
 from .models.post import Author, Post, merge_authors
 
 _ACTIVITY_RE = re.compile(r"urn:li:activity:(\d+)")
+_log = logging.getLogger(__name__)
+
+
+def _feed_dom_counts(page: Page) -> dict[str, int]:
+    selectors = {
+        "text_boxes": "[data-testid='expandable-text-box']",
+        "post_containers": (
+            "div.feed-shared-update-v2, div.occludable-update, article[data-urn]"
+        ),
+    }
+    out: dict[str, int] = {}
+    for key, sel in selectors.items():
+        try:
+            out[key] = page.locator(sel).count()
+        except Exception:
+            out[key] = -1
+    return out
 
 
 def _author_from_read_item(item: dict[str, Any]) -> Author | None:
@@ -146,20 +163,6 @@ def _upsert_post(results: list[Post], seen: set[str], post: Post) -> bool:
             continue
         enriched = _enrich_post(existing, post)
         results[idx] = enriched
-        # region agent log
-        agent_dbg_log(
-            run_id="post-fix",
-            hypothesis_id="H6",
-            location="client.py:_upsert_post",
-            message="Enriched existing post from secondary source",
-            data={
-                "has_author": enriched.author is not None,
-                "has_headline": bool(enriched.author and enriched.author.headline),
-                "has_profile_url": bool(enriched.author and enriched.author.profile_url),
-                "has_post_urn": bool(enriched.urn),
-            },
-        )
-        # endregion
         return False
 
     seen.add(key)
@@ -431,23 +434,6 @@ class LinkedInClient:
                         if not isinstance(text, str) or not text.strip():
                             continue
 
-                        # region agent log
-                        agent_dbg_log(
-                            run_id="post-fix",
-                            hypothesis_id="H1",
-                            location="client.py:merge_read_posts",
-                            message="Creating Author from read_posts item",
-                            data={
-                                "has_author": author is not None,
-                                "has_headline": bool(author and author.headline),
-                                "has_profile_url": bool(author and author.profile_url),
-                                "has_author_urn": bool(author and author.urn),
-                                "has_post_urn": bool(urn),
-                                "item_keys": sorted(item.keys()),
-                            },
-                        )
-                        # endregion
-
                         p = Post(
                             author=author,
                             content=text,
@@ -458,17 +444,24 @@ class LinkedInClient:
                         _upsert_post(results, seen, p)
 
                 parse_budget = min(max(limit * 5, 50), 250)
+                read_limit = min(parse_budget, limit * 2)
 
                 merge(parser.parse_posts(self.page, limit=parse_budget))
-                merge_read_posts(
-                    self.read_posts(limit=min(parse_budget, limit * 2))
+                merge_read_posts(self.read_posts(limit=read_limit))
+
+                _log.info(
+                    "Feed initial parse: %s/%s posts (DOM text_boxes=%s)",
+                    len(results),
+                    limit,
+                    _feed_dom_counts(self.page).get("text_boxes", "?"),
                 )
 
                 if len(results) >= limit:
                     return results[:limit]
 
                 no_progress = 0
-                for i in range(self._client_cfg.scroll.max_scrolls):
+                max_scrolls = self._client_cfg.scroll.max_scrolls
+                for i in range(max_scrolls):
                     before_len = len(results)
                     scrolled = scroller.scroll_batch(page=self.page)
 
@@ -478,8 +471,15 @@ class LinkedInClient:
                     self.page.wait_for_timeout(250)
 
                     merge(parser.parse_posts(self.page, limit=parse_budget))
-                    merge_read_posts(
-                        self.read_posts(limit=min(parse_budget, limit * 2))
+                    merge_read_posts(self.read_posts(limit=read_limit))
+
+                    _log.info(
+                        "Feed scroll %s/%s: %s/%s posts (scrolled=%s)",
+                        i + 1,
+                        max_scrolls,
+                        len(results),
+                        limit,
+                        scrolled,
                     )
 
                     if len(results) >= limit:
@@ -496,6 +496,11 @@ class LinkedInClient:
                         ):
                             break
 
+                _log.info(
+                    "Feed fetch finished: collected %s posts (requested %s)",
+                    len(results),
+                    limit,
+                )
                 return results[:limit]
             except FeedLoadError:
                 if attempt == 0:

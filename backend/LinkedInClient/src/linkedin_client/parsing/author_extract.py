@@ -6,8 +6,6 @@ from urllib.parse import unquote
 
 from playwright.sync_api import Locator
 
-from linkedin_client.debug_agent_log import agent_dbg_log
-
 _PROFILE_LINK_SELECTOR = "a[href*='/in/'], a[href*='/company/']"
 
 _LEGACY_NAME_SELECTORS: tuple[str, ...] = (
@@ -323,30 +321,6 @@ def extract_author_fields(container: Locator) -> dict[str, Any]:
     )
     headline = extract_author_headline(container, author_name=name)
     urn = _urn_from_profile_link(link) if link is not None else None
-
-    # region agent log
-    if name:
-        headline_probe: dict[str, int] = {}
-        for sel in _LEGACY_HEADLINE_SELECTORS + _HEADLINE_WILDCARD_SELECTORS:
-            try:
-                headline_probe[sel] = container.locator(sel).count()
-            except Exception:
-                headline_probe[sel] = -1
-        agent_dbg_log(
-            run_id="post-fix",
-            hypothesis_id="H2",
-            location="author_extract.py:extract_author_fields",
-            message="Author field extraction snapshot",
-            data={
-                "has_name": bool(name),
-                "has_headline": bool(headline),
-                "has_profile_url": bool(profile_url),
-                "has_urn": bool(urn),
-                "headline_probe": headline_probe,
-                "profile_links": _profile_link_count(container),
-            },
-        )
-    # endregion
 
     if not name:
         return {"name": None, "headline": None, "profile_url": None, "urn": None}

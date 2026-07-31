@@ -16,7 +16,6 @@ from dataclasses import dataclass
 from playwright.sync_api import Locator, Page
 
 from ..models.post import Author, Post, merge_authors
-from ..debug_agent_log import agent_dbg_log
 from .author_extract import extract_author_fields, pick_post_container
 from .post_url import get_post_url
 
@@ -31,6 +30,7 @@ _POST_CONTAINER_SELECTOR_GROUP = (
     "div[data-urn*='urn:li:ugcPost'], "
     "div[data-urn*='urn:li:share']"
 )
+_TEXT_BOX_SELECTOR = "[data-testid='expandable-text-box']"
 
 
 _COMPACT_RE = re.compile(r"^\s*(?P<num>\d+(?:[.,]\d+)?)\s*(?P<sfx>[KMB])?\s*$", re.IGNORECASE)
@@ -83,13 +83,19 @@ class PostParser:
 
         containers = page.locator(_POST_CONTAINER_SELECTOR_GROUP)
         count = containers.count()
+        use_text_boxes = count <= 0
+        if use_text_boxes:
+            containers = page.locator(_TEXT_BOX_SELECTOR)
+            count = containers.count()
+
         results: list[Post] = []
         seen: set[str] = set()
 
         for i in range(min(count, limit * 3)):
             if len(results) >= limit:
                 break
-            container = containers.nth(i)
+            raw = containers.nth(i)
+            container = pick_post_container(raw) if use_text_boxes else raw
             try:
                 post = self._parse_container(container)
             except Exception:  # noqa: BLE001 - isolate per-post failures
@@ -219,26 +225,13 @@ class PostParser:
             profile_url=profile_val if isinstance(profile_val, str) else None,
             urn=urn_val if isinstance(urn_val, str) else None,
         )
-        # region agent log
-        agent_dbg_log(
-            run_id="post-fix",
-            hypothesis_id="H5",
-            location="post_parser.py:_try_get_author",
-            message="PostParser author built",
-            data={
-                "has_name": bool(author.name),
-                "has_headline": bool(author.headline),
-                "has_profile_url": bool(author.profile_url),
-                "has_urn": bool(author.urn),
-            },
-        )
-        # endregion
         return author
 
     def _try_get_content(self, container: Locator) -> str | None:
         return _first_text(
             container,
             [
+                "[data-testid='expandable-text-box']",
                 "div.feed-shared-update-v2__description",
                 "div.update-components-text",
                 "span.break-words",
