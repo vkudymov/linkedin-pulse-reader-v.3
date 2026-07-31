@@ -11,7 +11,7 @@ import {
   Sparkles,
 } from "lucide-react";
 
-import { Avatar, AvatarFallback } from "@/components/ui/avatar";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import { buttonVariants } from "@/components/ui/button";
 import {
@@ -121,6 +121,11 @@ export function PostCard({ post }: { post: FeedPostRow }) {
     post.author_json.profile_url.trim()
       ? post.author_json.profile_url.trim()
       : null;
+  const authorAvatarUrl =
+    typeof post.author_json?.avatar_url === "string" &&
+    post.author_json.avatar_url.trim()
+      ? post.author_json.avatar_url.trim()
+      : null;
   const reason = getReason(post);
   const comment =
     typeof post.comment_text === "string" && post.comment_text.trim()
@@ -146,6 +151,9 @@ export function PostCard({ post }: { post: FeedPostRow }) {
         <div className="flex items-start justify-between gap-3">
           <div className="flex min-w-0 items-start gap-3">
             <Avatar size="default" className="size-10">
+              {authorAvatarUrl ? (
+                <AvatarImage src={authorAvatarUrl} alt={displayName} />
+              ) : null}
               <AvatarFallback className="bg-background text-sm font-medium text-foreground">
                 {authorInitials(authorName)}
               </AvatarFallback>

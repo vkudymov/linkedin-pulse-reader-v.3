@@ -161,7 +161,7 @@ def read_posts(page: Page, limit: int) -> list[dict[str, Any]]:
 
     Output format per post:
       {
-        "author": {"name", "headline", "profile_url", "urn"} | None,
+        "author": {"name", "headline", "profile_url", "urn", "avatar_url"} | None,
         "created_at": str | None,
         "text": str | None,
         "post_url": str | None,

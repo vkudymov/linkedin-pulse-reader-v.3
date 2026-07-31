@@ -219,11 +219,13 @@ class PostParser:
         headline_val = fields.get("headline")
         profile_val = fields.get("profile_url")
         urn_val = fields.get("urn")
+        avatar_val = fields.get("avatar_url")
         author = Author(
             name=name,
             headline=headline_val if isinstance(headline_val, str) else None,
             profile_url=profile_val if isinstance(profile_val, str) else None,
             urn=urn_val if isinstance(urn_val, str) else None,
+            avatar_url=avatar_val if isinstance(avatar_val, str) else None,
         )
         return author
 

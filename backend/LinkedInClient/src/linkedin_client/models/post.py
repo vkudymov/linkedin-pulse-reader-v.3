@@ -18,6 +18,7 @@ class Author:
     headline: str | None = None
     profile_url: str | None = None
     urn: str | None = None
+    avatar_url: str | None = None
 
     extra: Mapping[str, Any] = field(default_factory=dict, repr=False)
 
@@ -35,6 +36,7 @@ def merge_authors(a: Author | None, b: Author | None) -> Author | None:
         headline=a.headline or b.headline,
         profile_url=a.profile_url or b.profile_url,
         urn=a.urn or b.urn,
+        avatar_url=a.avatar_url or b.avatar_url,
     )
 
 

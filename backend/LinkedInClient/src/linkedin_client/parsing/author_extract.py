@@ -44,6 +44,23 @@ _TIME_OR_META_RE = re.compile(
 
 _BAD_HREF_TOKENS = ("/posts", "/feed/", "/pulse/", "/search/")
 
+_AVATAR_IMG_SELECTORS: tuple[str, ...] = (
+    "img.update-components-actor__avatar-image",
+    "img.feed-shared-actor__avatar",
+    "[data-testid='actor-avatar'] img",
+    ".update-components-actor__avatar img",
+    ".feed-shared-actor__avatar img",
+    "a[href*='/in/'] img",
+    "a[href*='/company/'] img",
+)
+
+_GHOST_AVATAR_MARKERS: tuple[str, ...] = (
+    "ghost-person",
+    "ghost-company",
+    "static.licdn.com/aero-v1/",
+    "/aero-v1/sc/h/",
+)
+
 
 def _maybe_inner_text(locator: Locator) -> str | None:
     try:
@@ -300,6 +317,56 @@ def extract_author_profile_url(container: Locator) -> str | None:
         return None
 
 
+def _normalize_avatar_src(src: str | None) -> str | None:
+    if not isinstance(src, str):
+        return None
+    src = src.strip()
+    if not src.startswith("http"):
+        return None
+    lowered = src.lower()
+    if any(marker in lowered for marker in _GHOST_AVATAR_MARKERS):
+        return None
+    return src
+
+
+def extract_author_avatar_url(
+    container: Locator,
+    *,
+    profile_link: Locator | None = None,
+) -> str | None:
+    scopes: list[Locator] = []
+    if profile_link is not None:
+        try:
+            actor = profile_link.locator(
+                "xpath=ancestor::*[contains(@class,'actor') or contains(@class,'Actor')][1]"
+            ).first
+            if actor.count() > 0:
+                scopes.append(actor)
+            scopes.append(profile_link)
+        except Exception:
+            pass
+    scopes.append(container)
+
+    seen_scopes: set[int] = set()
+    for scope in scopes:
+        scope_id = id(scope)
+        if scope_id in seen_scopes:
+            continue
+        seen_scopes.add(scope_id)
+
+        for sel in _AVATAR_IMG_SELECTORS:
+            try:
+                imgs = scope.locator(sel)
+                count = imgs.count()
+                for i in range(min(count, 4)):
+                    src = _normalize_avatar_src(imgs.nth(i).get_attribute("src"))
+                    if src:
+                        return src
+            except Exception:
+                continue
+    return None
+
+
 def extract_author_fields(container: Locator) -> dict[str, Any]:
     legacy_name = _first_text(container, _LEGACY_NAME_SELECTORS)
     name = _clean_author_name(legacy_name) if legacy_name else None
@@ -321,12 +388,20 @@ def extract_author_fields(container: Locator) -> dict[str, Any]:
     )
     headline = extract_author_headline(container, author_name=name)
     urn = _urn_from_profile_link(link) if link is not None else None
+    avatar_url = extract_author_avatar_url(container, profile_link=link)
 
     if not name:
-        return {"name": None, "headline": None, "profile_url": None, "urn": None}
+        return {
+            "name": None,
+            "headline": None,
+            "profile_url": None,
+            "urn": None,
+            "avatar_url": None,
+        }
     return {
         "name": name,
         "headline": headline,
         "profile_url": profile_url,
         "urn": urn,
+        "avatar_url": avatar_url,
     }

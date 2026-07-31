@@ -126,6 +126,7 @@ def post_to_dict(post: Any) -> dict[str, Any]:
                 "headline": getattr(author, "headline", None),
                 "profile_url": getattr(author, "profile_url", None),
                 "urn": getattr(author, "urn", None),
+                "avatar_url": getattr(author, "avatar_url", None),
             }
         ),
     }

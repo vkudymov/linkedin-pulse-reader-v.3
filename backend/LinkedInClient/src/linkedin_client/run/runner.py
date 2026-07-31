@@ -51,6 +51,7 @@ def _save_posts(path: Path, posts: list[Any]) -> None:
                     "headline": getattr(author, "headline", None),
                     "profile_url": getattr(author, "profile_url", None),
                     "urn": getattr(author, "urn", None),
+                    "avatar_url": getattr(author, "avatar_url", None),
                 },
             }
         )

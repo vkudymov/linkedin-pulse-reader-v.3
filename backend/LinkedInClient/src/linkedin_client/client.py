@@ -60,6 +60,7 @@ def _author_from_read_item(item: dict[str, Any]) -> Author | None:
         headline = raw.get("headline")
         profile_url = raw.get("profile_url")
         urn = raw.get("urn")
+        avatar_url = raw.get("avatar_url")
         return Author(
             name=name.strip(),
             headline=headline if isinstance(headline, str) and headline.strip() else None,
@@ -67,6 +68,9 @@ def _author_from_read_item(item: dict[str, Any]) -> Author | None:
                 profile_url if isinstance(profile_url, str) and profile_url.strip() else None
             ),
             urn=urn if isinstance(urn, str) and urn.strip() else None,
+            avatar_url=(
+                avatar_url if isinstance(avatar_url, str) and avatar_url.strip() else None
+            ),
         )
     if isinstance(raw, str) and raw.strip():
         return Author(name=raw.strip())

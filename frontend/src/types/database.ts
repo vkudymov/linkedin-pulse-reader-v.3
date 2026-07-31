@@ -15,6 +15,7 @@ export type FeedPostRow = {
     name?: string | null;
     headline?: string | null;
     profile_url?: string | null;
+    avatar_url?: string | null;
     urn?: string | null;
     [k: string]: unknown;
   } | null;
