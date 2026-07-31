@@ -1,44 +1,64 @@
 import Link from "next/link";
 
+import { buttonVariants } from "@/components/ui/button";
+import { cn } from "@/lib/utils";
+
 export type PostFilter = "all" | "relevant" | "rejected";
 
-function FilterLink({
-  href,
-  active,
-  children,
+export type PostFilterCounts = {
+  all: number;
+  relevant: number;
+  rejected: number;
+  pending: number;
+};
+
+const FILTERS: { value: PostFilter; href: string; label: string; countKey: keyof Omit<PostFilterCounts, "pending"> }[] = [
+  { value: "all", href: "/posts?filter=all", label: "Все", countKey: "all" },
+  { value: "relevant", href: "/posts?filter=relevant", label: "Принято", countKey: "relevant" },
+  { value: "rejected", href: "/posts?filter=rejected", label: "Отклонено", countKey: "rejected" },
+];
+
+export function PostFilters({
+  filter,
+  counts,
 }: {
-  href: string;
-  active: boolean;
-  children: React.ReactNode;
+  filter: PostFilter;
+  counts?: PostFilterCounts;
 }) {
   return (
-    <Link
-      href={href}
-      className={[
-        "rounded-xl border px-3 py-1.5 text-sm",
-        active
-          ? "border-zinc-900 bg-zinc-900 text-white"
-          : "border-zinc-200 bg-white text-zinc-900 hover:bg-zinc-50",
-      ].join(" ")}
-    >
-      {children}
-    </Link>
-  );
-}
+    <div className="inline-flex flex-wrap gap-2">
+      {FILTERS.map((item) => {
+        const active = filter === item.value;
+        const count = counts?.[item.countKey];
 
-export function PostFilters({ filter }: { filter: PostFilter }) {
-  return (
-    <div className="flex flex-wrap gap-2">
-      <FilterLink href="/posts?filter=all" active={filter === "all"}>
-        Все
-      </FilterLink>
-      <FilterLink href="/posts?filter=relevant" active={filter === "relevant"}>
-        Принято
-      </FilterLink>
-      <FilterLink href="/posts?filter=rejected" active={filter === "rejected"}>
-        Отклонено
-      </FilterLink>
+        return (
+          <Link
+            key={item.value}
+            href={item.href}
+            className={cn(
+              buttonVariants({
+                variant: active ? "default" : "outline",
+                size: "sm",
+              }),
+              "h-9 gap-2 rounded-full px-4",
+            )}
+          >
+            {item.label}
+            {typeof count === "number" ? (
+              <span
+                className={cn(
+                  "inline-flex min-w-5 items-center justify-center rounded-full px-1.5 text-xs tabular-nums",
+                  active
+                    ? "bg-primary-foreground/15 text-primary-foreground"
+                    : "bg-muted text-muted-foreground",
+                )}
+              >
+                {count}
+              </span>
+            ) : null}
+          </Link>
+        );
+      })}
     </div>
   );
 }
-

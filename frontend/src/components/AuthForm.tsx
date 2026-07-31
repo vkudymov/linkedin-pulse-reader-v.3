@@ -3,13 +3,49 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
+import { Lock } from "lucide-react";
 
+import { Button } from "@/components/ui/button";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardFooter,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { cn } from "@/lib/utils";
 import { createSupabaseBrowserClient } from "@/lib/supabase/client";
 
 type Variant = "login" | "register";
 
+const COPY = {
+  login: {
+    title: "Доступ к аккаунту",
+    description: "Войдите, чтобы просматривать найденные посты.",
+    submit: "Войти",
+    pending: "Входим...",
+    passwordLabel: "Пароль",
+    alt: { href: "/register", label: "Нет аккаунта? Зарегистрироваться" },
+  },
+  register: {
+    title: "Регистрация",
+    description: "Создайте аккаунт для доступа к LinkedIn Pulse Reader.",
+    submit: "Создать аккаунт",
+    pending: "Создаём...",
+    passwordLabel: "Пароль",
+    alt: { href: "/login", label: "Уже есть аккаунт? Войти" },
+  },
+} as const;
+
+const fieldClassName =
+  "h-11 rounded-full border-border/80 bg-secondary px-4 text-sm text-foreground shadow-none";
+
 export function AuthForm({ variant }: { variant: Variant }) {
   const router = useRouter();
+  const copy = COPY[variant];
   const nextPath = "/posts";
 
   const [email, setEmail] = useState("");
@@ -59,70 +95,89 @@ export function AuthForm({ variant }: { variant: Variant }) {
     }
   }
 
-  const title = variant === "register" ? "Регистрация" : "Вход";
-  const alt = variant === "register" ? { href: "/login", label: "Уже есть аккаунт? Войти" } : { href: "/register", label: "Нет аккаунта? Зарегистрироваться" };
-
   return (
-    <div className="min-h-[calc(100vh-1px)] flex items-center justify-center p-6">
-      <div className="w-full max-w-md rounded-2xl border border-zinc-200 bg-white p-6 shadow-sm">
-        <h1 className="text-2xl font-semibold">{title}</h1>
-        <p className="mt-1 text-sm text-zinc-600">
-          LinkedIn Pulse Reader (MVP)
-        </p>
+    <div className="flex min-h-screen items-center justify-center bg-background p-6">
+      <Card className="w-full max-w-md rounded-2xl border border-border bg-card py-6 shadow-none ring-0">
+        <CardHeader className="gap-1.5 px-6">
+          <CardTitle className="text-xl font-semibold tracking-tight">
+            {copy.title}
+          </CardTitle>
+          <CardDescription className="text-sm leading-6">
+            {copy.description}
+          </CardDescription>
+        </CardHeader>
 
-        <form className="mt-6 space-y-4" onSubmit={onSubmit}>
-          <label className="block">
-            <div className="text-sm font-medium text-zinc-800">Email</div>
-            <input
-              className="mt-1 w-full rounded-xl border border-zinc-200 px-3 py-2 outline-none focus:ring-2 focus:ring-zinc-900/10"
-              type="email"
-              autoComplete="email"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              required
-            />
-          </label>
-
-          <label className="block">
-            <div className="text-sm font-medium text-zinc-800">Пароль</div>
-            <input
-              className="mt-1 w-full rounded-xl border border-zinc-200 px-3 py-2 outline-none focus:ring-2 focus:ring-zinc-900/10"
-              type="password"
-              autoComplete={variant === "register" ? "new-password" : "current-password"}
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              required
-              minLength={6}
-            />
-          </label>
-
-          {error && (
-            <div className="rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-800">
-              {error}
+        <CardContent className="px-6">
+          <form className="space-y-5" onSubmit={onSubmit}>
+            <div className="space-y-2">
+              <Label htmlFor="email">Email</Label>
+              <Input
+                id="email"
+                className={fieldClassName}
+                type="email"
+                autoComplete="email"
+                placeholder="you@example.com"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                required
+              />
             </div>
-          )}
-          {info && (
-            <div className="rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-800">
-              {info}
-            </div>
-          )}
 
-          <button
-            type="submit"
-            disabled={pending}
-            className="w-full rounded-xl bg-zinc-900 px-3 py-2 text-sm font-medium text-white hover:bg-zinc-800 disabled:opacity-60"
+            <div className="space-y-2">
+              <div className="flex items-center justify-between gap-3">
+                <Label htmlFor="password">{copy.passwordLabel}</Label>
+              </div>
+              <Input
+                id="password"
+                className={fieldClassName}
+                type="password"
+                autoComplete={
+                  variant === "register" ? "new-password" : "current-password"
+                }
+                placeholder="••••••••"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                required
+                minLength={6}
+              />
+            </div>
+
+            {error ? (
+              <div className="rounded-xl border border-destructive/30 bg-destructive/10 px-3 py-2 text-sm text-destructive">
+                {error}
+              </div>
+            ) : null}
+
+            {info ? (
+              <div className="rounded-xl border border-border/80 bg-muted/40 px-3 py-2 text-sm text-muted-foreground">
+                {info}
+              </div>
+            ) : null}
+
+            <Button
+              type="submit"
+              disabled={pending}
+              className={cn(
+                "h-11 w-full rounded-full border-0 bg-gradient-to-b from-neutral-200 to-neutral-400",
+                "text-neutral-900 shadow-none hover:from-neutral-100 hover:to-neutral-300",
+                "disabled:opacity-60",
+              )}
+            >
+              <Lock className="size-4" />
+              {pending ? copy.pending : copy.submit}
+            </Button>
+          </form>
+        </CardContent>
+
+        <CardFooter className="justify-center px-6 pt-2">
+          <Link
+            className="text-sm text-muted-foreground underline-offset-4 hover:text-foreground hover:underline"
+            href={copy.alt.href}
           >
-            {pending ? "Подождите..." : title}
-          </button>
-        </form>
-
-        <div className="mt-4 text-sm">
-          <Link className="text-zinc-900 underline" href={alt.href}>
-            {alt.label}
+            {copy.alt.label}
           </Link>
-        </div>
-      </div>
+        </CardFooter>
+      </Card>
     </div>
   );
 }
-
