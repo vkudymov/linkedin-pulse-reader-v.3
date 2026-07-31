@@ -13,7 +13,7 @@ The package is intentionally split into:
 1. Open Supabase Dashboard.
 2. Go to **Project Settings -> API** and copy:
    - `SUPABASE_URL` from Project URL.
-   - `SUPABASE_SERVICE_ROLE_KEY` from `service_role` secret for backend/worker usage.
+   - `SUPABASE_SERVICE_ROLE_KEY` from `service_role` secret for worker usage.
    - `SUPABASE_ANON_KEY` from `anon public` for future user-facing RLS usage.
 3. Go to **Authentication -> Users**.
    - Create or select a user.
@@ -41,7 +41,7 @@ Expected result: `linkedin_accounts` and `feed_posts`.
 
 ## Runtime Environment
 
-For backend/worker ingestion:
+For worker ingestion:
 
 ```bash
 export SUPABASE_URL="https://<project-ref>.supabase.co"

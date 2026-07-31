@@ -1,5 +1,5 @@
 -- RLS policies assume requests authenticated with a user JWT.
--- Service role bypasses RLS and can still be used for backend/worker ingestion.
+-- Service role bypasses RLS and can still be used for worker ingestion.
 
 -- linkedin_accounts: a user can only see and mutate their own accounts.
 drop policy if exists linkedin_accounts_select_own on public.linkedin_accounts;

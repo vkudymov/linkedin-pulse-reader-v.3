@@ -23,8 +23,8 @@ def _load_dotenv(path: Path) -> None:
             os.environ[key] = value
 
 
-_BACKEND_ROOT = Path(__file__).resolve().parents[4]
-_load_dotenv(_BACKEND_ROOT / ".env")
+_WORKER_ROOT = Path(__file__).resolve().parents[3]
+_load_dotenv(_WORKER_ROOT / ".env")
 
 
 class Settings(BaseSettings):
@@ -41,7 +41,7 @@ class Settings(BaseSettings):
     # LinkedIn auth (interactive)
     linkedin_auth_timeout_ms: int = 300_000
     playwright_channel: str | None = "chrome"
-    playwright_user_data_dir: str = str(_BACKEND_ROOT / ".playwright-profile")
+    playwright_user_data_dir: str = str(_WORKER_ROOT / ".playwright-profile")
 
     cors_allow_origins: str = "http://localhost:3000,http://127.0.0.1:3000"
 

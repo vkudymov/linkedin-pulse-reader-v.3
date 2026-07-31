@@ -1,6 +1,6 @@
-# Backend (Python)
+# Worker (Python)
 
-`backend/` содержит текущий Python-код: `LinkedInClient/`, `PostAnalyzer/`, `Storage/`, а также `run_demo.py`, который:
+`worker/` содержит Python-код пайплайна: `LinkedInClient/`, `PostAnalyzer/`, `Storage/`, а также `run_demo.py`, который:
 
 - логинится в LinkedIn (Playwright)
 - сохраняет cookies и найденные посты в Supabase (`linkedin_accounts`, `feed_posts`)
@@ -11,13 +11,13 @@
 Из корня репозитория:
 
 ```bash
-cd backend
+cd worker
 python3 -m pip install -e LinkedInClient -e PostAnalyzer -e Storage -e api
 ```
 
 ## Переменные окружения
 
-Создайте `backend/.env` (не коммитится). Минимальный набор для Supabase worker:
+Создайте `worker/.env` (не коммитится). Минимальный набор для Supabase worker:
 
 ```bash
 SUPABASE_URL="https://<project-ref>.supabase.co"
@@ -33,11 +33,11 @@ STORAGE_ACCOUNT_LABEL="default"
 ### Demo-скрипт (worker-пайплайн)
 
 ```bash
-cd backend
+cd worker
 python run_demo.py --limit 10
 ```
 
-### HTTP API для LinkedIn login (backend only)
+### HTTP API для LinkedIn login (worker only)
 
 API поднимает интерактивный Playwright Chromium и сохраняет cookies в Supabase `linkedin_accounts` для **текущего пользователя** (определяется по Supabase JWT).
 
@@ -56,12 +56,12 @@ API_PORT="8000"
 - `PLAYWRIGHT_CHANNEL="chrome"`
 - `PLAYWRIGHT_USER_DATA_DIR` (persistent профиль)
 
-Чтобы начать “с чистого листа”, остановите API и удалите папку профиля (по умолчанию `backend/.playwright-profile/`), затем запустите API снова.
+Чтобы начать “с чистого листа”, остановите API и удалите папку профиля (по умолчанию `worker/.playwright-profile/`), затем запустите API снова.
 
 Запуск:
 
 ```bash
-cd backend
+cd worker
 uvicorn pulse_api.main:app --app-dir api/src --reload --host 127.0.0.1 --port 8000
 ```
 
@@ -96,4 +96,3 @@ curl -X POST "http://127.0.0.1:8000/v1/linkedin/login" \
   -H "Content-Type: application/json" \
   -d '{"method":"apple","label":"default"}'
 ```
-

@@ -5,7 +5,7 @@ build-backend = "hatchling.build"
 [project]
 name = "pulse-api"
 version = "0.1.0"
-description = "Backend API for LinkedIn Pulse Reader (LinkedIn auth via Playwright)."
+description = "Worker API for LinkedIn Pulse Reader (LinkedIn auth via Playwright)."
 requires-python = ">=3.11"
 license = { text = "Proprietary" }
 authors = [{ name = "Pulse API" }]

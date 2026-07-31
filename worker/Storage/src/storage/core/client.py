@@ -17,7 +17,7 @@ def create_supabase_client(
     """
     Create a Supabase client.
 
-    - `SUPABASE_SERVICE_ROLE_KEY` is for backend/worker access and bypasses RLS.
+    - `SUPABASE_SERVICE_ROLE_KEY` is for worker access and bypasses RLS.
     - `SUPABASE_ANON_KEY` + `user_jwt` is for user-facing access where RLS applies.
     """
 

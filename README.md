@@ -3,7 +3,7 @@
 Репозиторий разделён на две части:
 
 - `frontend/` — Next.js UI (регистрация/вход, просмотр найденных постов)
-- `backend/` — Python worker (сбор постов, запись в Supabase, анализ через LLM)
+- `worker/` — Python worker (сбор постов, запись в Supabase, анализ через LLM)
 
 ## Быстрый старт
 
@@ -16,14 +16,14 @@ npm install
 npm run dev
 ```
 
-### 2) Backend
+### 2) Worker
 
 ```bash
-cd backend
+cd worker
 python3 -m pip install -e LinkedInClient -e PostAnalyzer -e Storage
 python run_demo.py --limit 10
 ```
 
 ## Supabase
 
-Схема БД находится в `backend/supabase/migrations/`.
+Схема БД находится в `worker/supabase/migrations/`.
