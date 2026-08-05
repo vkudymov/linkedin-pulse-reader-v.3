@@ -1,6 +1,6 @@
-import Link from "next/link";
 import { redirect } from "next/navigation";
 
+import { AppHeader } from "@/components/AppHeader";
 import { PostCard } from "@/components/PostCard";
 import { PostFilters, type PostFilter } from "@/components/PostFilters";
 import { log } from "@/lib/log/logger";
@@ -70,26 +70,11 @@ export default async function PostsPage({
 
   return (
     <div className="min-h-screen bg-background text-foreground">
-      <header className="border-b border-border/80 bg-background">
-        <div className="mx-auto flex max-w-3xl items-center justify-between gap-4 px-6 py-4">
-          <div className="min-w-0">
-            <h1 className="truncate text-base font-semibold tracking-tight">
-              Найденные посты
-            </h1>
-            <p className="text-sm text-muted-foreground">
-              Аккаунтов LinkedIn: {accounts.length}
-            </p>
-          </div>
-          <nav className="flex items-center gap-3">
-            <Link
-              className="text-sm text-muted-foreground underline-offset-4 hover:text-foreground hover:underline"
-              href="/logout"
-            >
-              Выйти
-            </Link>
-          </nav>
-        </div>
-      </header>
+      <AppHeader
+        title="Найденные посты"
+        subtitle={`Аккаунтов LinkedIn: ${accounts.length}`}
+        active="posts"
+      />
 
       <main className="mx-auto max-w-3xl px-6 py-6">
         <div className="overflow-hidden rounded-2xl border border-border bg-card">

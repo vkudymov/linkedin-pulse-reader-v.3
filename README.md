@@ -27,3 +27,9 @@ python run_demo.py --limit 10
 ## Supabase
 
 Схема БД находится в `worker/supabase/migrations/`.
+
+### Личный кабинет
+
+- Таблица профиля пользователя: `public.user_profiles`
+- Аватары: Supabase Storage bucket `avatars`
+- Страница: `/account`

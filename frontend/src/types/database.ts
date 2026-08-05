@@ -33,3 +33,18 @@ export type FeedPostRow = {
   analyzed_at: string | null;
 };
 
+export type UserProfileRow = {
+  id: string;
+  full_name: string | null;
+  phone: string | null;
+  avatar_url: string | null;
+  company: string | null;
+  job_title: string | null;
+  date_of_birth: string | null;
+  city: string | null;
+  bio: string | null;
+  website: string | null;
+  created_at: string;
+  updated_at: string;
+};
+
