@@ -139,9 +139,13 @@ export function PromptForm({
 
         <div className="space-y-1 text-xs leading-5 text-muted-foreground">
           <p>
-            Маркер обязателен: <code>{SEARCH_REQUIRED_MARKER}</code>. Ответ модели должен быть JSON с
-            полями <code>relevant</code>, <code>score</code>, <code>content_type</code>,{" "}
-            <code>main_topics</code>, <code>reason</code>, <code>selection_reason</code>.
+            Плейсхолдер (маркер) <code>{SEARCH_REQUIRED_MARKER}</code> — это место, куда система
+            подставляет реальный текст поста LinkedIn перед отправкой в LLM.
+          </p>
+          <p>
+            Ответ модели должен быть JSON с полями <code>relevant</code>, <code>score</code>,{" "}
+            <code>content_type</code>, <code>main_topics</code>, <code>reason</code>,{" "}
+            <code>selection_reason</code>.
           </p>
           {isSearchEmpty ? (
             <p className="text-destructive">Промпт поиска не заполнен — worker не будет анализировать посты.</p>
@@ -184,12 +188,21 @@ export function PromptForm({
 
         <div className="space-y-1 text-xs leading-5 text-muted-foreground">
           <p>
+            Плейсхолдеры (маркеры) вида <code>{"<<<...>>>"}</code> — это переменные, которые система
+            подставляет перед генерацией комментария.
+          </p>
+          <p>
             Если заполняете, шаблон должен содержать маркеры:{" "}
             {COMMENT_REQUIRED_MARKERS.map((m) => (
               <code key={m} className="mr-2">
                 {m}
               </code>
             ))}
+          </p>
+          <p>
+            Что подставляется: <code>{"<<<POST_TEXT>>>"}</code> — текст поста,{" "}
+            <code>{"<<<CONTENT_TYPE>>>"}</code> — тип контента, <code>{"<<<MAIN_TOPICS>>>"}</code>{" "}
+            — ключевые темы, <code>{"<<<TARGET_LANGUAGE>>>"}</code> — язык комментария.
           </p>
           {commentPrompt.trim() && commentMissing.length > 0 ? (
             <p className="text-destructive">
