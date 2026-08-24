@@ -16,6 +16,9 @@ class PostAnalyzerConfig:
     # Optional file-based prompt for comment generation (used by LLMPostSelector).
     # If None, comment generation is disabled for selector path.
     comment_prompt_path: str | None = None
+    # Optional inline prompt template for comment generation (preferred for per-user prompts).
+    # If provided, LLMPostSelector uses it instead of comment_prompt_path.
+    comment_prompt_template: str | None = None
     comment_target_language: str = "ru"
 
     def format_relevance_user(self, *, text: str, post_url: str) -> str:

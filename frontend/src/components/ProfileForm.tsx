@@ -78,9 +78,7 @@ export function ProfileForm({
     setSuccess(null);
 
     try {
-      const supabase = createSupabaseBrowserClient();
       const payload = {
-        id: userId,
         full_name: fullName.trim() || null,
         phone: phone.trim() || null,
         avatar_url: avatarUrl.trim() || null,
@@ -90,11 +88,18 @@ export function ProfileForm({
         city: city.trim() || null,
         website: website.trim() || null,
         bio: bio.trim() || null,
-        updated_at: new Date().toISOString(),
       };
 
-      const { error } = await supabase.from("user_profiles").upsert(payload);
-      if (error) throw error;
+      const res = await fetch("/api/account/profile", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+      if (!res.ok) {
+        const data = (await res.json().catch(() => null)) as { error?: string } | null;
+        const message = data?.error || "Не удалось сохранить профиль.";
+        throw new Error(message);
+      }
       setSuccess("Профиль сохранён.");
     } catch (e: unknown) {
       const message = e instanceof Error ? e.message : "Не удалось сохранить профиль.";

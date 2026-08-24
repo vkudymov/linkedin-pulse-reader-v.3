@@ -11,10 +11,17 @@ from .relevance import RelevanceResult
 @dataclass(frozen=True, slots=True)
 class StructuredPromptRelevanceFilter:
     llm_client: BaseAsyncLLMClient
-    prompt_path: str | Path
+    prompt_path: str | Path | None = None
+    prompt_template: str | None = None
     min_score: int = 70
 
     def check(self, post: Mapping[str, Any]) -> RelevanceResult:
+        if (self.prompt_path is None) == (self.prompt_template is None):
+            return RelevanceResult(
+                relevant=False,
+                error="StructuredPromptRelevanceFilter misconfigured: provide exactly one of prompt_path or prompt_template.",
+            )
+
         text = post.get("text")
         post_url = post.get("post_url")
 
@@ -24,7 +31,11 @@ class StructuredPromptRelevanceFilter:
             return RelevanceResult(relevant=False, error="Post is missing non-empty 'post_url'.")
 
         try:
-            analyzer = PostRelevanceAnalyzer(self.llm_client, prompt_file=self.prompt_path)
+            analyzer = PostRelevanceAnalyzer(
+                self.llm_client,
+                prompt_file=self.prompt_path,
+                prompt_template=self.prompt_template,
+            )
             r = run_async(analyzer.analyze_post_text(text))
             relevant = bool(r.relevant) and int(r.score) >= int(self.min_score)
             return RelevanceResult(

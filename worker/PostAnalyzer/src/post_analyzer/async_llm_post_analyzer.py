@@ -215,18 +215,25 @@ class PostRelevanceAnalyzer:
         "selection_reason",
     ]
 
-    def __init__(self, llm_client: BaseAsyncLLMClient, prompt_file: str | Path):
+    def __init__(
+        self,
+        llm_client: BaseAsyncLLMClient,
+        *,
+        prompt_file: str | Path | None = None,
+        prompt_template: str | None = None,
+    ):
         self._llm_client = llm_client
-        self._prompt_file = Path(prompt_file)
-        if not self._prompt_file.exists():
+        if (prompt_file is None) == (prompt_template is None):
+            raise ValueError("Provide exactly one of prompt_file or prompt_template.")
+        self._prompt_file = Path(prompt_file) if prompt_file is not None else None
+        if self._prompt_file is not None and not self._prompt_file.exists():
             raise FileNotFoundError(f"Prompt file not found: {self._prompt_file}")
-        self._prompt_template: Optional[str] = None
+        self._prompt_template: Optional[str] = (prompt_template or None)
 
     def _load_prompt(self) -> str:
         if self._prompt_template is None:
-            self._prompt_template = self._prompt_file.read_text(
-                encoding="utf-8"
-            ).strip()
+            assert self._prompt_file is not None
+            self._prompt_template = self._prompt_file.read_text(encoding="utf-8").strip()
         return self._prompt_template
 
     def _build_prompt(self, post_text: str) -> str:

@@ -37,7 +37,11 @@ class LLMPostSelector:
         self._comment_prompt_template: str | None = None
 
     def _initialize(self) -> None:
-        needs_llm_manager = self._filter is None or self._analyzer_config.comment_prompt_path is not None
+        needs_comment = (
+            self._analyzer_config.comment_prompt_template is not None
+            or self._analyzer_config.comment_prompt_path is not None
+        )
+        needs_llm_manager = self._filter is None or needs_comment
 
         if needs_llm_manager and self._llm_manager is None:
             if self._llm_client is not None:
@@ -61,10 +65,14 @@ class LLMPostSelector:
 
     def _get_comment_prompt_template(self) -> str:
         if self._comment_prompt_template is None:
-            prompt_path = self._analyzer_config.comment_prompt_path
-            if prompt_path is None:
-                raise ValueError("comment_prompt_path is not configured")
-            self._comment_prompt_template = load_prompt_template(Path(prompt_path))
+            inline = self._analyzer_config.comment_prompt_template
+            if inline is not None:
+                self._comment_prompt_template = (inline or "").strip()
+            else:
+                prompt_path = self._analyzer_config.comment_prompt_path
+                if prompt_path is None:
+                    raise ValueError("comment prompt is not configured")
+                self._comment_prompt_template = load_prompt_template(Path(prompt_path))
         return self._comment_prompt_template
 
     def analyze(self, posts: list[dict[str, Any]]) -> list[dict[str, Any]]:
@@ -92,7 +100,11 @@ class LLMPostSelector:
                     "analysis": analysis,
                 }
 
-            if accepted and self._analyzer_config.comment_prompt_path is not None:
+            needs_comment = (
+                self._analyzer_config.comment_prompt_template is not None
+                or self._analyzer_config.comment_prompt_path is not None
+            )
+            if accepted and needs_comment:
                 assert self._llm_manager is not None
                 try:
                     template = self._get_comment_prompt_template()

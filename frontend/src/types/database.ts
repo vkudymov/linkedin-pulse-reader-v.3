@@ -44,6 +44,8 @@ export type UserProfileRow = {
   city: string | null;
   bio: string | null;
   website: string | null;
+  search_prompt: string | null;
+  comment_prompt: string | null;
   created_at: string;
   updated_at: string;
 };
