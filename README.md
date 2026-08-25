@@ -21,7 +21,16 @@ npm run dev
 ```bash
 cd worker
 python3 -m pip install -e LinkedInClient -e PostAnalyzer -e Storage
-python run_demo.py --limit 10
+python run_post_search.py --limit 10
+```
+
+### 3) Worker API (для запуска поиска из UI)
+
+Если вы хотите запускать поиск постов кнопкой из интерфейса (`/prompts`), нужно поднять worker API:
+
+```bash
+cd worker
+uvicorn pulse_api.main:app --app-dir api/src --reload --host 127.0.0.1 --port 8000
 ```
 
 ## Supabase

@@ -93,7 +93,7 @@ def compute_source_key(post: Mapping[str, Any]) -> str:
     """
     Stable id for upsert and analysis updates.
 
-    Must stay in sync between ingest (upsert_posts) and run_demo (update_analysis).
+    Must stay in sync between ingest (upsert_posts) and run_post_search (update_analysis).
     Prefer urn/post_url; fallback hash avoids collisions only for posts without ids.
     """
     urn = post.get("urn")

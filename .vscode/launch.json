@@ -2,10 +2,10 @@
   "version": "0.2.0",
   "configurations": [
     {
-      "name": "Run run_demo.py",
+      "name": "Run run_post_search.py",
       "type": "python",
       "request": "launch",
-      "program": "${workspaceFolder}/worker/run_demo.py",
+      "program": "${workspaceFolder}/worker/run_post_search.py",
       "console": "integratedTerminal",
       "envFile": "${workspaceFolder}/worker/.env",
       "cwd": "${workspaceFolder}/worker",

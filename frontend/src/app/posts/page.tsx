@@ -136,7 +136,7 @@ export default async function PostsPage({
                 <p className="mt-2 text-sm leading-6 text-muted-foreground">
                   Запустите сбор постов через{" "}
                   <code className="rounded-md bg-background px-1.5 py-0.5 text-xs">
-                    worker/run_demo.py
+                    worker/run_post_search.py
                   </code>
                   , чтобы создать запись в <code>linkedin_accounts</code> и загрузить{" "}
                   <code>feed_posts</code>.
@@ -154,7 +154,7 @@ export default async function PostsPage({
                     <>
                       Запустите{" "}
                       <code className="rounded-md bg-background px-1.5 py-0.5 text-xs">
-                        worker/run_demo.py
+                        worker/run_post_search.py
                       </code>{" "}
                       и затем обновите страницу.
                     </>

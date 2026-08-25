@@ -32,7 +32,7 @@ npm run dev
 - `/login` — вход
 - `/posts` — просмотр `feed_posts` из Supabase для текущего пользователя (через RLS)
 
-Данные загружает python-воркер из `worker/run_demo.py`.
+Данные загружает python-воркер из `worker/run_post_search.py`.
 
 ## Логи
 
