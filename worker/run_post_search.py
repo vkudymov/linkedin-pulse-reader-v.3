@@ -362,7 +362,7 @@ def main() -> None:
     )
     log_supabase_target()
 
-    from storage import PulseStorage  # type: ignore[import-not-found]
+    from storage import PulseStorage, pick_linkedin_account_row  # type: ignore[import-not-found]
 
     # STORAGE_USER_ID = auth.users.id; service role links rows to that user.
     user_id = os.environ["STORAGE_USER_ID"]
@@ -371,16 +371,17 @@ def main() -> None:
     storage = PulseStorage()
     accounts = storage.linkedin_accounts
     rows = accounts.list_by_user(user_id=user_id)
-    if account_label:
-        chosen = next((a for a in rows if a.get("label") == account_label), None)
-        if chosen is None and rows:
-            log.info(
-                "No linkedin_account with label=%r among %s account(s); creating a new one.",
-                account_label,
-                len(rows),
-            )
-    else:
-        chosen = rows[0] if rows else None
+    chosen = pick_linkedin_account_row(
+        rows,
+        label=account_label,
+        create_new_on_label_miss=True,
+    )
+    if account_label and chosen is None and rows:
+        log.info(
+            "No linkedin_account with label=%r among %s account(s); creating a new one.",
+            account_label,
+            len(rows),
+        )
 
     account_id: str
     cookies: list[dict[str, Any]]

@@ -1,17 +1,14 @@
-import { NextResponse } from "next/server";
-
-import { createSupabaseServerClient } from "@/lib/supabase/server";
-
-function getWorkerApiBaseUrl() {
-  return (process.env.WORKER_API_URL || "http://127.0.0.1:8000").trim().replace(/\/+$/, "");
-}
+import {
+  forwardWorkerResponse,
+  getWorkerAccessToken,
+  getWorkerApiBaseUrl,
+  unauthorizedResponse,
+} from "../_workerApi";
 
 export async function POST(request: Request) {
-  const supabase = await createSupabaseServerClient();
-  const { data: sessionData } = await supabase.auth.getSession();
-  const accessToken = sessionData.session?.access_token;
+  const accessToken = await getWorkerAccessToken();
   if (!accessToken) {
-    return NextResponse.json({ ok: false, error: "unauthorized" }, { status: 401 });
+    return unauthorizedResponse();
   }
 
   let body: unknown = null;
@@ -31,10 +28,6 @@ export async function POST(request: Request) {
     body: JSON.stringify(body || {}),
   });
 
-  const text = await resp.text();
-  return new NextResponse(text, {
-    status: resp.status,
-    headers: { "content-type": resp.headers.get("content-type") || "application/json" },
-  });
+  return forwardWorkerResponse(resp);
 }
 

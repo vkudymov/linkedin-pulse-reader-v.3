@@ -19,7 +19,6 @@ class PostSearchSession:
     user_id: str
     status: RunStatus
     message: str | None
-    exit_code: int | None = None
     future: Future[None] | None = None
 
 
@@ -27,7 +26,6 @@ class PostSearchSessionManager:
     def __init__(self) -> None:
         self._lock = Lock()
         self._sessions: dict[str, PostSearchSession] = {}
-        self._active_by_user: dict[str, str] = {}
         self._executor = ThreadPoolExecutor(max_workers=2, thread_name_prefix="post-search")
 
     def start(self, *, user_id: str, limit: int, account_label: str | None) -> PostSearchSession:
@@ -38,10 +36,8 @@ class PostSearchSessionManager:
                 user_id=user_id,
                 status="running",
                 message="Post search started.",
-                exit_code=None,
             )
             self._sessions[session_id] = sess
-            self._active_by_user[user_id] = session_id
             fut = self._executor.submit(self._run, sess.session_id, limit, account_label)
             sess.future = fut
             return sess
@@ -57,7 +53,6 @@ class PostSearchSessionManager:
         *,
         status: RunStatus | None = None,
         message: str | None = None,
-        exit_code: int | None = None,
     ) -> None:
         with self._lock:
             sess = self._sessions.get(session_id)
@@ -67,8 +62,6 @@ class PostSearchSessionManager:
                 sess.status = status
             if message is not None:
                 sess.message = message
-            if exit_code is not None:
-                sess.exit_code = exit_code
 
     def _worker_root(self) -> Path:
         """
@@ -104,13 +97,12 @@ class PostSearchSessionManager:
             proc = subprocess.run(argv, cwd=str(worker_root), env=env)
             code = int(proc.returncode)
             if code == 0:
-                self._update(session_id, status="done", message="Post search completed.", exit_code=code)
+                self._update(session_id, status="done", message="Post search completed.")
             else:
                 self._update(
                     session_id,
                     status="error",
                     message=f"Post search failed with exit code {code}.",
-                    exit_code=code,
                 )
         except Exception as e:
             detail = str(e).splitlines()[0] if str(e).strip() else type(e).__name__

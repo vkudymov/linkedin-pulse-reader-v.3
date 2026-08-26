@@ -19,19 +19,6 @@ from linkedin_client.browser import BrowserConfig
 from linkedin_client.exceptions import LoginRequiredError
 
 
-# File persistence for cookies.json/posts.json is intentionally disabled in this
-# test runner. The application-level storage logic lives in ../../run_post_search.py.
-#
-# def _load_cookies(path: Path) -> list[dict[str, Any]] | None:
-#     ...
-#
-# def _save_cookies(path: Path, cookies: list[dict[str, Any]]) -> None:
-#     ...
-#
-# def _save_posts(path: Path, posts: list[Any]) -> None:
-#     ...
-
-
 def _maybe_start_trace(client: LinkedInClient, trace_path: Path | None) -> None:
     # EN: Optional Playwright trace to debug flaky feed loading / selector changes.
     # RU: Опциональный trace Playwright для отладки флейков/изменений DOM/селекторов.
@@ -191,8 +178,6 @@ def main() -> int:
             return 0
 
     raise SystemExit(f"Unknown command: {cmd}")
-
-    # Unreachable
 
 
 if __name__ == "__main__":
