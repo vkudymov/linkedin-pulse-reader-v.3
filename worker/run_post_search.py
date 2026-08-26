@@ -55,6 +55,61 @@ from post_analyzer import LLMPostSelector, PostAnalyzerConfig  # type: ignore[im
 logging.basicConfig(level=logging.INFO, format="%(levelname)s: %(message)s")
 log = logging.getLogger(__name__)
 
+LLM_CONNECT_FAILED_EXIT_CODE = 2
+
+
+def ensure_llm_connected() -> None:
+    """Pre-flight: проверить, что LLM доступна и отвечает.
+
+    Вызывается до поиска постов. При ошибке worker останавливается,
+    без fetch/upsert, чтобы не трогать уже выбранные посты.
+    """
+
+    try:
+        from post_analyzer.config import load_llm_manager_settings_from_env  # type: ignore[import-not-found]
+        from post_analyzer.config import LLMProviderSettings  # type: ignore[import-not-found]
+        from post_analyzer.llm_manager import LLMProviderManager  # type: ignore[import-not-found]
+
+        settings = load_llm_manager_settings_from_env()
+        mgr = LLMProviderManager(settings=settings)
+        desc = mgr.describe()
+
+        if desc.get("provider") == "fake" and desc.get("mode") == "fake":
+            lmstudio_base_url = (
+                os.getenv("POST_ANALYZER_OPENAI_BASE_URL")
+                or os.getenv("OPENAI_BASE_URL")
+                or "http://127.0.0.1:1234/v1"
+            )
+            lmstudio_model = (
+                os.getenv("POST_ANALYZER_LLM_MODEL")
+                or os.getenv("POST_ANALYZER_OPENAI_MODEL")
+                or os.getenv("OPENAI_MODEL")
+                or "deepseek-coder-v2-lite-instruct"
+            )
+            mgr.switch(
+                primary=LLMProviderSettings(
+                    provider="openai",
+                    mode="real",
+                    model=lmstudio_model,
+                    base_url=lmstudio_base_url,
+                ),
+                fallback=None,
+            )
+
+        mgr.test_connection()
+
+        desc = mgr.describe()
+        log.info(
+            "LLM connected: provider=%s model=%s — модель отвечает.",
+            desc.get("provider") or "<unknown>",
+            desc.get("model") or "<unknown>",
+        )
+    except SystemExit:
+        raise
+    except Exception as e:
+        log.error("LLM not connected: нет коннекта, модель не работает. %s", e)
+        raise SystemExit(LLM_CONNECT_FAILED_EXIT_CODE) from None
+
 
 def log_supabase_target() -> None:
     try:
@@ -361,6 +416,8 @@ def main() -> None:
         browser=BrowserConfig(headless=args.headless, timeout_ms=login_timeout_ms)
     )
     log_supabase_target()
+
+    ensure_llm_connected()
 
     from storage import PulseStorage, pick_linkedin_account_row  # type: ignore[import-not-found]
 
