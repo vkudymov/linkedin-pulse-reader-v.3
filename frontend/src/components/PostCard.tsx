@@ -216,7 +216,20 @@ export function PostCard({ post }: { post: FeedPostRow }) {
           ) : null}
 
           {!open && reason ? (
-            <InsightPreview title="Причина отбора" text={reason} />
+            <div className="space-y-2">
+              {post.post_url ? (
+                <a
+                  className="inline-flex items-center gap-1.5 text-xs text-muted-foreground underline-offset-4 hover:text-foreground hover:underline"
+                  href={post.post_url}
+                  target="_blank"
+                  rel="noreferrer"
+                >
+                  <ExternalLink className="size-3.5 opacity-70" aria-hidden />
+                  Пост в LinkedIn
+                </a>
+              ) : null}
+              <InsightPreview title="Причина отбора" text={reason} />
+            </div>
           ) : null}
 
           {!open && comment ? (
@@ -234,6 +247,17 @@ export function PostCard({ post }: { post: FeedPostRow }) {
 
             {reason ? (
               <blockquote className="rounded-xl border border-border bg-background/60 px-3.5 py-2.5 text-sm text-muted-foreground">
+                {post.post_url ? (
+                  <a
+                    className="mb-2 inline-flex items-center gap-1.5 text-xs text-muted-foreground underline-offset-4 hover:text-foreground hover:underline"
+                    href={post.post_url}
+                    target="_blank"
+                    rel="noreferrer"
+                  >
+                    <ExternalLink className="size-3.5 opacity-70" aria-hidden />
+                    Пост в LinkedIn
+                  </a>
+                ) : null}
                 <span className="font-medium text-foreground">Причина отбора: </span>
                 {reason}
               </blockquote>

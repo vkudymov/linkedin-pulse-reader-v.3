@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import os
+import re
 import sys
 import traceback
 import uuid
@@ -11,6 +12,24 @@ from threading import Lock
 from typing import Any, Literal
 
 RunStatus = Literal["running", "done", "error"]
+LLM_CONNECT_FAILED_EXIT_CODE = 2
+
+_ANSI_RE = re.compile(r"\x1b\[[0-9;]*m")
+
+
+def _extract_error_line(output: str) -> str | None:
+    """
+    Extract a single 'ERROR: ...' line from worker output.
+
+    This is used to show a concise error message in the frontend, while keeping
+    full logs available in the worker/uvicorn console.
+    """
+    cleaned = _ANSI_RE.sub("", output or "")
+    for line in cleaned.splitlines():
+        candidate = line.strip()
+        if candidate.startswith("ERROR:"):
+            return candidate
+    return None
 
 
 @dataclass(slots=True)
@@ -94,18 +113,44 @@ class PostSearchSessionManager:
 
             import subprocess  # noqa: PLC0415
 
-            proc = subprocess.run(argv, cwd=str(worker_root), env=env)
+            # Capture output so we can surface the exact error text to the frontend.
+            proc = subprocess.run(
+                argv,
+                cwd=str(worker_root),
+                env=env,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.STDOUT,
+                text=True,
+            )
+            output = (proc.stdout or "").rstrip()
+            if output:
+                print(output)
             code = int(proc.returncode)
             if code == 0:
                 self._update(session_id, status="done", message="Post search completed.")
             else:
+                error_line = _extract_error_line(output)
+                if code == LLM_CONNECT_FAILED_EXIT_CODE:
+                    self._update(
+                        session_id,
+                        status="error",
+                        message=(
+                            error_line
+                            or "Не удалось подключиться к LLM. Поиск постов не запущен. Уже выбранные посты не изменены."
+                        ),
+                    )
+                    return
                 self._update(
                     session_id,
                     status="error",
-                    message=f"Post search failed with exit code {code}.",
+                    message=(
+                        error_line
+                        or (output[-4000:] if output else f"Post search failed with exit code {code}.")
+                    ),
                 )
         except Exception as e:
             detail = str(e).splitlines()[0] if str(e).strip() else type(e).__name__
             tb = traceback.format_exc(limit=10)
-            self._update(session_id, status="error", message=f"{detail}\n\n{tb}")
+            print(tb)
+            self._update(session_id, status="error", message=f"ERROR: {detail}")
 

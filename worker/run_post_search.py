@@ -52,7 +52,17 @@ from linkedin_client.exceptions import FeedLoadError, LoginRequiredError  # type
 
 from post_analyzer import LLMPostSelector, PostAnalyzerConfig  # type: ignore[import-not-found]  # noqa: E402
 
-logging.basicConfig(level=logging.INFO, format="%(levelname)s: %(message)s")
+
+class _ColorLevelFormatter(logging.Formatter):
+    def format(self, record: logging.LogRecord) -> str:
+        if record.levelname == "ERROR":
+            record.levelname = f"\x1b[31m{record.levelname}\x1b[0m"
+        return super().format(record)
+
+
+_handler = logging.StreamHandler()
+_handler.setFormatter(_ColorLevelFormatter("%(levelname)s: %(message)s"))
+logging.basicConfig(level=logging.INFO, handlers=[_handler])
 log = logging.getLogger(__name__)
 
 LLM_CONNECT_FAILED_EXIT_CODE = 2
@@ -317,7 +327,9 @@ def fetch_and_store_posts(
             post["result"] = "ошибка анализа"
             post["reason"] = reason
             post["analysis_error"] = reason
-        log.warning("Selector failed; continuing without selected posts snapshot: %s", e)
+        log.warning(
+            "Selector failed; continuing without selected posts snapshot: %s", e
+        )
     log.info("Selected %s relevant posts via LLM", len(selected))
 
     post_numbers_by_key = {
@@ -376,13 +388,17 @@ def fetch_and_store_posts(
                 analysis_error=(
                     analyzed_by_key[source_key].get("analysis_error")
                     if isinstance(analyzed_by_key.get(source_key), dict)
-                    and isinstance(analyzed_by_key[source_key].get("analysis_error"), str)
+                    and isinstance(
+                        analyzed_by_key[source_key].get("analysis_error"), str
+                    )
                     else None
                 ),
                 analysis_payload=(
                     analyzed_by_key[source_key].get("relevance_analysis")
                     if isinstance(analyzed_by_key.get(source_key), dict)
-                    and isinstance(analyzed_by_key[source_key].get("relevance_analysis"), dict)
+                    and isinstance(
+                        analyzed_by_key[source_key].get("relevance_analysis"), dict
+                    )
                     else None
                 ),
             )
@@ -489,4 +505,3 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
-
