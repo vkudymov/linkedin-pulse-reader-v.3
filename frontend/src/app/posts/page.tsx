@@ -5,7 +5,7 @@ import { PostCard } from "@/components/PostCard";
 import { PostFilters, type PostFilter } from "@/components/PostFilters";
 import { log } from "@/lib/log/logger";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
-import type { FeedPostRow, LinkedInAccountRow } from "@/types/database";
+import type { FeedPostMediaRow, FeedPostRow, LinkedInAccountRow } from "@/types/database";
 
 function normalizeFilter(raw: unknown): PostFilter {
   if (raw === "relevant" || raw === "rejected" || raw === "all") return raw;
@@ -40,6 +40,7 @@ export default async function PostsPage({
   const accountIds = accounts.map((a) => a.id).filter(Boolean);
 
   let posts: FeedPostRow[] = [];
+  let mediaByPostId: Record<string, FeedPostMediaRow[]> = {};
   if (accountIds.length > 0) {
     const postsResp = await supabase
       .from("feed_posts")
@@ -56,6 +57,28 @@ export default async function PostsPage({
     }
 
     posts = (postsResp.data || []) as FeedPostRow[];
+
+    const postIds = posts.map((p) => p.id).filter(Boolean);
+    if (postIds.length > 0) {
+      const mediaResp = await supabase
+        .from("feed_post_media")
+        .select("*")
+        .in("feed_post_id", postIds)
+        .order("position", { ascending: true });
+      if (mediaResp.error) {
+        log.error("posts", "failed to load feed_post_media", {
+          where: "src/app/posts/page.tsx",
+          meta: { code: mediaResp.error.code },
+        });
+      } else {
+        const rows = (mediaResp.data || []) as FeedPostMediaRow[];
+        mediaByPostId = rows.reduce<Record<string, FeedPostMediaRow[]>>((acc, row) => {
+          const key = row.feed_post_id;
+          (acc[key] ||= []).push(row);
+          return acc;
+        }, {});
+      }
+    }
   }
 
   const counts = {
@@ -172,7 +195,7 @@ export default async function PostsPage({
                 </p>
                 <div className="space-y-4">
                   {posts.map((post) => (
-                    <PostCard key={post.id} post={post} />
+                    <PostCard key={post.id} post={post} media={mediaByPostId[post.id] || []} />
                   ))}
                 </div>
               </div>

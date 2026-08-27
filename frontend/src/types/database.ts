@@ -33,6 +33,16 @@ export type FeedPostRow = {
   analyzed_at: string | null;
 };
 
+export type FeedPostMediaRow = {
+  id: string;
+  feed_post_id: string;
+  original_url: string;
+  object_path: string;
+  public_url: string;
+  position: number;
+  created_at: string;
+};
+
 export type UserProfileRow = {
   id: string;
   full_name: string | null;

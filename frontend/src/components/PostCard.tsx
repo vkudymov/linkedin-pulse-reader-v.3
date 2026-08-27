@@ -30,7 +30,7 @@ import {
 } from "@/components/ui/collapsible";
 import { Separator } from "@/components/ui/separator";
 import { cn } from "@/lib/utils";
-import { FeedPostRow } from "@/types/database";
+import { FeedPostMediaRow, FeedPostRow } from "@/types/database";
 
 type PostStatus = {
   label: string;
@@ -113,7 +113,50 @@ function InsightPreview({
   );
 }
 
-export function PostCard({ post }: { post: FeedPostRow }) {
+function PostMediaGrid({ media }: { media: FeedPostMediaRow[] }) {
+  if (!media || media.length === 0) return null;
+
+  const items = media.slice(0, 4);
+  const extra = media.length - items.length;
+
+  if (items.length === 1) {
+    const m = items[0];
+    return (
+      <div className="overflow-hidden rounded-2xl border border-border bg-background/30">
+        {/* eslint-disable-next-line @next/next/no-img-element -- Supabase Storage public URLs; keep simple <img> without next/image config. */}
+        <img
+          src={m.public_url}
+          alt="Изображение поста"
+          className="max-h-[520px] w-full object-cover"
+          loading="lazy"
+        />
+      </div>
+    );
+  }
+
+  return (
+    <div className="grid overflow-hidden rounded-2xl border border-border bg-background/30 sm:grid-cols-2">
+      {items.map((m, idx) => (
+        <div key={m.id} className="relative aspect-[16/10] overflow-hidden">
+          {/* eslint-disable-next-line @next/next/no-img-element -- Supabase Storage public URLs; keep simple <img> without next/image config. */}
+          <img
+            src={m.public_url}
+            alt="Изображение поста"
+            className="h-full w-full object-cover"
+            loading="lazy"
+          />
+          {extra > 0 && idx === items.length - 1 ? (
+            <div className="absolute inset-0 flex items-center justify-center bg-background/70 text-lg font-semibold text-foreground">
+              +{extra}
+            </div>
+          ) : null}
+        </div>
+      ))}
+    </div>
+  );
+}
+
+export function PostCard({ post, media }: { post: FeedPostRow; media: FeedPostMediaRow[] }) {
   const router = useRouter();
   const [open, setOpen] = useState(false);
   const [deleted, setDeleted] = useState(false);
@@ -243,19 +286,10 @@ export function PostCard({ post }: { post: FeedPostRow }) {
             <p className="text-sm italic text-muted-foreground">Текст поста недоступен</p>
           ) : null}
 
+          {!open ? <PostMediaGrid media={media} /> : null}
+
           {!open && reason ? (
             <div className="space-y-2">
-              {post.post_url ? (
-                <a
-                  className="inline-flex items-center gap-1.5 text-xs text-muted-foreground underline-offset-4 hover:text-foreground hover:underline"
-                  href={post.post_url}
-                  target="_blank"
-                  rel="noreferrer"
-                >
-                  <ExternalLink className="size-3.5 opacity-70" aria-hidden />
-                  Пост в LinkedIn
-                </a>
-              ) : null}
               <InsightPreview title="Причина отбора" text={reason} />
             </div>
           ) : null}
@@ -273,19 +307,10 @@ export function PostCard({ post }: { post: FeedPostRow }) {
               <p className="text-sm italic text-muted-foreground">Текст поста недоступен</p>
             )}
 
+            <PostMediaGrid media={media} />
+
             {reason ? (
               <blockquote className="rounded-xl border border-border bg-background/60 px-3.5 py-2.5 text-sm text-muted-foreground">
-                {post.post_url ? (
-                  <a
-                    className="mb-2 inline-flex items-center gap-1.5 text-xs text-muted-foreground underline-offset-4 hover:text-foreground hover:underline"
-                    href={post.post_url}
-                    target="_blank"
-                    rel="noreferrer"
-                  >
-                    <ExternalLink className="size-3.5 opacity-70" aria-hidden />
-                    Пост в LinkedIn
-                  </a>
-                ) : null}
                 <span className="font-medium text-foreground">Причина отбора: </span>
                 {reason}
               </blockquote>

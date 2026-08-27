@@ -7,6 +7,7 @@ import argparse
 import json
 import logging
 import os
+import re
 import sys
 from datetime import datetime
 from pathlib import Path
@@ -197,6 +198,146 @@ def post_to_dict(post: Any) -> dict[str, Any]:
     }
 
 
+def extract_post_image_urls(media_urls: list[str]) -> list[str]:
+    """Pick likely post image URLs from a noisy media_urls list.
+
+    LinkedIn pages often include many avatar/group images; this helper keeps only
+    URLs that look like actual post media so we can persist and render them.
+    """
+    out: list[str] = []
+    for url in media_urls:
+        if not isinstance(url, str):
+            continue
+        u = url.strip()
+        if not u.startswith("http"):
+            continue
+        # Heuristic: feedshare/articleshare are typically the post images.
+        if "feedshare-" not in u and "articleshare-" not in u:
+            continue
+        out.append(u)
+        if len(out) >= 8:
+            break
+    # De-dup while preserving order
+    seen: set[str] = set()
+    deduped: list[str] = []
+    for u in out:
+        if u in seen:
+            continue
+        seen.add(u)
+        deduped.append(u)
+    return deduped
+
+
+def store_post_images(
+    storage: Any,
+    *,
+    user_id: str,
+    feed_post_id: str,
+    urls: list[str],
+) -> None:
+    """Download + upload post images to Supabase Storage, then persist metadata.
+
+    This is best-effort and must not affect the main post ingest / analysis flow.
+    """
+    if not urls:
+        return
+
+    try:
+        from urllib.request import Request, urlopen
+    except Exception as e:  # pragma: no cover
+        log.warning("Media download unavailable: %s", e)
+        return
+
+    ssl_ctx = None
+    ssl_ctx_source = "none"
+    try:
+        import ssl
+
+        try:
+            import certifi  # type: ignore[import-not-found]
+
+            ssl_ctx = ssl.create_default_context(cafile=certifi.where())
+            ssl_ctx_source = "certifi"
+        except Exception:
+            ssl_ctx = ssl.create_default_context()
+            ssl_ctx_source = "default"
+    except Exception as e:  # pragma: no cover
+        ssl_ctx = None
+        ssl_ctx_source = "import_failed"
+
+    bucket = "post_media"
+    inserted: list[dict[str, Any]] = []
+
+    for idx, url in enumerate(urls, start=1):
+        try:
+            req = Request(url, headers={"User-Agent": "Mozilla/5.0"})
+            with (
+                urlopen(req, timeout=20, context=ssl_ctx)
+                if ssl_ctx is not None
+                else urlopen(req, timeout=20)
+            ) as resp:
+                content_type = (resp.headers.get("Content-Type") or "").split(";", 1)[0].strip()
+                body = resp.read()
+        except Exception as e:
+            log.warning("Failed to download media url=%s: %s", url, e)
+            continue
+
+        if not body:
+            continue
+
+        ext = {
+            "image/jpeg": "jpg",
+            "image/jpg": "jpg",
+            "image/png": "png",
+            "image/webp": "webp",
+            "image/gif": "gif",
+        }.get(content_type)
+        if ext is None:
+            # Fallback: try to guess from URL path
+            m = re.search(r"\.(jpg|jpeg|png|webp|gif)(?:\\?|$)", url, re.IGNORECASE)
+            ext = (m.group(1).lower().replace("jpeg", "jpg") if m else None)
+        if ext is None:
+            log.warning("Skipping media with unknown content-type=%r url=%s", content_type, url)
+            continue
+
+        object_path = f"{user_id}/{feed_post_id}/{idx}.{ext}"
+        try:
+            # supabase-py v2 API
+            storage.client.storage.from_(bucket).upload(  # type: ignore[attr-defined]
+                object_path,
+                body,
+                # storage3 expects header values to be strings; "upsert" is mapped to "x-upsert"
+                file_options={
+                    "content-type": content_type or f"image/{ext}",
+                    "upsert": "true",
+                },
+            )
+            public_url = storage.client.storage.from_(bucket).get_public_url(object_path)  # type: ignore[attr-defined]
+            inserted.append(
+                {
+                    "feed_post_id": feed_post_id,
+                    "original_url": url,
+                    "object_path": object_path,
+                    "public_url": public_url,
+                    "position": idx,
+                }
+            )
+        except Exception as e:
+            log.warning("Failed to upload media path=%s: %s", object_path, e)
+            continue
+
+    if not inserted:
+        return
+
+    try:
+        storage.client.table("feed_post_media").upsert(  # type: ignore[attr-defined]
+            inserted,
+            on_conflict="feed_post_id,position",
+        ).execute()
+    except Exception as e:
+        log.warning("Failed to persist feed_post_media rows: %s", e)
+
+
 def copy_analysis_fields(
     *,
     payload_post: dict[str, Any],
@@ -252,6 +393,31 @@ def fetch_and_store_posts(
         )
     upserted = posts_repo.upsert_posts(linkedin_account_id=account_id, posts=payload)
     log.info("Upserted %s posts to Supabase (account=%s)", upserted, account_id)
+
+    # Best-effort: persist post images into Supabase Storage for UI rendering.
+    try:
+        source_keys = [compute_source_key(post) for post in payload]
+        ids_by_key = posts_repo.list_ids_by_source_keys(
+            linkedin_account_id=account_id,
+            source_keys=source_keys,
+        )
+        user_id = os.environ.get("STORAGE_USER_ID", "")
+        if user_id:
+            for post in payload:
+                sk = compute_source_key(post)
+                feed_post_id = ids_by_key.get(sk)
+                if not feed_post_id:
+                    continue
+                media_urls_val = post.get("media_urls")
+                media_urls = (
+                    [u for u in media_urls_val if isinstance(u, str)]
+                    if isinstance(media_urls_val, list)
+                    else []
+                )
+                urls = extract_post_image_urls(media_urls)
+                store_post_images(storage, user_id=user_id, feed_post_id=feed_post_id, urls=urls)
+    except Exception as e:
+        log.warning("Post media persistence failed (ignored): %s", e)
     try:
         write_run_snapshot(POSTS_PATH, run_at=run_at, posts=payload)
         log.info("Wrote %s (%s posts)", POSTS_PATH, len(payload))
