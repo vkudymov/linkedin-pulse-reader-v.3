@@ -4,10 +4,12 @@ export function AppHeader({
   title,
   subtitle,
   active,
+  isAdmin,
 }: {
   title: string;
   subtitle?: string | null;
-  active?: "posts" | "account" | "prompts";
+  active?: "posts" | "account" | "prompts" | "admin";
+  isAdmin?: boolean;
 }) {
   return (
     <header className="border-b border-border/80 bg-background">
@@ -46,6 +48,17 @@ export function AppHeader({
           >
             Личный кабинет
           </Link>
+          {isAdmin ? (
+            <Link
+              className={[
+                "text-sm underline-offset-4 hover:text-foreground hover:underline",
+                active === "admin" ? "text-foreground" : "text-muted-foreground",
+              ].join(" ")}
+              href="/admin"
+            >
+              Админ
+            </Link>
+          ) : null}
           <Link
             className="text-sm text-muted-foreground underline-offset-4 hover:text-foreground hover:underline"
             href="/logout"

@@ -60,7 +60,7 @@ export async function POST(request: Request) {
     updated_at: new Date().toISOString(),
   };
 
-  const { error } = await supabase.from("user_profiles").upsert(payload);
+  const { error } = await supabase.from("user_prompts").upsert(payload);
   if (error) {
     return NextResponse.json(
       { ok: false, error: error.message || "supabase error" },

@@ -4,6 +4,7 @@ import { AppHeader } from "@/components/AppHeader";
 import { PostCard } from "@/components/PostCard";
 import { PostFilters, type PostFilter } from "@/components/PostFilters";
 import { log } from "@/lib/log/logger";
+import { requireNotBlocked } from "@/lib/auth/blocked";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import type { FeedPostMediaRow, FeedPostRow, LinkedInAccountRow } from "@/types/database";
 
@@ -23,6 +24,7 @@ export default async function PostsPage({
   const supabase = await createSupabaseServerClient();
   const { data } = await supabase.auth.getUser();
   if (!data.user) redirect("/login");
+  const isAdmin = await requireNotBlocked(supabase, data.user.id);
 
   const accountsResp = await supabase
     .from("linkedin_accounts")
@@ -97,6 +99,7 @@ export default async function PostsPage({
         title="Найденные посты"
         subtitle={`Аккаунтов LinkedIn: ${accounts.length}`}
         active="posts"
+        isAdmin={isAdmin}
       />
 
       <main className="mx-auto max-w-3xl px-6 py-6">

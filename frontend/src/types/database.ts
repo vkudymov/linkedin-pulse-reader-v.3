@@ -45,6 +45,7 @@ export type FeedPostMediaRow = {
 
 export type UserProfileRow = {
   id: string;
+  is_admin: boolean;
   full_name: string | null;
   phone: string | null;
   avatar_url: string | null;
@@ -56,6 +57,9 @@ export type UserProfileRow = {
   website: string | null;
   search_prompt: string | null;
   comment_prompt: string | null;
+  is_blocked: boolean;
+  blocked_at: string | null;
+  post_search_run_count: number;
   created_at: string;
   updated_at: string;
 };

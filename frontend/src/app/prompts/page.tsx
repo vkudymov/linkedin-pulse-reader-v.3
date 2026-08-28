@@ -3,6 +3,7 @@ import { redirect } from "next/navigation";
 import { AppHeader } from "@/components/AppHeader";
 import { PostSearchRunner } from "@/components/PostSearchRunner";
 import { PromptForm } from "@/components/PromptForm";
+import { requireNotBlocked } from "@/lib/auth/blocked";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import type { UserProfileRow } from "@/types/database";
 
@@ -10,9 +11,10 @@ export default async function PromptsPage() {
   const supabase = await createSupabaseServerClient();
   const { data } = await supabase.auth.getUser();
   if (!data.user) redirect("/login");
+  const isAdmin = await requireNotBlocked(supabase, data.user.id);
 
   const profileResp = await supabase
-    .from("user_profiles")
+    .from("user_profiles_view")
     .select("*")
     .eq("id", data.user.id)
     .maybeSingle();
@@ -21,7 +23,12 @@ export default async function PromptsPage() {
 
   return (
     <div className="min-h-screen bg-background text-foreground">
-      <AppHeader title="Промпты" subtitle={data.user.email ?? null} active="prompts" />
+      <AppHeader
+        title="Промпты"
+        subtitle={data.user.email ?? null}
+        active="prompts"
+        isAdmin={isAdmin}
+      />
 
       <main className="mx-auto max-w-3xl px-6 py-6">
         <div className="overflow-hidden rounded-2xl border border-border bg-card">

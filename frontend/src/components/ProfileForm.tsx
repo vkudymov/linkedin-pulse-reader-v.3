@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Lock, Save } from "lucide-react";
 
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
@@ -8,7 +8,6 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { cn } from "@/lib/utils";
-import { createSupabaseBrowserClient } from "@/lib/supabase/client";
 import type { UserProfileRow } from "@/types/database";
 
 const fieldClassName =
@@ -21,13 +20,6 @@ function initialsFromName(name: string | null | undefined) {
   if (parts.length === 0) return "?";
   if (parts.length === 1) return parts[0].slice(0, 2).toUpperCase();
   return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
-}
-
-function extFromFile(file: File): string {
-  const type = (file.type || "").toLowerCase();
-  if (type === "image/png") return "png";
-  if (type === "image/webp") return "webp";
-  return "jpg";
 }
 
 export function ProfileForm({
@@ -52,23 +44,57 @@ export function ProfileForm({
   const [website, setWebsite] = useState(initialProfile?.website ?? "");
   const [bio, setBio] = useState(initialProfile?.bio ?? "");
   const [avatarUrl, setAvatarUrl] = useState(initialProfile?.avatar_url ?? "");
+  const [avatarImgSrc, setAvatarImgSrc] = useState<string>(initialProfile?.avatar_url ?? "");
+  const avatarPreviewUrlRef = useRef<string | null>(null);
 
   const avatarAlt = useMemo(() => (fullName || email || "Профиль").trim(), [email, fullName]);
   const avatarFallback = useMemo(() => initialsFromName(fullName || email), [email, fullName]);
 
+  useEffect(() => {
+    // Reset displayed src to the canonical URL (async to satisfy hooks lint rules).
+    queueMicrotask(() => setAvatarImgSrc(avatarUrl ? `${avatarUrl}?v=${Date.now()}` : ""));
+
+    if (!avatarUrl) return;
+
+    // Browser <img> loads can fail with QUIC/range (206). Use a blob URL as a fallback.
+    let cancelled = false;
+    let objectUrl: string | null = null;
+
+    (async () => {
+      try {
+        const r = await fetch(`${avatarUrl}?v=${Date.now()}`, { method: "GET", cache: "no-store" });
+        if (!r.ok) return;
+        const blob = await r.blob();
+        if (cancelled) return;
+        objectUrl = URL.createObjectURL(blob);
+        setAvatarImgSrc(objectUrl);
+        if (avatarPreviewUrlRef.current) {
+          URL.revokeObjectURL(avatarPreviewUrlRef.current);
+          avatarPreviewUrlRef.current = null;
+        }
+      } catch {
+        // Swallow: we'll fallback to AvatarFallback.
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+      if (objectUrl) URL.revokeObjectURL(objectUrl);
+    };
+  }, [avatarUrl]);
+
   async function onUploadAvatar(file: File) {
-    const supabase = createSupabaseBrowserClient();
-    const ext = extFromFile(file);
-    const path = `${userId}/avatar.${ext}`;
-
-    const { error: uploadError } = await supabase.storage
-      .from("avatars")
-      .upload(path, file, { upsert: true, contentType: file.type || undefined });
-    if (uploadError) throw uploadError;
-
-    const { data } = supabase.storage.from("avatars").getPublicUrl(path);
-    if (!data.publicUrl) throw new Error("Не удалось получить ссылку на аватар.");
-    return data.publicUrl;
+    // Workaround for browser-to-Supabase storage timeouts: upload via same-origin API.
+    const fd = new FormData();
+    fd.set("file", file);
+    const resp = await fetch("/api/account/avatar", { method: "POST", body: fd });
+    type ApiResponse = { ok: true; publicUrl: string } | { ok: false; error?: string };
+    const json = (await resp.json().catch(() => null)) as ApiResponse | null;
+    const publicUrl = json && json.ok === true ? json.publicUrl : null;
+    if (!resp.ok || !publicUrl) {
+      throw new Error((json && "error" in json && typeof json.error === "string" && json.error) || "Не удалось загрузить аватар.");
+    }
+    return publicUrl;
   }
 
   async function onSubmit(e: React.FormEvent) {
@@ -127,8 +153,14 @@ export function ProfileForm({
     setSuccess(null);
 
     try {
+      // Show immediate local preview (works for all users).
+      if (avatarPreviewUrlRef.current) URL.revokeObjectURL(avatarPreviewUrlRef.current);
+      avatarPreviewUrlRef.current = URL.createObjectURL(file);
+      setAvatarImgSrc(avatarPreviewUrlRef.current);
+
       const publicUrl = await onUploadAvatar(file);
       setAvatarUrl(publicUrl);
+      void userId;
       setSuccess("Аватар загружен. Нажмите «Сохранить», чтобы закрепить его в профиле.");
     } catch (e: unknown) {
       const message = e instanceof Error ? e.message : "Не удалось загрузить аватар.";
@@ -144,7 +176,13 @@ export function ProfileForm({
       <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div className="flex items-center gap-4">
           <Avatar size="default" className="size-14">
-            {avatarUrl ? <AvatarImage src={avatarUrl} alt={avatarAlt} /> : null}
+            {avatarImgSrc ? (
+              <AvatarImage
+                key={avatarImgSrc}
+                src={avatarImgSrc}
+                alt={avatarAlt}
+              />
+            ) : null}
             <AvatarFallback className="bg-background text-base font-medium text-foreground">
               {avatarFallback}
             </AvatarFallback>

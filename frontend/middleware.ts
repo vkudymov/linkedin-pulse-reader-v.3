@@ -19,7 +19,10 @@ export async function middleware(request: NextRequest) {
 
   const { pathname } = request.nextUrl;
   const isProtected =
-    pathname.startsWith("/posts") || pathname.startsWith("/account") || pathname.startsWith("/prompts");
+    pathname.startsWith("/posts") ||
+    pathname.startsWith("/account") ||
+    pathname.startsWith("/prompts") ||
+    pathname.startsWith("/admin");
 
   if (isProtected && !user) {
     log.warn("middleware", "redirect /posts -> /login", {
@@ -36,6 +39,14 @@ export async function middleware(request: NextRequest) {
 }
 
 export const config = {
-  matcher: ["/posts/:path*", "/account/:path*", "/prompts/:path*", "/login", "/register", "/auth/callback"],
+  matcher: [
+    "/posts/:path*",
+    "/account/:path*",
+    "/prompts/:path*",
+    "/admin/:path*",
+    "/login",
+    "/register",
+    "/auth/callback",
+  ],
 };
 
