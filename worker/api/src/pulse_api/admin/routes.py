@@ -166,16 +166,18 @@ def _to_nullable_trimmed_string(v: str | None) -> str | None:
     return s or None
 
 
-def _to_nullable_date(v: str | None) -> date | None:
+def _to_nullable_date(v: str | None) -> str | None:
     if not isinstance(v, str):
         return None
     s = v.strip()
     if not s:
         return None
     try:
-        return date.fromisoformat(s)
+        # Keep as ISO string for PostgREST JSON payload.
+        date.fromisoformat(s)
+        return s  # type: ignore[return-value]
     except Exception:
-        return None
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid date_of_birth.")
 
 
 @router.post("/users/{target_user_id}/profile")
@@ -199,9 +201,16 @@ def update_user_profile_details(
         "updated_at": datetime.now(timezone.utc).isoformat(),
     }
     try:
-        client.table("user_profiles").upsert(payload).execute()
+        resp = client.table("user_profiles").upsert(payload).execute()
     except Exception as e:
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Failed to update profile.") from e
+    err = getattr(resp, "error", None)
+    if err:
+        msg = getattr(err, "message", None) if err is not None else None
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=(msg if isinstance(msg, str) and msg else "Failed to update profile."),
+        )
     return {"ok": True}
 
 

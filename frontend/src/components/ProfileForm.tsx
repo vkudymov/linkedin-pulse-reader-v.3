@@ -139,7 +139,7 @@ export function ProfileForm({
           message,
           where: "src/components/ProfileForm.tsx",
         }),
-      }).catch(() => {});
+      }).catch(() => { });
     } finally {
       setPending(false);
     }
