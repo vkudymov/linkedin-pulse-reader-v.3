@@ -311,8 +311,14 @@ export function AdminUsersTable({ initialUsers }: { initialUsers: AdminUserRow[]
                             if (next) void ensureDetails(u.id);
                           }}
                         >
-                          <ChevronDown className={cn("size-4 transition-transform", openDetails && "rotate-180")} />
-                          {openDetails ? "Свернуть" : "Подробнее"}
+                          {openDetails ? "Свернуть" : "Профиль"}
+                          <ChevronDown
+                            className={cn(
+                              "ml-1 size-4 transition-transform",
+                              openDetails && "rotate-180",
+                            )}
+                            aria-hidden
+                          />
                         </button>
 
                         <button
@@ -329,6 +335,13 @@ export function AdminUsersTable({ initialUsers }: { initialUsers: AdminUserRow[]
                         >
                           <MessageSquareText className="size-4" aria-hidden />
                           {openPrompts ? "Свернуть" : "Промпт"}
+                          <ChevronDown
+                            className={cn(
+                              "ml-1 size-4 transition-transform",
+                              openPrompts && "rotate-180",
+                            )}
+                            aria-hidden
+                          />
                         </button>
 
                         <button
@@ -344,6 +357,13 @@ export function AdminUsersTable({ initialUsers }: { initialUsers: AdminUserRow[]
                         >
                           <Newspaper className="size-4" aria-hidden />
                           {openPosts ? "Свернуть" : "Посты"}
+                          <ChevronDown
+                            className={cn(
+                              "ml-1 size-4 transition-transform",
+                              openPosts && "rotate-180",
+                            )}
+                            aria-hidden
+                          />
                         </button>
 
                         {u.is_blocked ? (
@@ -537,26 +557,6 @@ export function AdminUsersTable({ initialUsers }: { initialUsers: AdminUserRow[]
                           </div>
 
                           <div className="space-y-2">
-                            <Label htmlFor={`avatar_url_${u.id}`}>Avatar URL</Label>
-                            <Input
-                              id={`avatar_url_${u.id}`}
-                              className={fieldClassName}
-                              value={details?.avatar_url || ""}
-                              onChange={(e) =>
-                                setDetailsById((m) => ({
-                                  ...m,
-                                  [u.id]: {
-                                    ...(m[u.id] as UserProfileDetails),
-                                    avatar_url: e.target.value,
-                                  },
-                                }))
-                              }
-                              disabled={Boolean(savePendingById[u.id])}
-                              placeholder="https://..."
-                            />
-                          </div>
-
-                          <div className="space-y-2">
                             <Label htmlFor={`bio_${u.id}`}>О себе</Label>
                             <Textarea
                               id={`bio_${u.id}`}
@@ -569,7 +569,9 @@ export function AdminUsersTable({ initialUsers }: { initialUsers: AdminUserRow[]
                               }
                               disabled={Boolean(savePendingById[u.id])}
                               placeholder="Несколько строк о пользователе"
-                              className={cn("min-h-28 resize-y rounded-xl")}
+                              className={cn(
+                                "min-h-28 resize-y rounded-xl border-border/80 bg-secondary px-4 py-3 text-sm text-foreground shadow-none",
+                              )}
                             />
                           </div>
 
