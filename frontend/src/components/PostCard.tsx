@@ -156,7 +156,17 @@ function PostMediaGrid({ media }: { media: FeedPostMediaRow[] }) {
   );
 }
 
-export function PostCard({ post, media }: { post: FeedPostRow; media: FeedPostMediaRow[] }) {
+export function PostCard({
+  post,
+  media,
+  deleteUrl,
+  onDeleted,
+}: {
+  post: FeedPostRow;
+  media: FeedPostMediaRow[];
+  deleteUrl?: string;
+  onDeleted?: () => void;
+}) {
   const router = useRouter();
   const [open, setOpen] = useState(false);
   const [deleted, setDeleted] = useState(false);
@@ -199,13 +209,17 @@ export function PostCard({ post, media }: { post: FeedPostRow; media: FeedPostMe
     setDeletePending(true);
     setDeleteError(null);
     try {
-      const res = await fetch(`/api/posts/${encodeURIComponent(post.id)}`, { method: "DELETE" });
+      const url = deleteUrl || `/api/posts/${encodeURIComponent(post.id)}`;
+      const res = await fetch(url, { method: "DELETE" });
       const json = (await res.json().catch(() => null)) as { ok?: boolean; error?: string } | null;
       if (!res.ok || !json?.ok) {
         throw new Error(json?.error || "Не удалось удалить пост.");
       }
       setDeleted(true);
-      router.refresh();
+      onDeleted?.();
+      if (!onDeleted) {
+        router.refresh();
+      }
     } catch (e: unknown) {
       const message = e instanceof Error ? e.message : "Не удалось удалить пост.";
       setDeleteError(message);

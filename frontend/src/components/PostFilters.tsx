@@ -1,3 +1,5 @@
+"use client";
+
 import Link from "next/link";
 
 import { buttonVariants } from "@/components/ui/button";
@@ -21,28 +23,29 @@ const FILTERS: { value: PostFilter; href: string; label: string; countKey: keyof
 export function PostFilters({
   filter,
   counts,
+  mode = "nav",
+  onFilterChange,
 }: {
   filter: PostFilter;
   counts?: PostFilterCounts;
+  mode?: "nav" | "local";
+  onFilterChange?: (next: PostFilter) => void;
 }) {
   return (
     <div className="inline-flex flex-wrap gap-2">
       {FILTERS.map((item) => {
         const active = filter === item.value;
         const count = counts?.[item.countKey];
+        const commonClassName = cn(
+          buttonVariants({
+            variant: active ? "default" : "outline",
+            size: "sm",
+          }),
+          "h-9 gap-2 rounded-full px-4",
+        );
 
-        return (
-          <Link
-            key={item.value}
-            href={item.href}
-            className={cn(
-              buttonVariants({
-                variant: active ? "default" : "outline",
-                size: "sm",
-              }),
-              "h-9 gap-2 rounded-full px-4",
-            )}
-          >
+        const content = (
+          <>
             {item.label}
             {typeof count === "number" ? (
               <span
@@ -56,6 +59,25 @@ export function PostFilters({
                 {count}
               </span>
             ) : null}
+          </>
+        );
+
+        if (mode === "local") {
+          return (
+            <button
+              key={item.value}
+              type="button"
+              className={commonClassName}
+              onClick={() => onFilterChange?.(item.value)}
+            >
+              {content}
+            </button>
+          );
+        }
+
+        return (
+          <Link key={item.value} href={item.href} className={commonClassName}>
+            {content}
           </Link>
         );
       })}

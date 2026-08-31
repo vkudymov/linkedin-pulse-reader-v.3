@@ -11,10 +11,15 @@ from ..post_search.schemas import PostSearchRunResponse, PostSearchStartRequest
 from ..post_search.sessions import PostSearchSessionManager
 from ..settings import get_settings
 from .schemas import (
+    AdminFeedPostMediaRow,
+    AdminFeedPostRow,
+    AdminLinkedInAccountRow,
+    AdminPostCounts,
     AdminUserProfileDetails,
     AdminUserProfileUpdate,
     AdminUserPromptsDetails,
     AdminUserPromptsUpdate,
+    AdminUserPostsResponse,
     AdminUserRow,
 )
 
@@ -306,6 +311,179 @@ def update_user_prompts_details(
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=(msg if isinstance(msg, str) and msg else "Failed to update prompts."),
+        )
+    return {"ok": True}
+
+
+def _normalize_posts_filter(raw: str | None) -> str:
+    if raw in ("all", "relevant", "rejected"):
+        return raw
+    return "all"
+
+
+def _compute_post_counts(posts: list[dict[str, Any]]) -> AdminPostCounts:
+    all_count = len(posts)
+    relevant = len([p for p in posts if p.get("is_relevant") is True])
+    rejected = len([p for p in posts if p.get("is_relevant") is False])
+    pending = len([p for p in posts if p.get("is_relevant") is None])
+    return AdminPostCounts(all=all_count, relevant=relevant, rejected=rejected, pending=pending)
+
+
+@router.get("/users/{target_user_id}/posts", response_model=AdminUserPostsResponse)
+def get_user_posts(
+    target_user_id: str,
+    filter: str | None = None,
+    _: str = Depends(require_admin_user_id),
+) -> AdminUserPostsResponse:
+    client = _get_service_client()
+    filt = _normalize_posts_filter(filter)
+
+    try:
+        acc_resp = (
+            client.table("linkedin_accounts")
+            .select("id,label,li_profile_url,created_at")
+            .eq("user_id", target_user_id)
+            .order("created_at", desc=True)
+            .execute()
+        )
+    except Exception as e:
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Failed to load accounts.") from e
+
+    acc_raw = getattr(acc_resp, "data", None)
+    acc_rows: list[dict[str, Any]] = (
+        [a for a in acc_raw if isinstance(a, dict)] if isinstance(acc_raw, list) else []
+    )
+    accounts = [AdminLinkedInAccountRow(**a) for a in acc_rows if a.get("id")]
+    account_ids = [a.id for a in accounts if a.id]
+
+    posts_rows: list[dict[str, Any]] = []
+    media_by_post_id: dict[str, list[AdminFeedPostMediaRow]] = {}
+    if account_ids:
+        try:
+            posts_resp = (
+                client.table("feed_posts")
+                .select("*")
+                .in_("linkedin_account_id", account_ids)
+                .order("fetched_at", desc=True)
+                .limit(100)
+                .execute()
+            )
+        except Exception as e:
+            raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Failed to load posts.") from e
+
+        posts_raw = getattr(posts_resp, "data", None)
+        posts_rows = [p for p in posts_raw if isinstance(p, dict)] if isinstance(posts_raw, list) else []
+
+        post_ids = [p.get("id") for p in posts_rows if isinstance(p.get("id"), str) and p.get("id")]
+        if post_ids:
+            try:
+                media_resp = (
+                    client.table("feed_post_media")
+                    .select("*")
+                    .in_("feed_post_id", post_ids)
+                    .order("position", desc=False)
+                    .execute()
+                )
+            except Exception as e:
+                raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Failed to load media.") from e
+
+            media_raw = getattr(media_resp, "data", None)
+            media_rows = [m for m in media_raw if isinstance(m, dict)] if isinstance(media_raw, list) else []
+            for m in media_rows:
+                feed_post_id = m.get("feed_post_id")
+                if not isinstance(feed_post_id, str) or not feed_post_id:
+                    continue
+                row = AdminFeedPostMediaRow(**m)
+                media_by_post_id.setdefault(feed_post_id, []).append(row)
+
+    counts = _compute_post_counts(posts_rows)
+
+    filtered_rows = posts_rows
+    if filt == "relevant":
+        filtered_rows = [p for p in posts_rows if p.get("is_relevant") is True]
+    elif filt == "rejected":
+        filtered_rows = [p for p in posts_rows if p.get("is_relevant") is False]
+
+    posts = [AdminFeedPostRow(**p) for p in filtered_rows if p.get("id")]
+    return AdminUserPostsResponse(accounts=accounts, posts=posts, media_by_post_id=media_by_post_id, counts=counts)
+
+
+@router.delete("/users/{target_user_id}/posts/{post_id}")
+def admin_delete_user_post(
+    target_user_id: str,
+    post_id: str,
+    _: str = Depends(require_admin_user_id),
+) -> dict[str, Any]:
+    if not post_id or not isinstance(post_id, str):
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="invalid post id")
+
+    client = _get_service_client()
+    try:
+        post_resp = (
+            client.table("feed_posts")
+            .select("id,linkedin_account_id")
+            .eq("id", post_id)
+            .maybe_single()
+            .execute()
+        )
+    except Exception as e:
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Failed to load post.") from e
+
+    post_row = getattr(post_resp, "data", None)
+    if not isinstance(post_row, dict) or not post_row.get("id"):
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Post not found.")
+
+    acc_id = post_row.get("linkedin_account_id")
+    if not isinstance(acc_id, str) or not acc_id:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Post not found.")
+
+    try:
+        acc_resp = (
+            client.table("linkedin_accounts")
+            .select("id")
+            .eq("id", acc_id)
+            .eq("user_id", target_user_id)
+            .maybe_single()
+            .execute()
+        )
+    except Exception as e:
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Failed to validate ownership.") from e
+
+    acc_row = getattr(acc_resp, "data", None)
+    if not isinstance(acc_row, dict) or not acc_row.get("id"):
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Post not found.")
+
+    try:
+        media_resp = client.table("feed_post_media").select("object_path").eq("feed_post_id", post_id).execute()
+    except Exception as e:
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Failed to load post media.") from e
+
+    media_raw = getattr(media_resp, "data", None)
+    media_rows = [m for m in media_raw if isinstance(m, dict)] if isinstance(media_raw, list) else []
+    object_paths = [p for p in (m.get("object_path") for m in media_rows) if isinstance(p, str) and p.strip()]
+
+    if object_paths:
+        try:
+            storage_resp = client.storage.from_("post_media").remove(object_paths)
+        except Exception as e:
+            raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Storage delete failed.") from e
+
+        if isinstance(storage_resp, dict) and storage_resp.get("error"):
+            err = storage_resp.get("error") or {}
+            msg = err.get("message") if isinstance(err, dict) else None
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=(msg or "storage error"))
+
+    try:
+        del_resp = client.table("feed_posts").delete().eq("id", post_id).execute()
+    except Exception as e:
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Failed to delete post.") from e
+
+    err = getattr(del_resp, "error", None)
+    if err:
+        msg = getattr(err, "message", None) if err is not None else None
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=(msg if isinstance(msg, str) and msg else "supabase error"),
         )
     return {"ok": True}
 

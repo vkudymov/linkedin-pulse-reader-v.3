@@ -2,7 +2,7 @@
 
 import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
-import { ChevronDown, MessageSquareText, Save, Shield, UserX } from "lucide-react";
+import { ChevronDown, MessageSquareText, Newspaper, Save, Shield, UserX } from "lucide-react";
 
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
@@ -12,6 +12,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { PostSearchRunner } from "@/components/PostSearchRunner";
 import { PromptForm } from "@/components/PromptForm";
+import { AdminUserPostsSection } from "@/components/admin/AdminUserPostsSection";
 import { Textarea } from "@/components/ui/textarea";
 import { cn } from "@/lib/utils";
 
@@ -76,6 +77,7 @@ export function AdminUsersTable({ initialUsers }: { initialUsers: AdminUserRow[]
   const [error, setError] = useState<string | null>(null);
   const [openDetailsById, setOpenDetailsById] = useState<Record<string, boolean>>({});
   const [openPromptsById, setOpenPromptsById] = useState<Record<string, boolean>>({});
+  const [openPostsById, setOpenPostsById] = useState<Record<string, boolean>>({});
   const [detailsById, setDetailsById] = useState<Record<string, UserProfileDetails | null>>({});
   const [detailsErrorById, setDetailsErrorById] = useState<Record<string, string | null>>({});
   const [savePendingById, setSavePendingById] = useState<Record<string, boolean>>({});
@@ -251,6 +253,7 @@ export function AdminUsersTable({ initialUsers }: { initialUsers: AdminUserRow[]
             const pending = pendingId === u.id;
             const openDetails = Boolean(openDetailsById[u.id]);
             const openPrompts = Boolean(openPromptsById[u.id]);
+            const openPosts = Boolean(openPostsById[u.id]);
             const email = u.email || "";
             const statusLabel = u.is_blocked ? "Заблокирован" : "Активен";
             const displayName = u.full_name || "—";
@@ -326,6 +329,21 @@ export function AdminUsersTable({ initialUsers }: { initialUsers: AdminUserRow[]
                         >
                           <MessageSquareText className="size-4" aria-hidden />
                           {openPrompts ? "Свернуть" : "Промпт"}
+                        </button>
+
+                        <button
+                          type="button"
+                          className={cn(
+                            buttonVariants({ variant: "outline", size: "sm" }),
+                            "h-9 rounded-full px-4 text-muted-foreground hover:text-foreground",
+                          )}
+                          onClick={() => {
+                            const next = !openPosts;
+                            setOpenPostsById((m) => ({ ...m, [u.id]: next }));
+                          }}
+                        >
+                          <Newspaper className="size-4" aria-hidden />
+                          {openPosts ? "Свернуть" : "Посты"}
                         </button>
 
                         {u.is_blocked ? (
@@ -622,6 +640,12 @@ export function AdminUsersTable({ initialUsers }: { initialUsers: AdminUserRow[]
                       ) : (
                         <div className="text-sm text-muted-foreground">Загружаем промпты…</div>
                       )}
+                    </CardContent>
+                  ) : null}
+
+                  {openPosts ? (
+                    <CardContent className="space-y-3 border-t border-border px-6 pb-6 pt-6">
+                      <AdminUserPostsSection userId={u.id} />
                     </CardContent>
                   ) : null}
               </Card>
