@@ -17,7 +17,19 @@ async function sleep(ms: number) {
   await new Promise((r) => setTimeout(r, ms));
 }
 
-export function PostSearchRunner() {
+export function PostSearchRunner({
+  runUrl = "/api/post-search/run",
+  statusUrl = (sessionId: string) => `/api/post-search/run/${encodeURIComponent(sessionId)}`,
+  redirectOnSuccess = true,
+  successMessage = "Список постов обновлён.",
+  onSuccess,
+}: {
+  runUrl?: string;
+  statusUrl?: (sessionId: string) => string;
+  redirectOnSuccess?: boolean;
+  successMessage?: string;
+  onSuccess?: () => void;
+}) {
   const router = useRouter();
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -38,7 +50,7 @@ export function PostSearchRunner() {
     setMessage(null);
 
     try {
-      const runResp = await fetch("/api/post-search/run", {
+      const runResp = await fetch(runUrl, {
         method: "POST",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({}),
@@ -54,7 +66,7 @@ export function PostSearchRunner() {
       // Poll status until done/error.
       for (let attempt = 0; attempt < 600; attempt += 1) {
         await sleep(1000);
-        const stResp = await fetch(`/api/post-search/run/${encodeURIComponent(runJson.session_id)}`);
+        const stResp = await fetch(statusUrl(runJson.session_id));
         const stJson = (await stResp.json().catch(() => null)) as RunResponse | null;
         if (!stResp.ok || !stJson) {
           throw new Error("Не удалось получить статус выполнения.");
@@ -63,11 +75,14 @@ export function PostSearchRunner() {
         setMessage(stJson.message ?? null);
 
         if (stJson.status === "done") {
-          setSuccess("Список постов обновлён. Открываю ленту…");
-          // Give UI a moment to render success.
-          await sleep(300);
-          router.push("/posts");
-          router.refresh();
+          setSuccess(redirectOnSuccess ? "Список постов обновлён. Открываю ленту…" : successMessage);
+          onSuccess?.();
+          if (redirectOnSuccess) {
+            // Give UI a moment to render success.
+            await sleep(300);
+            router.push("/posts");
+            router.refresh();
+          }
           return;
         }
         if (stJson.status === "error") {

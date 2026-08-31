@@ -43,3 +43,16 @@ class AdminUserProfileUpdate(BaseModel):
     bio: str | None = None
     website: str | None = None
 
+
+class AdminUserPromptsDetails(BaseModel):
+    id: str
+    search_prompt: str | None = None
+    comment_prompt: str | None = None
+    created_at: datetime | None = None
+    updated_at: datetime | None = None
+
+
+class AdminUserPromptsUpdate(BaseModel):
+    search_prompt: str | None = None
+    comment_prompt: str | None = None
+

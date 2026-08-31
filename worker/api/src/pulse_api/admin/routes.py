@@ -6,10 +6,20 @@ from typing import Any
 from fastapi import APIRouter, Depends, HTTPException, status
 
 from ..deps.auth import require_user_id
+from ..post_search.routes import _ensure_not_blocked_and_increment_counter  # type: ignore
+from ..post_search.schemas import PostSearchRunResponse, PostSearchStartRequest
+from ..post_search.sessions import PostSearchSessionManager
 from ..settings import get_settings
-from .schemas import AdminUserProfileDetails, AdminUserProfileUpdate, AdminUserRow
+from .schemas import (
+    AdminUserProfileDetails,
+    AdminUserProfileUpdate,
+    AdminUserPromptsDetails,
+    AdminUserPromptsUpdate,
+    AdminUserRow,
+)
 
 router = APIRouter(prefix="/v1/admin", tags=["admin"])
+_admin_sessions = PostSearchSessionManager()
 
 
 def _get_service_client() -> Any:
@@ -212,6 +222,115 @@ def update_user_profile_details(
             detail=(msg if isinstance(msg, str) and msg else "Failed to update profile."),
         )
     return {"ok": True}
+
+
+_SEARCH_REQUIRED_MARKER = "<<<POST_TEXT>>>"
+_COMMENT_REQUIRED_MARKERS = [
+    "<<<POST_TEXT>>>",
+    "<<<CONTENT_TYPE>>>",
+    "<<<MAIN_TOPICS>>>",
+    "<<<TARGET_LANGUAGE>>>",
+]
+
+
+def _missing_markers(value: str, markers: list[str]) -> list[str]:
+    v = value or ""
+    return [m for m in markers if m not in v]
+
+
+def _validate_prompts(*, search_prompt: str | None, comment_prompt: str | None) -> tuple[str, str | None]:
+    s = _to_nullable_trimmed_string(search_prompt)
+    c = _to_nullable_trimmed_string(comment_prompt)
+    if not s:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Промпт поиска обязателен.")
+    if _SEARCH_REQUIRED_MARKER not in s:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Промпт поиска должен содержать маркер {_SEARCH_REQUIRED_MARKER}.",
+        )
+    if c:
+        missing = _missing_markers(c, _COMMENT_REQUIRED_MARKERS)
+        if missing:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"Промпт комментария должен содержать маркеры: {', '.join(missing)}.",
+            )
+    return s, c
+
+
+@router.get("/users/{target_user_id}/prompts", response_model=AdminUserPromptsDetails)
+def get_user_prompts_details(
+    target_user_id: str, _: str = Depends(require_admin_user_id)
+) -> AdminUserPromptsDetails:
+    client = _get_service_client()
+    try:
+        resp = (
+            client.table("user_prompts")
+            .select("id,search_prompt,comment_prompt,created_at,updated_at")
+            .eq("id", target_user_id)
+            .maybe_single()
+            .execute()
+        )
+    except Exception as e:
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Failed to load prompts.") from e
+    row = getattr(resp, "data", None)
+    # Row may not exist yet for legacy users; return empty record shape.
+    if not isinstance(row, dict) or not row.get("id"):
+        return AdminUserPromptsDetails(id=target_user_id)
+    return AdminUserPromptsDetails(**row)
+
+
+@router.post("/users/{target_user_id}/prompts")
+def update_user_prompts_details(
+    target_user_id: str,
+    body: AdminUserPromptsUpdate,
+    _: str = Depends(require_admin_user_id),
+) -> dict[str, Any]:
+    client = _get_service_client()
+    search_prompt, comment_prompt = _validate_prompts(
+        search_prompt=body.search_prompt, comment_prompt=body.comment_prompt
+    )
+    payload: dict[str, Any] = {
+        "id": target_user_id,
+        "search_prompt": search_prompt,
+        "comment_prompt": comment_prompt,
+        "updated_at": datetime.now(timezone.utc).isoformat(),
+    }
+    try:
+        resp = client.table("user_prompts").upsert(payload).execute()
+    except Exception as e:
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Failed to update prompts.") from e
+    err = getattr(resp, "error", None)
+    if err:
+        msg = getattr(err, "message", None) if err is not None else None
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=(msg if isinstance(msg, str) and msg else "Failed to update prompts."),
+        )
+    return {"ok": True}
+
+
+@router.post("/users/{target_user_id}/post-search/run", response_model=PostSearchRunResponse)
+def admin_start_post_search_run(
+    target_user_id: str,
+    req: PostSearchStartRequest,
+    _: str = Depends(require_admin_user_id),
+) -> PostSearchRunResponse:
+    _ensure_not_blocked_and_increment_counter(user_id=target_user_id)
+    sess = _admin_sessions.start(user_id=target_user_id, limit=req.limit, account_label=req.account_label)
+    return PostSearchRunResponse(session_id=sess.session_id, status=sess.status, message=sess.message)
+
+
+@router.get("/users/{target_user_id}/post-search/run/{session_id}", response_model=PostSearchRunResponse)
+def admin_get_post_search_status(
+    target_user_id: str,
+    session_id: str,
+    _: str = Depends(require_admin_user_id),
+) -> PostSearchRunResponse:
+    sess = _admin_sessions.get(user_id=target_user_id, session_id=session_id)
+    if sess is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Session not found.")
+    return PostSearchRunResponse(session_id=sess.session_id, status=sess.status, message=sess.message)
 
 
 def _set_blocked(*, user_id: str, blocked: bool) -> None:

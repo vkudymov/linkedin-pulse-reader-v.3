@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Save, Sparkles } from "lucide-react";
 
 import {
@@ -11,42 +11,58 @@ import {
 } from "@/lib/defaultPrompts";
 import { cn } from "@/lib/utils";
 import type { UserProfileRow } from "@/types/database";
+import { getPromptIssues, validatePromptPayload } from "@/lib/validatePrompts";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 
-function missingMarkers(value: string, markers: readonly string[]) {
-  const v = value || "";
-  return markers.filter((m) => !v.includes(m));
-}
-
 export function PromptForm({
   initialProfile,
+  initialSearchPrompt,
+  initialCommentPrompt,
+  saveUrl = "/api/account/prompts",
+  fieldIdPrefix,
+  footerHint = "Сохранение происходит в таблицу user_prompts (видно только вам).",
+  onSaved,
 }: {
   initialProfile: UserProfileRow | null;
+  initialSearchPrompt?: string | null;
+  initialCommentPrompt?: string | null;
+  saveUrl?: string;
+  fieldIdPrefix?: string;
+  footerHint?: string;
+  onSaved?: () => void;
 }) {
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
 
-  const [searchPrompt, setSearchPrompt] = useState(initialProfile?.search_prompt ?? "");
-  const [commentPrompt, setCommentPrompt] = useState(initialProfile?.comment_prompt ?? "");
+  const initialSearch = initialSearchPrompt ?? initialProfile?.search_prompt ?? "";
+  const initialComment = initialCommentPrompt ?? initialProfile?.comment_prompt ?? "";
+  const [searchPrompt, setSearchPrompt] = useState(initialSearch);
+  const [commentPrompt, setCommentPrompt] = useState(initialComment);
+  const lastInitialRef = useRef({ initialSearch, initialComment });
 
-  const searchMissing = useMemo(
-    () => missingMarkers(searchPrompt, [SEARCH_REQUIRED_MARKER]),
-    [searchPrompt]
-  );
-  const commentMissing = useMemo(
-    () =>
-      commentPrompt.trim()
-        ? missingMarkers(commentPrompt, [...COMMENT_REQUIRED_MARKERS])
-        : ([] as string[]),
-    [commentPrompt]
-  );
+  useEffect(() => {
+    // Update form when upstream value changes, but don't clobber user edits.
+    if (pending) return;
+    const prev = lastInitialRef.current;
+    const canUpdateSearch = searchPrompt === prev.initialSearch;
+    const canUpdateComment = commentPrompt === prev.initialComment;
+    if (canUpdateSearch) setSearchPrompt(initialSearch);
+    if (canUpdateComment) setCommentPrompt(initialComment);
+    lastInitialRef.current = { initialSearch, initialComment };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [initialSearch, initialComment, pending]);
 
-  const isSearchEmpty = !searchPrompt.trim();
+  const issues = useMemo(
+    () => getPromptIssues({ search_prompt: searchPrompt, comment_prompt: commentPrompt }),
+    [commentPrompt, searchPrompt],
+  );
   const isInvalid =
-    isSearchEmpty || searchMissing.length > 0 || (commentPrompt.trim() && commentMissing.length > 0);
+    issues.isSearchEmpty ||
+    issues.searchMissing.length > 0 ||
+    (commentPrompt.trim() && issues.commentMissing.length > 0);
 
   async function onSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -58,29 +74,15 @@ export function PromptForm({
     const trimmedComment = commentPrompt.trim();
 
     try {
-      if (!trimmedSearch) {
-        throw new Error("Промпт поиска обязателен.");
-      }
-      if (!trimmedSearch.includes(SEARCH_REQUIRED_MARKER)) {
-        throw new Error(`Промпт поиска должен содержать маркер ${SEARCH_REQUIRED_MARKER}.`);
-      }
-      if (trimmedComment) {
-        const missing = missingMarkers(trimmedComment, [...COMMENT_REQUIRED_MARKERS]);
-        if (missing.length > 0) {
-          throw new Error(
-            `Промпт комментария должен содержать маркеры: ${missing.join(", ")}.`
-          );
-        }
-      }
-
-      const payload = {
+      const validated = validatePromptPayload({
         search_prompt: trimmedSearch,
-        comment_prompt: trimmedComment || null,
-      };
-      const res = await fetch("/api/account/prompts", {
+        comment_prompt: trimmedComment,
+      });
+      if (!validated.ok) throw new Error(validated.error);
+      const res = await fetch(saveUrl, {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify(payload),
+        body: JSON.stringify(validated.value),
       });
       if (!res.ok) {
         const data = (await res.json().catch(() => null)) as { error?: string } | null;
@@ -89,6 +91,7 @@ export function PromptForm({
       }
 
       setSuccess("Промпты сохранены.");
+      onSaved?.();
     } catch (e: unknown) {
       const message = e instanceof Error ? e.message : "Не удалось сохранить промпты.";
       setError(message);
@@ -101,17 +104,21 @@ export function PromptForm({
           message,
           where: "src/components/PromptForm.tsx",
         }),
-      }).catch(() => {});
+      }).catch(() => { });
     } finally {
       setPending(false);
     }
   }
 
+  const idPrefix = fieldIdPrefix ? `${fieldIdPrefix}_` : "";
+  const searchId = `${idPrefix}search_prompt`;
+  const commentId = `${idPrefix}comment_prompt`;
+
   return (
     <form onSubmit={onSubmit} className="space-y-6">
       <div className="space-y-2">
         <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-          <Label htmlFor="search_prompt" className="text-sm font-medium">
+          <Label htmlFor={searchId} className="text-sm font-medium">
             Промпт поиска (релевантность)
           </Label>
 
@@ -129,7 +136,7 @@ export function PromptForm({
         </div>
 
         <Textarea
-          id="search_prompt"
+          id={searchId}
           value={searchPrompt}
           onChange={(e) => setSearchPrompt(e.target.value)}
           disabled={pending}
@@ -147,12 +154,12 @@ export function PromptForm({
             <code>content_type</code>, <code>main_topics</code>, <code>reason</code>,{" "}
             <code>selection_reason</code>.
           </p>
-          {isSearchEmpty ? (
+          {issues.isSearchEmpty ? (
             <p className="text-destructive">Промпт поиска не заполнен — worker не будет анализировать посты.</p>
           ) : null}
-          {searchMissing.length > 0 ? (
+          {issues.searchMissing.length > 0 ? (
             <p className="text-destructive">
-              Не хватает маркера: {searchMissing.join(", ")}.
+              Не хватает маркера: {issues.searchMissing.join(", ")}.
             </p>
           ) : null}
         </div>
@@ -160,7 +167,7 @@ export function PromptForm({
 
       <div className="space-y-2">
         <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-          <Label htmlFor="comment_prompt" className="text-sm font-medium">
+          <Label htmlFor={commentId} className="text-sm font-medium">
             Промпт комментария (опционально)
           </Label>
 
@@ -178,7 +185,7 @@ export function PromptForm({
         </div>
 
         <Textarea
-          id="comment_prompt"
+          id={commentId}
           value={commentPrompt}
           onChange={(e) => setCommentPrompt(e.target.value)}
           disabled={pending}
@@ -204,9 +211,9 @@ export function PromptForm({
             <code>{"<<<CONTENT_TYPE>>>"}</code> — тип контента, <code>{"<<<MAIN_TOPICS>>>"}</code>{" "}
             — ключевые темы, <code>{"<<<TARGET_LANGUAGE>>>"}</code> — язык комментария.
           </p>
-          {commentPrompt.trim() && commentMissing.length > 0 ? (
+          {commentPrompt.trim() && issues.commentMissing.length > 0 ? (
             <p className="text-destructive">
-              Не хватает маркеров: {commentMissing.join(", ")}.
+              Не хватает маркеров: {issues.commentMissing.join(", ")}.
             </p>
           ) : null}
         </div>
@@ -228,7 +235,7 @@ export function PromptForm({
         <p className={cn("text-xs text-muted-foreground", isInvalid ? "text-destructive" : "")}>
           {isInvalid
             ? "Исправьте ошибки выше, чтобы сохранить."
-            : "Сохранение происходит в таблицу user_profiles (видно только вам)."}
+            : footerHint}
         </p>
 
         <Button type="submit" disabled={pending || isInvalid} className="rounded-full">

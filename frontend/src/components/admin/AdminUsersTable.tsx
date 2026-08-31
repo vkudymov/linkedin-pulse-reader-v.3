@@ -2,15 +2,16 @@
 
 import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
-import { ChevronDown, Save, Shield, UserX } from "lucide-react";
+import { ChevronDown, MessageSquareText, Save, Shield, UserX } from "lucide-react";
 
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import { Button, buttonVariants } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { PostSearchRunner } from "@/components/PostSearchRunner";
+import { PromptForm } from "@/components/PromptForm";
 import { Textarea } from "@/components/ui/textarea";
 import { cn } from "@/lib/utils";
 
@@ -40,6 +41,14 @@ type UserProfileDetails = {
   updated_at: string | null;
 };
 
+type UserPromptsDetails = {
+  id: string;
+  search_prompt: string | null;
+  comment_prompt: string | null;
+  created_at: string | null;
+  updated_at: string | null;
+};
+
 const fieldClassName =
   "h-11 rounded-full border-border/80 bg-secondary px-4 text-sm text-foreground shadow-none";
 
@@ -65,12 +74,21 @@ export function AdminUsersTable({ initialUsers }: { initialUsers: AdminUserRow[]
   const router = useRouter();
   const [pendingId, setPendingId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [openById, setOpenById] = useState<Record<string, boolean>>({});
+  const [openDetailsById, setOpenDetailsById] = useState<Record<string, boolean>>({});
+  const [openPromptsById, setOpenPromptsById] = useState<Record<string, boolean>>({});
   const [detailsById, setDetailsById] = useState<Record<string, UserProfileDetails | null>>({});
   const [detailsErrorById, setDetailsErrorById] = useState<Record<string, string | null>>({});
   const [savePendingById, setSavePendingById] = useState<Record<string, boolean>>({});
   const [saveErrorById, setSaveErrorById] = useState<Record<string, string | null>>({});
   const [saveSuccessById, setSaveSuccessById] = useState<Record<string, string | null>>({});
+  const [promptsById, setPromptsById] = useState<Record<string, UserPromptsDetails | null>>({});
+  const [promptsErrorById, setPromptsErrorById] = useState<Record<string, string | null>>({});
+  const [savePromptsErrorById, setSavePromptsErrorById] = useState<Record<string, string | null>>(
+    {},
+  );
+  const [savePromptsSuccessById, setSavePromptsSuccessById] = useState<
+    Record<string, string | null>
+  >({});
 
   const users = useMemo(() => initialUsers || [], [initialUsers]);
 
@@ -92,6 +110,50 @@ export function AdminUsersTable({ initialUsers }: { initialUsers: AdminUserRow[]
       setDetailsErrorById((m) => ({
         ...m,
         [userId]: e instanceof Error ? e.message : "Не удалось загрузить профиль.",
+      }));
+    }
+  }
+
+  async function ensurePrompts(userId: string) {
+    if (promptsById[userId] !== undefined) return;
+    setPromptsErrorById((m) => ({ ...m, [userId]: null }));
+    try {
+      const resp = await fetch(`/api/admin/users/${encodeURIComponent(userId)}/prompts`, {
+        method: "GET",
+      });
+      if (!resp.ok) {
+        const text = await resp.text().catch(() => "");
+        throw new Error(text || "Не удалось загрузить промпты.");
+      }
+      const json = (await resp.json()) as UserPromptsDetails;
+      setPromptsById((m) => ({ ...m, [userId]: json }));
+    } catch (e: unknown) {
+      setPromptsById((m) => ({ ...m, [userId]: null }));
+      setPromptsErrorById((m) => ({
+        ...m,
+        [userId]: e instanceof Error ? e.message : "Не удалось загрузить промпты.",
+      }));
+    }
+  }
+
+  async function refreshPrompts(userId: string) {
+    setPromptsErrorById((m) => ({ ...m, [userId]: null }));
+    try {
+      const resp = await fetch(`/api/admin/users/${encodeURIComponent(userId)}/prompts`, {
+        method: "GET",
+        cache: "no-store",
+      });
+      if (!resp.ok) {
+        const text = await resp.text().catch(() => "");
+        throw new Error(text || "Не удалось загрузить промпты.");
+      }
+      const json = (await resp.json()) as UserPromptsDetails;
+      setPromptsById((m) => ({ ...m, [userId]: json }));
+    } catch (e: unknown) {
+      setPromptsById((m) => ({ ...m, [userId]: null }));
+      setPromptsErrorById((m) => ({
+        ...m,
+        [userId]: e instanceof Error ? e.message : "Не удалось загрузить промпты.",
       }));
     }
   }
@@ -187,24 +249,19 @@ export function AdminUsersTable({ initialUsers }: { initialUsers: AdminUserRow[]
         <div className="space-y-3">
           {users.map((u) => {
             const pending = pendingId === u.id;
-            const open = Boolean(openById[u.id]);
+            const openDetails = Boolean(openDetailsById[u.id]);
+            const openPrompts = Boolean(openPromptsById[u.id]);
             const email = u.email || "";
             const statusLabel = u.is_blocked ? "Заблокирован" : "Активен";
             const displayName = u.full_name || "—";
             const details = detailsById[u.id];
+            const prompts = promptsById[u.id] ?? null;
             const avatarAlt = (displayName || email || "Профиль").trim();
             const avatarFallback = initialsFromName(displayName || email);
 
             return (
               <Card key={u.id} className="overflow-hidden rounded-2xl border border-border bg-background/40">
-                <Collapsible
-                  open={open}
-                  onOpenChange={(next) => {
-                    setOpenById((m) => ({ ...m, [u.id]: next }));
-                    if (next) void ensureDetails(u.id);
-                  }}
-                >
-                  <CardHeader className="gap-2 px-6 pb-4 pt-5">
+                <CardHeader className="gap-2 px-6 pb-4 pt-5">
                     <div className="flex flex-wrap items-start justify-between gap-4">
                       <div className="min-w-0 space-y-1">
                         <div className="flex flex-wrap items-center gap-2">
@@ -239,15 +296,37 @@ export function AdminUsersTable({ initialUsers }: { initialUsers: AdminUserRow[]
                       </div>
 
                       <div className="flex flex-wrap items-center justify-end gap-2">
-                        <CollapsibleTrigger
+                        <button
+                          type="button"
                           className={cn(
                             buttonVariants({ variant: "outline", size: "sm" }),
                             "h-9 rounded-full px-4 text-muted-foreground hover:text-foreground",
                           )}
+                          onClick={() => {
+                            const next = !openDetails;
+                            setOpenDetailsById((m) => ({ ...m, [u.id]: next }));
+                            if (next) void ensureDetails(u.id);
+                          }}
                         >
-                          <ChevronDown className={cn("size-4 transition-transform", open && "rotate-180")} />
-                          {open ? "Свернуть" : "Подробнее"}
-                        </CollapsibleTrigger>
+                          <ChevronDown className={cn("size-4 transition-transform", openDetails && "rotate-180")} />
+                          {openDetails ? "Свернуть" : "Подробнее"}
+                        </button>
+
+                        <button
+                          type="button"
+                          className={cn(
+                            buttonVariants({ variant: "outline", size: "sm" }),
+                            "h-9 rounded-full px-4 text-muted-foreground hover:text-foreground",
+                          )}
+                          onClick={() => {
+                            const next = !openPrompts;
+                            setOpenPromptsById((m) => ({ ...m, [u.id]: next }));
+                            if (next) void ensurePrompts(u.id);
+                          }}
+                        >
+                          <MessageSquareText className="size-4" aria-hidden />
+                          {openPrompts ? "Свернуть" : "Промпт"}
+                        </button>
 
                         {u.is_blocked ? (
                           <Button
@@ -284,7 +363,7 @@ export function AdminUsersTable({ initialUsers }: { initialUsers: AdminUserRow[]
                     </div>
                   </CardHeader>
 
-                  <CollapsibleContent>
+                  {openDetails ? (
                     <CardContent className="space-y-3 px-6 pb-6 pt-0">
                       {saveErrorById[u.id] ? (
                         <div className="rounded-xl border border-destructive/30 bg-destructive/10 px-3 py-2 text-sm text-destructive">
@@ -489,8 +568,62 @@ export function AdminUsersTable({ initialUsers }: { initialUsers: AdminUserRow[]
                         <div className="text-sm text-muted-foreground">Загружаем профиль…</div>
                       )}
                     </CardContent>
-                  </CollapsibleContent>
-                </Collapsible>
+                  ) : null}
+
+                  {openPrompts ? (
+                    <CardContent className="space-y-3 border-t border-border px-6 pb-6 pt-6">
+                      {promptsErrorById[u.id] ? (
+                        <div className="rounded-xl border border-destructive/30 bg-destructive/10 px-3 py-2 text-sm text-destructive">
+                          {promptsErrorById[u.id]}
+                        </div>
+                      ) : null}
+                      {savePromptsErrorById[u.id] ? (
+                        <div className="rounded-xl border border-destructive/30 bg-destructive/10 px-3 py-2 text-sm text-destructive">
+                          {savePromptsErrorById[u.id]}
+                        </div>
+                      ) : null}
+                      {savePromptsSuccessById[u.id] ? (
+                        <div className="rounded-xl border border-emerald-300/40 bg-emerald-500/10 px-3 py-2 text-sm text-emerald-700 dark:text-emerald-300">
+                          {savePromptsSuccessById[u.id]}
+                        </div>
+                      ) : null}
+
+                      {prompts ? (
+                        <div className="space-y-6 rounded-xl border border-border bg-background/60 p-4">
+                          <PromptForm
+                            initialProfile={null}
+                            initialSearchPrompt={prompts.search_prompt}
+                            initialCommentPrompt={prompts.comment_prompt}
+                            saveUrl={`/api/admin/users/${encodeURIComponent(u.id)}/prompts`}
+                            fieldIdPrefix={`prompts_${u.id}`}
+                            footerHint="Сохранение происходит для выбранного пользователя."
+                            onSaved={() => {
+                              setSavePromptsErrorById((m) => ({ ...m, [u.id]: null }));
+                              setSavePromptsSuccessById((m) => ({ ...m, [u.id]: "Сохранено." }));
+                              void refreshPrompts(u.id);
+                            }}
+                          />
+
+                          <div className="border-t border-border/80 pt-6">
+                            <PostSearchRunner
+                              runUrl={`/api/admin/users/${encodeURIComponent(u.id)}/post-search/run`}
+                              statusUrl={(sid) =>
+                                `/api/admin/users/${encodeURIComponent(u.id)}/post-search/run/${encodeURIComponent(sid)}`
+                              }
+                              redirectOnSuccess={false}
+                              successMessage="Поиск постов завершён."
+                              onSuccess={() => {
+                                void refreshPrompts(u.id);
+                                router.refresh();
+                              }}
+                            />
+                          </div>
+                        </div>
+                      ) : (
+                        <div className="text-sm text-muted-foreground">Загружаем промпты…</div>
+                      )}
+                    </CardContent>
+                  ) : null}
               </Card>
             );
           })}
