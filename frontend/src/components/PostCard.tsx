@@ -1,5 +1,6 @@
 "use client";
 
+import { useRouter } from "next/navigation";
 import { useState, type ComponentType } from "react";
 import {
   Calendar,
@@ -9,6 +10,7 @@ import {
   ImageIcon,
   MessageCircle,
   Sparkles,
+  Trash2,
 } from "lucide-react";
 
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
@@ -28,7 +30,7 @@ import {
 } from "@/components/ui/collapsible";
 import { Separator } from "@/components/ui/separator";
 import { cn } from "@/lib/utils";
-import { FeedPostRow } from "@/types/database";
+import { FeedPostMediaRow, FeedPostRow } from "@/types/database";
 
 type PostStatus = {
   label: string;
@@ -111,8 +113,65 @@ function InsightPreview({
   );
 }
 
-export function PostCard({ post }: { post: FeedPostRow }) {
+function PostMediaGrid({ media }: { media: FeedPostMediaRow[] }) {
+  if (!media || media.length === 0) return null;
+
+  const items = media.slice(0, 4);
+  const extra = media.length - items.length;
+
+  if (items.length === 1) {
+    const m = items[0];
+    return (
+      <div className="overflow-hidden rounded-2xl border border-border bg-background/30">
+        {/* eslint-disable-next-line @next/next/no-img-element -- Supabase Storage public URLs; keep simple <img> without next/image config. */}
+        <img
+          src={m.public_url}
+          alt="Изображение поста"
+          className="max-h-[520px] w-full object-cover"
+          loading="lazy"
+        />
+      </div>
+    );
+  }
+
+  return (
+    <div className="grid overflow-hidden rounded-2xl border border-border bg-background/30 sm:grid-cols-2">
+      {items.map((m, idx) => (
+        <div key={m.id} className="relative aspect-[16/10] overflow-hidden">
+          {/* eslint-disable-next-line @next/next/no-img-element -- Supabase Storage public URLs; keep simple <img> without next/image config. */}
+          <img
+            src={m.public_url}
+            alt="Изображение поста"
+            className="h-full w-full object-cover"
+            loading="lazy"
+          />
+          {extra > 0 && idx === items.length - 1 ? (
+            <div className="absolute inset-0 flex items-center justify-center bg-background/70 text-lg font-semibold text-foreground">
+              +{extra}
+            </div>
+          ) : null}
+        </div>
+      ))}
+    </div>
+  );
+}
+
+export function PostCard({
+  post,
+  media,
+  deleteUrl,
+  onDeleted,
+}: {
+  post: FeedPostRow;
+  media: FeedPostMediaRow[];
+  deleteUrl?: string;
+  onDeleted?: () => void;
+}) {
+  const router = useRouter();
   const [open, setOpen] = useState(false);
+  const [deleted, setDeleted] = useState(false);
+  const [deletePending, setDeletePending] = useState(false);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
   const status = postStatus(post);
   const authorName = post.author_json?.name || null;
   const authorHeadline = post.author_json?.headline || null;
@@ -144,6 +203,32 @@ export function PostCard({ post }: { post: FeedPostRow }) {
         minute: "2-digit",
       })
     : null;
+
+  async function onDelete() {
+    if (!confirm("Удалить этот пост? Это удалит его из списка и из базы.")) return;
+    setDeletePending(true);
+    setDeleteError(null);
+    try {
+      const url = deleteUrl || `/api/posts/${encodeURIComponent(post.id)}`;
+      const res = await fetch(url, { method: "DELETE" });
+      const json = (await res.json().catch(() => null)) as { ok?: boolean; error?: string } | null;
+      if (!res.ok || !json?.ok) {
+        throw new Error(json?.error || "Не удалось удалить пост.");
+      }
+      setDeleted(true);
+      onDeleted?.();
+      if (!onDeleted) {
+        router.refresh();
+      }
+    } catch (e: unknown) {
+      const message = e instanceof Error ? e.message : "Не удалось удалить пост.";
+      setDeleteError(message);
+    } finally {
+      setDeletePending(false);
+    }
+  }
+
+  if (deleted) return null;
 
   return (
     <Card className="overflow-hidden rounded-2xl border border-border bg-secondary py-0 shadow-none ring-0 transition-colors hover:border-foreground/20">
@@ -215,8 +300,12 @@ export function PostCard({ post }: { post: FeedPostRow }) {
             <p className="text-sm italic text-muted-foreground">Текст поста недоступен</p>
           ) : null}
 
+          {!open ? <PostMediaGrid media={media} /> : null}
+
           {!open && reason ? (
-            <InsightPreview title="Причина отбора" text={reason} />
+            <div className="space-y-2">
+              <InsightPreview title="Причина отбора" text={reason} />
+            </div>
           ) : null}
 
           {!open && comment ? (
@@ -231,6 +320,8 @@ export function PostCard({ post }: { post: FeedPostRow }) {
             ) : (
               <p className="text-sm italic text-muted-foreground">Текст поста недоступен</p>
             )}
+
+            <PostMediaGrid media={media} />
 
             {reason ? (
               <blockquote className="rounded-xl border border-border bg-background/60 px-3.5 py-2.5 text-sm text-muted-foreground">
@@ -293,21 +384,42 @@ export function PostCard({ post }: { post: FeedPostRow }) {
               {open ? "Свернуть" : "Подробнее"}
             </CollapsibleTrigger>
 
-            {post.post_url ? (
-              <a
+            <div className="flex flex-wrap items-center justify-end gap-2">
+              {post.post_url ? (
+                <a
+                  className={cn(
+                    buttonVariants({ variant: "outline", size: "sm" }),
+                    "h-9 rounded-full px-4",
+                  )}
+                  href={post.post_url}
+                  target="_blank"
+                  rel="noreferrer"
+                >
+                  Открыть в LinkedIn
+                  <ExternalLink className="size-3.5" />
+                </a>
+              ) : null}
+
+              <button
+                type="button"
+                onClick={onDelete}
+                disabled={deletePending}
                 className={cn(
                   buttonVariants({ variant: "outline", size: "sm" }),
-                  "h-9 rounded-full px-4",
+                  "h-9 rounded-full px-4 text-destructive hover:text-destructive",
                 )}
-                href={post.post_url}
-                target="_blank"
-                rel="noreferrer"
               >
-                Открыть в LinkedIn
-                <ExternalLink className="size-3.5" />
-              </a>
-            ) : null}
+                Удалить
+                <Trash2 className="size-3.5" />
+              </button>
+            </div>
           </div>
+
+          {deleteError ? (
+            <div className="rounded-xl border border-destructive/40 bg-destructive/10 px-4 py-3 text-sm text-destructive">
+              {deleteError}
+            </div>
+          ) : null}
         </CardContent>
       </Collapsible>
     </Card>

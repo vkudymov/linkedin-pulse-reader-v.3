@@ -88,12 +88,48 @@ class FeedPostRepository:
         )
         return expect_list(resp)
 
+    def list_ids_by_source_keys(
+        self,
+        *,
+        linkedin_account_id: str,
+        source_keys: list[str],
+    ) -> dict[str, str]:
+        """
+        Resolve feed_posts ids by source_keys for a given LinkedIn account.
+
+        Used by worker ingestion to attach stored media to existing rows without
+        changing the upsert contract.
+        """
+        if not source_keys:
+            return {}
+
+        q = (
+            self._client.table("feed_posts")
+            .select("id,source_key")
+            .eq("linkedin_account_id", linkedin_account_id)
+        )
+        # supabase-py uses `.in_` for SQL IN
+        in_fn = getattr(q, "in_", None)
+        if callable(in_fn):
+            q = in_fn("source_key", source_keys)
+        else:  # pragma: no cover - best-effort compatibility
+            q = q.in_("source_key", source_keys)  # type: ignore[attr-defined]
+
+        rows = expect_list(q.execute())
+        out: dict[str, str] = {}
+        for row in rows:
+            sk = row.get("source_key")
+            pid = row.get("id")
+            if isinstance(sk, str) and isinstance(pid, str):
+                out[sk] = pid
+        return out
+
 
 def compute_source_key(post: Mapping[str, Any]) -> str:
     """
     Stable id for upsert and analysis updates.
 
-    Must stay in sync between ingest (upsert_posts) and run_demo (update_analysis).
+    Must stay in sync between ingest (upsert_posts) and run_post_search (update_analysis).
     Prefer urn/post_url; fallback hash avoids collisions only for posts without ids.
     """
     urn = post.get("urn")

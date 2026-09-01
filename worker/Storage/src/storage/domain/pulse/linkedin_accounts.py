@@ -8,6 +8,21 @@ from storage.core.response import expect_list, expect_single
 from .models import LinkedInAccountCreate, LinkedInAccountRow
 
 
+def pick_linkedin_account_row(
+    rows: list[LinkedInAccountRow],
+    *,
+    label: str | None,
+    create_new_on_label_miss: bool,
+) -> LinkedInAccountRow | None:
+    if label:
+        matched = next((row for row in rows if row.get("label") == label), None)
+        if matched is not None:
+            return matched
+        if create_new_on_label_miss:
+            return None
+    return rows[0] if rows else None
+
+
 class LinkedInAccountRepository:
     """One row per LinkedIn session; cookies_json is the browser session state."""
 

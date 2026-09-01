@@ -1,10 +1,14 @@
 # Worker (Python)
 
-`worker/` содержит Python-код пайплайна: `LinkedInClient/`, `PostAnalyzer/`, `Storage/`, а также `run_demo.py`, который:
+`worker/` содержит Python-код пайплайна: `LinkedInClient/`, `PostAnalyzer/`, `Storage/`, а также `run_post_search.py`, который:
 
 - логинится в LinkedIn (Playwright)
 - сохраняет cookies и найденные посты в Supabase (`linkedin_accounts`, `feed_posts`)
 - анализирует релевантность постов через LLM
+
+Также в Supabase хранится профиль пользователя (личный кабинет):
+- `public.user_profiles` — расширенные данные профиля
+- Storage bucket `avatars` — аватар пользователя
 
 ## Установка зависимостей (editable)
 
@@ -34,7 +38,16 @@ STORAGE_ACCOUNT_LABEL="default"
 
 ```bash
 cd worker
-python run_demo.py --limit 10
+python run_post_search.py --limit 10
+```
+
+### Worker API (для запуска из UI)
+
+Если вы запускаете поиск постов кнопкой в интерфейсе (`/prompts`), поднимите worker API:
+
+```bash
+cd worker
+uvicorn pulse_api.main:app --app-dir api/src --reload --host 127.0.0.1 --port 8000
 ```
 
 ### HTTP API для LinkedIn login (worker only)

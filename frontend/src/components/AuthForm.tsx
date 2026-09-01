@@ -73,6 +73,21 @@ export function AuthForm({ variant }: { variant: Variant }) {
 
       const { error } = await supabase.auth.signInWithPassword({ email, password });
       if (error) throw error;
+
+      const { data: userData } = await supabase.auth.getUser();
+      const uid = userData.user?.id ?? null;
+      if (uid) {
+        const { data: profile } = await supabase
+          .from("user_admin_state")
+          .select("is_blocked")
+          .eq("id", uid)
+          .maybeSingle();
+        if (profile?.is_blocked) {
+          await supabase.auth.signOut();
+          setError("Пользователь заблокирован.");
+          return;
+        }
+      }
       router.push(nextPath);
       router.refresh();
     } catch (e: unknown) {

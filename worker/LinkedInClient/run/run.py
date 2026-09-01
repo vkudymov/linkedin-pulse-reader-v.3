@@ -19,19 +19,6 @@ from linkedin_client.browser import BrowserConfig
 from linkedin_client.exceptions import LoginRequiredError
 
 
-# File persistence for cookies.json/posts.json is intentionally disabled in this
-# test runner. The application-level storage logic lives in ../../run_demo.py.
-#
-# def _load_cookies(path: Path) -> list[dict[str, Any]] | None:
-#     ...
-#
-# def _save_cookies(path: Path, cookies: list[dict[str, Any]]) -> None:
-#     ...
-#
-# def _save_posts(path: Path, posts: list[Any]) -> None:
-#     ...
-
-
 def _maybe_start_trace(client: LinkedInClient, trace_path: Path | None) -> None:
     # EN: Optional Playwright trace to debug flaky feed loading / selector changes.
     # RU: Опциональный trace Playwright для отладки флейков/изменений DOM/селекторов.
@@ -61,7 +48,7 @@ def _manual_login_and_save_cookies(
         _maybe_start_trace(client, trace_path)
         try:
             refreshed = client.login_and_get_cookies()
-            # cookies.json persistence is handled by ../../run_demo.py.
+            # cookies.json persistence is handled by ../../run_post_search.py.
             print(f"Received {len(refreshed)} cookies.")
             return refreshed
         finally:
@@ -131,7 +118,7 @@ def main() -> int:
             _maybe_start_trace(client, args.trace)
             try:
                 refreshed = client.login_and_get_cookies()
-                # cookies.json persistence is handled by ../../run_demo.py.
+                # cookies.json persistence is handled by ../../run_post_search.py.
                 print(f"Received {len(refreshed)} cookies.")
             finally:
                 _maybe_stop_trace(client, args.trace)
@@ -166,7 +153,7 @@ def main() -> int:
                 try:
                     posts = client.fetch_posts(limit=args.limit)
                     print(f"Fetched {len(posts)} posts.")
-                    # posts.json/cookies.json persistence is handled by ../../run_demo.py.
+                    # posts.json/cookies.json persistence is handled by ../../run_post_search.py.
                 except Exception:
                     if args.screenshot_on_error:
                         artifacts_dir_default.mkdir(parents=True, exist_ok=True)
@@ -187,12 +174,10 @@ def main() -> int:
             with LinkedInClient(cookies=cookies, config=cfg) as client:
                 posts = client.fetch_posts(limit=args.limit)
                 print(f"Fetched {len(posts)} posts.")
-                # posts.json/cookies.json persistence is handled by ../../run_demo.py.
+                # posts.json/cookies.json persistence is handled by ../../run_post_search.py.
             return 0
 
     raise SystemExit(f"Unknown command: {cmd}")
-
-    # Unreachable
 
 
 if __name__ == "__main__":

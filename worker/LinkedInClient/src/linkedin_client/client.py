@@ -156,7 +156,7 @@ def _enrich_post(existing: Post, incoming: Post) -> Post:
     )
 
 
-def _upsert_post(results: list[Post], seen: set[str], post: Post) -> bool:
+def _upsert_post(results: list[Post], post: Post) -> bool:
     """Insert or enrich an existing post keyed by `_post_key`. Returns True if inserted."""
     key = _post_key(post)
     if not key:
@@ -169,7 +169,6 @@ def _upsert_post(results: list[Post], seen: set[str], post: Post) -> bool:
         results[idx] = enriched
         return False
 
-    seen.add(key)
     results.append(post)
     return True
 
@@ -417,7 +416,6 @@ class LinkedInClient:
                 navigator.goto_feed(self.page)
                 waiter.wait_for_feed_ready(self.page)
 
-                seen: set[str] = set()
                 results: list[Post] = []
 
                 def merge(posts: list[Post]) -> None:
@@ -425,7 +423,7 @@ class LinkedInClient:
                         content = (p.content or "").strip()
                         if not content:
                             continue
-                        _upsert_post(results, seen, p)
+                        _upsert_post(results, p)
 
                 def merge_read_posts(raw_posts: list[dict[str, Any]]) -> None:
                     for item in raw_posts:
@@ -445,7 +443,7 @@ class LinkedInClient:
                             post_url=post_url,
                             urn=urn,
                         )
-                        _upsert_post(results, seen, p)
+                        _upsert_post(results, p)
 
                 parse_budget = min(max(limit * 5, 50), 250)
                 read_limit = min(parse_budget, limit * 2)

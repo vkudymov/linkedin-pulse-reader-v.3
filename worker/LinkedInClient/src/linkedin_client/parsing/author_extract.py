@@ -256,15 +256,6 @@ def _urn_from_profile_link(link: Locator) -> str | None:
     return None
 
 
-def extract_author_name(container: Locator) -> str | None:
-    legacy = _first_text(container, _LEGACY_NAME_SELECTORS)
-    if legacy:
-        return _clean_author_name(legacy)
-
-    _, name = _pick_author_profile_link(container)
-    return name
-
-
 def _headline_from_actor_block(link: Locator, author_name: str) -> str | None:
     try:
         actor = link.locator(

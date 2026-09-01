@@ -33,3 +33,34 @@ export type FeedPostRow = {
   analyzed_at: string | null;
 };
 
+export type FeedPostMediaRow = {
+  id: string;
+  feed_post_id: string;
+  original_url: string;
+  object_path: string;
+  public_url: string;
+  position: number;
+  created_at: string;
+};
+
+export type UserProfileRow = {
+  id: string;
+  is_admin: boolean;
+  full_name: string | null;
+  phone: string | null;
+  avatar_url: string | null;
+  company: string | null;
+  job_title: string | null;
+  date_of_birth: string | null;
+  city: string | null;
+  bio: string | null;
+  website: string | null;
+  search_prompt: string | null;
+  comment_prompt: string | null;
+  is_blocked: boolean;
+  blocked_at: string | null;
+  post_search_run_count: number;
+  created_at: string;
+  updated_at: string;
+};
+
