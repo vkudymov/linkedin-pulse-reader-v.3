@@ -46,17 +46,20 @@ class LinkedInAccountRepository:
         cookies_json: list[dict[str, Any]],
         label: str | None = None,
         li_profile_url: str | None = None,
+        session_snapshot: dict[str, Any] | None = None,
     ) -> LinkedInAccountRow:
         now = datetime.now(timezone.utc).isoformat()
         payload: LinkedInAccountCreate = {
             "user_id": user_id,
-            "cookies_json": cookies_json,
+            "cookies_json": _legacy_playwright_cookies(cookies_json),
             "cookies_updated_at": now,
         }
         if label is not None:
             payload["label"] = label
         if li_profile_url is not None:
             payload["li_profile_url"] = li_profile_url
+        if session_snapshot is not None:
+            payload["session_snapshot"] = session_snapshot
 
         return expect_single(self._client.table("linkedin_accounts").insert(payload).execute())  # type: ignore[return-value]
 
@@ -69,10 +72,53 @@ class LinkedInAccountRepository:
         now = datetime.now(timezone.utc).isoformat()
         resp = (
             self._client.table("linkedin_accounts")
-            .update({"cookies_json": cookies_json, "cookies_updated_at": now, "updated_at": now})
+            .update(
+                {
+                    "cookies_json": _legacy_playwright_cookies(cookies_json),
+                    "cookies_updated_at": now,
+                    "updated_at": now,
+                }
+            )
             .eq("id", account_id)
             .select("*")
             .execute()
         )
         return expect_single(resp)  # type: ignore[return-value]
+
+    def update_session(
+        self,
+        *,
+        account_id: str,
+        session_snapshot: dict[str, Any],
+    ) -> LinkedInAccountRow:
+        now = datetime.now(timezone.utc).isoformat()
+        cookies = session_snapshot.get("cookies") if isinstance(session_snapshot, dict) else None
+        cookies_json = _legacy_playwright_cookies(cookies if isinstance(cookies, list) else [])
+        resp = (
+            self._client.table("linkedin_accounts")
+            .update(
+                {
+                    "session_snapshot": session_snapshot,
+                    "cookies_json": cookies_json,
+                    "cookies_updated_at": now,
+                    "updated_at": now,
+                }
+            )
+            .eq("id", account_id)
+            .select("*")
+            .execute()
+        )
+        return expect_single(resp)  # type: ignore[return-value]
+
+
+def _legacy_playwright_cookies(cookies: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Keep cookies_json as a Playwright list so legacy rows stay readable."""
+    if not cookies:
+        return []
+    try:
+        from session_snapshot import to_playwright_cookies
+    except ImportError:
+        return cookies
+    converted = to_playwright_cookies(cookies)
+    return converted if converted else cookies
 

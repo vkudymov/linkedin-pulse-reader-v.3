@@ -12,6 +12,7 @@ class LinkedInAccountRow(TypedDict):
     cookies_updated_at: str | None
     created_at: str
     updated_at: str
+    session_snapshot: NotRequired[dict[str, Any] | None]
 
 
 class LinkedInAccountCreate(TypedDict):
@@ -20,6 +21,7 @@ class LinkedInAccountCreate(TypedDict):
     label: NotRequired[str | None]
     li_profile_url: NotRequired[str | None]
     cookies_updated_at: NotRequired[str | None]
+    session_snapshot: NotRequired[dict[str, Any] | None]
 
 
 class FeedPostRow(TypedDict):

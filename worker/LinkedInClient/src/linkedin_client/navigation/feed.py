@@ -18,6 +18,11 @@ from playwright.sync_api import Page, TimeoutError as PlaywrightTimeoutError
 
 from ..exceptions import FeedLoadError, LoginRequiredError
 
+try:
+    from session_snapshot import is_logged_out as _session_is_logged_out
+except ImportError:  # pragma: no cover
+    _session_is_logged_out = None
+
 
 @dataclass(frozen=True, slots=True)
 class FeedNavigator:
@@ -73,7 +78,9 @@ class FeedNavigator:
 
     @staticmethod
     def _is_auth_redirect(url: str) -> bool:
-        lowered = url.lower()
+        if _session_is_logged_out is not None:
+            return bool(_session_is_logged_out(url or ""))
+        lowered = (url or "").lower()
         return any(
             marker in lowered
             for marker in (

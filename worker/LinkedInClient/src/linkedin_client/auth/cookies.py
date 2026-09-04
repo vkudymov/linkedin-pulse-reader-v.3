@@ -54,21 +54,38 @@ def inject_cookies(context: BrowserContext, cookies: Cookies) -> None:
     """
     Inject cookies into a fresh browser context.
 
-    RU: Это основной механизм восстановления сессии без API; функция должна оставаться feature-agnostic.
-    EN: This is the primary session restoration mechanism without APIs; keep it feature-agnostic.
-
-    The library never stores cookies; it only injects them and can extract them later.
+    RU: Восстановление сессии. Chrome-shaped cookies конвертируются на границе Playwright.
+    EN: Session restore. Chrome-shaped cookies are converted at the Playwright boundary.
     """
     if not cookies:
         return
-    validate_cookies(cookies)
-    context.add_cookies(list(cookies))
+    converted = _to_playwright_if_needed(list(cookies))
+    validate_cookies(converted)
+    context.add_cookies(converted)
 
 
 def extract_cookies(context: BrowserContext) -> list[dict[str, Any]]:
     """
-    RU: Экспорт cookies из текущего browser context (для внешнего хранения).
-    EN: Export cookies from the current browser context (for external persistence).
+    RU: Экспорт cookies из текущего browser context (Playwright list).
+        Chrome-shaped persist делает вызывающая сторона через session_snapshot.export_session.
+    EN: Export Playwright cookies. Chrome-shaped persist is done by the caller via export_session.
     """
     return context.cookies()
+
+
+def _to_playwright_if_needed(cookies: list[Any]) -> list[dict[str, Any]]:
+    raw = [c for c in cookies if isinstance(c, Mapping)]
+    if not raw:
+        return []
+    looks_chrome = any(
+        isinstance(c, Mapping) and "expirationDate" in c and "expires" not in c for c in raw
+    )
+    if not looks_chrome:
+        return [dict(c) for c in raw]
+    try:
+        from session_snapshot import to_playwright_cookies
+    except ImportError:
+        return [dict(c) for c in raw]
+    converted = to_playwright_cookies([dict(c) for c in raw])
+    return converted if converted else [dict(c) for c in raw]
 

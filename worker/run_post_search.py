@@ -17,6 +17,7 @@ ROOT = Path(__file__).resolve().parent
 LINKEDIN_SRC = ROOT / "LinkedInClient" / "src"
 POST_ANALYZER_SRC = ROOT / "PostAnalyzer" / "src"
 STORAGE_SRC = ROOT / "Storage" / "src"
+SESSION_SNAPSHOT_SRC = ROOT / "session_snapshot" / "src"
 POSTS_PATH = ROOT / "posts.json"
 SELECTED_POSTS_PATH = ROOT / "selected_posts.json"
 ENV_PATH = ROOT / ".env"
@@ -46,10 +47,18 @@ if str(POST_ANALYZER_SRC) not in sys.path:
     sys.path.insert(0, str(POST_ANALYZER_SRC))
 if str(STORAGE_SRC) not in sys.path:
     sys.path.insert(0, str(STORAGE_SRC))
+if str(SESSION_SNAPSHOT_SRC) not in sys.path:
+    sys.path.insert(0, str(SESSION_SNAPSHOT_SRC))
 
 from linkedin_client import LinkedInClient, LinkedInClientConfig  # type: ignore[import-not-found]  # noqa: E402
 from linkedin_client.browser import BrowserConfig  # type: ignore[import-not-found]  # noqa: E402
 from linkedin_client.exceptions import FeedLoadError, LoginRequiredError  # type: ignore[import-not-found]  # noqa: E402
+from session_snapshot import (  # noqa: E402
+    SessionLoggedOutError,
+    has_auth_cookie,
+    load_snapshot,
+    should_save_back,
+)
 
 from post_analyzer import LLMPostSelector, PostAnalyzerConfig  # type: ignore[import-not-found]  # noqa: E402
 
@@ -355,17 +364,40 @@ def copy_analysis_fields(
             payload_post[field] = analyzed_post[field]
 
 
-def login_and_get_cookies(cfg: LinkedInClientConfig) -> list[dict[str, Any]]:
+def login_and_export_snapshot(cfg: LinkedInClientConfig) -> dict[str, Any]:
     log.info("Cookies missing or expired. Log in in the opened browser window.")
     with LinkedInClient(config=cfg) as client:
-        return client.login_and_get_cookies()
+        client.login_and_get_cookies()
+        if not should_save_back(client.page.url):
+            raise LoginRequiredError(
+                "LinkedIn login did not reach a logged-in page; cookies were not saved."
+            )
+        try:
+            return client.export_session_snapshot({})
+        except SessionLoggedOutError as e:
+            raise LoginRequiredError(str(e)) from e
+
+
+def _persist_snapshot(accounts: Any, *, user_id: str, account_id: str | None, snapshot: dict[str, Any], label: str | None) -> str:
+    cookies = snapshot.get("cookies") if isinstance(snapshot, dict) else None
+    cookie_list = cookies if isinstance(cookies, list) else []
+    if account_id is None:
+        created = accounts.create(
+            user_id=user_id,
+            cookies_json=cookie_list,
+            label=label,
+            session_snapshot=snapshot,
+        )
+        return created["id"]
+    accounts.update_session(account_id=account_id, session_snapshot=snapshot)
+    return account_id
 
 
 def fetch_and_store_posts(
     *,
     storage: Any,
     account_id: str,
-    cookies: list[dict[str, Any]],
+    snapshot: dict[str, Any],
     cfg: LinkedInClientConfig,
     limit: int,
 ) -> None:
@@ -375,10 +407,17 @@ def fetch_and_store_posts(
     posts_repo = storage.feed_posts
 
     log.info("Fetching posts: limit=%s", limit)
-    with LinkedInClient(cookies=cookies, config=cfg) as client:
+    with LinkedInClient(session_snapshot=snapshot, config=cfg) as client:
         posts = client.fetch_posts(limit=limit)
-        fresh_cookies = client.get_cookies()
-        accounts.update_cookies(account_id=account_id, cookies_json=fresh_cookies)
+        if not should_save_back(client.page.url):
+            raise LoginRequiredError(
+                "LinkedIn returned a login/authwall page; session was not saved back."
+            )
+        try:
+            fresh_snapshot = client.export_session_snapshot(snapshot)
+        except SessionLoggedOutError as e:
+            raise LoginRequiredError(str(e)) from e
+        accounts.update_session(account_id=account_id, session_snapshot=fresh_snapshot)
 
     run_at = make_run_timestamp()
     payload = [post_to_dict(post) for post in posts]
@@ -623,41 +662,58 @@ def main() -> None:
         )
 
     account_id: str
-    cookies: list[dict[str, Any]]
+    snapshot: dict[str, Any]
     if chosen is None:
-        cookies = login_and_get_cookies(cfg)
-        created = accounts.create(
-            user_id=user_id, cookies_json=cookies, label=account_label
+        snapshot = login_and_export_snapshot(cfg)
+        account_id = _persist_snapshot(
+            accounts, user_id=user_id, account_id=None, snapshot=snapshot, label=account_label
         )
-        account_id = created["id"]
         log.info(
             "Created Supabase linkedin_account=%s for user=%s", account_id, user_id
         )
     else:
         account_id = chosen["id"]
-        cookies_val = chosen.get("cookies_json")
-        cookies = cookies_val if isinstance(cookies_val, list) else []
-        log.info("Loaded cookies from Supabase linkedin_account=%s", account_id)
-        if not cookies:
-            cookies = login_and_get_cookies(cfg)
-            accounts.update_cookies(account_id=account_id, cookies_json=cookies)
-            log.info("Supabase cookies were missing; re-logged in and refreshed them.")
+        snapshot = load_snapshot(chosen)
+        cookies = snapshot.get("cookies") if isinstance(snapshot.get("cookies"), list) else []
+        log.info(
+            "Loaded session from Supabase linkedin_account=%s (cookies=%s, li_at=%s)",
+            account_id,
+            len(cookies),
+            "yes" if has_auth_cookie(cookies) else "no",
+        )
+        if not has_auth_cookie(cookies):
+            snapshot = login_and_export_snapshot(cfg)
+            _persist_snapshot(
+                accounts,
+                user_id=user_id,
+                account_id=account_id,
+                snapshot=snapshot,
+                label=account_label,
+            )
+            log.info("Supabase session was missing; re-logged in and refreshed it.")
 
     try:
         fetch_and_store_posts(
             storage=storage,
             account_id=account_id,
-            cookies=cookies,
+            snapshot=snapshot,
             cfg=cfg,
             limit=args.limit,
         )
     except LoginRequiredError:
-        log.info("Stored cookies are expired. Re-login and retry once.")
-        fresh = login_and_get_cookies(cfg)
+        log.info("Stored session is expired. Re-login and retry once.")
+        snapshot = login_and_export_snapshot(cfg)
+        _persist_snapshot(
+            accounts,
+            user_id=user_id,
+            account_id=account_id,
+            snapshot=snapshot,
+            label=account_label,
+        )
         fetch_and_store_posts(
             storage=storage,
             account_id=account_id,
-            cookies=fresh,
+            snapshot=snapshot,
             cfg=cfg,
             limit=args.limit,
         )

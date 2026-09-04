@@ -152,6 +152,7 @@ class LoginSessionManager:
                 LoginCheckpointError,
                 LoginTimeoutError,
             )  # type: ignore[import-not-found]
+            from session_snapshot import SessionLoggedOutError, should_save_back
 
             cfg = LinkedInClientConfig(
                 browser=BrowserConfig(
@@ -171,11 +172,34 @@ class LoginSessionManager:
                     on_checkpoint=_on_checkpoint,
                 )
 
-            if sess.cancel_event.is_set():
-                self._update(session_id, status="cancelled", message="Cancelled by user.")
-                return
+                if sess.cancel_event.is_set():
+                    self._update(session_id, status="cancelled", message="Cancelled by user.")
+                    return
 
-            account_id = persist_cookies(user_id=sess.user_id, cookies=cookies, label=label)
+                snapshot: dict[str, Any] | None = None
+                try:
+                    if not should_save_back(client.page.url):
+                        self._update(
+                            session_id,
+                            status="failed",
+                            message="LinkedIn login did not reach a logged-in page; cookies were not saved.",
+                        )
+                        return
+                    snapshot = client.export_session_snapshot({})
+                except SessionLoggedOutError:
+                    self._update(
+                        session_id,
+                        status="failed",
+                        message="LinkedIn login did not reach a logged-in page; cookies were not saved.",
+                    )
+                    return
+
+            account_id = persist_cookies(
+                user_id=sess.user_id,
+                cookies=cookies,
+                label=label,
+                session_snapshot=snapshot,
+            )
             self._update(
                 session_id,
                 status="completed",
