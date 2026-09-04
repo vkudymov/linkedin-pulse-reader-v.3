@@ -13,14 +13,13 @@ EN: Library orchestration module.
 import logging
 import re
 from contextlib import suppress
-from collections.abc import Callable
+from collections.abc import Callable, Mapping, Sequence
 from typing import Any
 from urllib.parse import urlparse
 
 from dataclasses import replace
 from playwright.sync_api import Page, BrowserContext
 
-from .auth.cookies import Cookies, extract_cookies, inject_cookies
 from .auth.email_password import EmailPasswordLoginFlow, EmailPasswordLoginParams
 from .auth.methods import LoginMethod
 from .auth.social import SocialLoginFlow, SocialLoginParams
@@ -52,41 +51,37 @@ def _feed_dom_counts(page: Page) -> dict[str, int]:
     return out
 
 
+def _optional_stripped(value: Any) -> str | None:
+    return (value.strip() or None) if isinstance(value, str) else None
+
+
+def _author_from_dict(raw: dict[str, Any]) -> Author | None:
+    name = _optional_stripped(raw.get("name"))
+    if name is None:
+        return None
+    return Author(
+        name=name,
+        headline=_optional_stripped(raw.get("headline")),
+        profile_url=_optional_stripped(raw.get("profile_url")),
+        urn=_optional_stripped(raw.get("urn")),
+        avatar_url=_optional_stripped(raw.get("avatar_url")),
+    )
+
+
 def _author_from_read_item(item: dict[str, Any]) -> Author | None:
     raw = item.get("author")
     if isinstance(raw, dict):
-        name = raw.get("name")
-        if not isinstance(name, str) or not name.strip():
-            return None
-        headline = raw.get("headline")
-        profile_url = raw.get("profile_url")
-        urn = raw.get("urn")
-        avatar_url = raw.get("avatar_url")
-        return Author(
-            name=name.strip(),
-            headline=headline if isinstance(headline, str) and headline.strip() else None,
-            profile_url=(
-                profile_url if isinstance(profile_url, str) and profile_url.strip() else None
-            ),
-            urn=urn if isinstance(urn, str) and urn.strip() else None,
-            avatar_url=(
-                avatar_url if isinstance(avatar_url, str) and avatar_url.strip() else None
-            ),
-        )
-    if isinstance(raw, str) and raw.strip():
-        return Author(name=raw.strip())
-    return None
+        return _author_from_dict(raw)
+    name = _optional_stripped(raw)
+    return Author(name=name) if name else None
 
 
 def _urn_from_read_item(item: dict[str, Any]) -> str | None:
-    urn = item.get("urn")
-    if isinstance(urn, str) and urn.strip():
-        return urn.strip()
+    if urn := _optional_stripped(item.get("urn")):
+        return urn
     post_url = item.get("post_url")
-    if isinstance(post_url, str):
-        m = re.search(r"urn:li:(activity|ugcPost):(\d+)", post_url)
-        if m:
-            return f"urn:li:{m.group(1)}:{m.group(2)}"
+    if isinstance(post_url, str) and (m := re.search(r"urn:li:(activity|ugcPost):(\d+)", post_url)):
+        return f"urn:li:{m.group(1)}:{m.group(2)}"
     return None
 
 
@@ -122,15 +117,16 @@ def _urn_from_post_url(post_url: str | None) -> str | None:
     if not isinstance(post_url, str) or not post_url.strip():
         return None
     m = re.search(r"urn:li:(activity|ugcPost):(\d+)", post_url)
-    if m:
-        return f"urn:li:{m.group(1)}:{m.group(2)}"
-    return None
+    return f"urn:li:{m.group(1)}:{m.group(2)}" if m else None
 
 
 def _enrich_post(existing: Post, incoming: Post) -> Post:
-    urn = existing.urn or incoming.urn
-    if not urn:
-        urn = _urn_from_post_url(existing.post_url) or _urn_from_post_url(incoming.post_url)
+    urn = (
+        existing.urn
+        or incoming.urn
+        or _urn_from_post_url(existing.post_url)
+        or _urn_from_post_url(incoming.post_url)
+    )
 
     post_url = existing.post_url or incoming.post_url
     if not post_url and urn:
@@ -198,7 +194,7 @@ class LinkedInClient:
 
     RU: Взаимодействие с другими компонентами
         - `BrowserManager`: владение жизненным циклом Chromium/Context/Page.
-        - auth/cookies: инъекция и извлечение cookies (без хранения).
+        - auth/cookies: session restore via session_snapshot (no persistence).
         - `FeedNavigator`: переход на целевую страницу и обнаружение auth-редиректов.
         - `FeedWaiter`/`HumanScroller`: стабилизация динамической страницы и догрузка контента.
         - `PostParser`: преобразование DOM-элементов в `Post` модели.
@@ -225,7 +221,7 @@ class LinkedInClient:
 
     EN: Collaboration with other components
         - `BrowserManager`: Chromium/Context/Page lifecycle ownership.
-        - auth/cookies: cookie injection and extraction (no persistence).
+        - auth/cookies: session restore via session_snapshot (no persistence).
         - `FeedNavigator`: navigation to target pages and auth redirect detection.
         - `FeedWaiter`/`HumanScroller`: dynamic page stabilization and content loading.
         - `PostParser`: mapping DOM elements into `Post` models.
@@ -239,7 +235,7 @@ class LinkedInClient:
     def __init__(
         self,
         *,
-        cookies: Cookies | None = None,
+        cookies: Sequence[Mapping[str, Any]] | None = None,
         session_snapshot: dict[str, Any] | None = None,
         config: LinkedInClientConfig | None = None,
         headless: bool = True,
@@ -276,8 +272,6 @@ class LinkedInClient:
         )
         if isinstance(snapshot_cookies, list) and snapshot_cookies:
             _restore_session_snapshot(handle.context, handle.page, self._session_snapshot)
-        elif self._initial_cookies:
-            inject_cookies(handle.context, self._initial_cookies)
         else:
             # No cookies provided: open LinkedIn login page for manual authentication.
             handle.page.goto(
@@ -330,7 +324,7 @@ class LinkedInClient:
                 "Cookies were provided; manual login is not supported in this mode."
             )
         if self._manual_login_completed:
-            return extract_cookies(self._browser.handle.context)
+            return list(self._browser.handle.context.cookies())
 
         # Ensure we're on the LinkedIn login page before starting a UI flow.
         with suppress(Exception):
@@ -359,21 +353,18 @@ class LinkedInClient:
             raise LinkedInClientError(f"Unsupported login method: {method!r}")
 
         self._manual_login_completed = True
-        return extract_cookies(ctx)
+        return list(ctx.cookies())
 
     def get_cookies(self) -> list[dict]:
         """
-        RU: Снимок текущих cookies контекста (boundary state export).
-            Библиотека не хранит cookies — вызывающая сторона решает, где и как их персистить.
-
-        EN: Snapshot current context cookies (boundary state export).
-            The library does not persist cookies; the caller decides where/how to store them.
+        Playwright cookie list from the current context.
+        Pulse persist uses export_session_snapshot, not this method.
         """
         if not self._entered:
             raise BrowserLifecycleError(
                 "Client not started. Use LinkedInClient as a context manager."
             )
-        return extract_cookies(self._browser.handle.context)
+        return list(self._browser.handle.context.cookies())
 
     def export_session_snapshot(self, base: dict[str, Any] | None = None) -> dict[str, Any]:
         """
@@ -557,7 +548,7 @@ class LinkedInClient:
         if is_logged_out(self.page.url):
             return False
         try:
-            return has_auth_cookie(extract_cookies(self.context))
+            return has_auth_cookie(list(self.context.cookies()))
         except Exception:
             return False
 
@@ -571,17 +562,18 @@ def _snapshot_has_cookies(snapshot: dict[str, Any] | None) -> bool:
 
 def _coerce_session_snapshot(
     session_snapshot: dict[str, Any] | None,
-    cookies: Cookies | None,
+    cookies: Sequence[Mapping[str, Any]] | None,
 ) -> dict[str, Any] | None:
     if isinstance(session_snapshot, dict):
         return session_snapshot
     if cookies:
+        raw = [dict(c) for c in cookies if isinstance(c, dict)]
         try:
             from session_snapshot import playwright_list_to_snapshot
 
-            return playwright_list_to_snapshot([dict(c) for c in cookies if isinstance(c, dict)])
+            return playwright_list_to_snapshot(raw)
         except ImportError:
-            return None
+            return {"cookies": raw}
     return None
 
 
@@ -621,13 +613,8 @@ def _restore_session_snapshot(context: BrowserContext, page: Page, snapshot: dic
         return
     try:
         from session_snapshot import restore_session
-    except ImportError:
-        cookies = snapshot.get("cookies")
-        if isinstance(cookies, list):
-            inject_cookies(context, cookies)
-        _log.warning(
-            "session_snapshot package missing; fell back to inject_cookies (count=%s)",
-            len(cookies) if isinstance(cookies, list) else 0,
-        )
-        return
+    except ImportError as e:
+        raise BrowserLifecycleError(
+            "session_snapshot is required to restore a LinkedIn session."
+        ) from e
     restore_session(context, page, snapshot)

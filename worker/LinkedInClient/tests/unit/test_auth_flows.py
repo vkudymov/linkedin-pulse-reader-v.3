@@ -89,6 +89,9 @@ class _FakeContext:
     def expect_page(self, timeout: int) -> "_FakeContext._ExpectPage":
         return _FakeContext._ExpectPage(timeout=timeout)
 
+    def cookies(self) -> list[dict[str, str]]:
+        return [{"name": "li_at", "value": "x", "domain": "linkedin.com"}]
+
 
 def test_email_password_flow_fills_and_submits(monkeypatch: pytest.MonkeyPatch) -> None:
     from linkedin_client.auth.email_password import (
@@ -170,11 +173,6 @@ def test_client_login_uses_email_flow(monkeypatch: pytest.MonkeyPatch) -> None:
 
     calls: list[tuple[str, object | None]] = []
 
-    monkeypatch.setattr(
-        "linkedin_client.client.extract_cookies",
-        lambda _ctx: [{"name": "li_at", "value": "x", "domain": "linkedin.com"}],
-    )
-
     def _email_run(self, page, context) -> None:  # type: ignore[no-untyped-def]
         calls.append(("email", getattr(self, "_params", None)))
 
@@ -185,7 +183,7 @@ def test_client_login_uses_email_flow(monkeypatch: pytest.MonkeyPatch) -> None:
 
     class _Handle:
         def __init__(self) -> None:
-            self.context = object()
+            self.context = _FakeContext()
             self.page = _FakePage()
 
     client._entered = True  # type: ignore[attr-defined]
@@ -208,11 +206,6 @@ def test_client_login_uses_social_flow(monkeypatch: pytest.MonkeyPatch) -> None:
 
     calls: list[str] = []
 
-    monkeypatch.setattr(
-        "linkedin_client.client.extract_cookies",
-        lambda _ctx: [{"name": "li_at", "value": "x", "domain": "linkedin.com"}],
-    )
-
     def _social_run(self, page, context) -> None:  # type: ignore[no-untyped-def]
         calls.append("social")
 
@@ -223,7 +216,7 @@ def test_client_login_uses_social_flow(monkeypatch: pytest.MonkeyPatch) -> None:
 
     class _Handle:
         def __init__(self) -> None:
-            self.context = object()
+            self.context = _FakeContext()
             self.page = _FakePage()
 
     client._entered = True  # type: ignore[attr-defined]

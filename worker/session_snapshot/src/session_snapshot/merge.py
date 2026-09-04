@@ -48,8 +48,7 @@ def merge_session_payload(
     payload["tab"] = tab
 
     browser = payload.get("browser") if isinstance(payload.get("browser"), dict) else {}
-    fingerprint_timezone = str(account_timezone or "").strip()
-    if fingerprint_timezone:
+    if fingerprint_timezone := str(account_timezone or "").strip():
         browser["timeZone"] = fingerprint_timezone
     payload["browser"] = browser
 

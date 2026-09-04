@@ -8,7 +8,7 @@ from threading import Event, Lock
 from typing import Any, Literal
 
 from ..settings import get_settings
-from .persist import persist_cookies
+from .persist import persist_snapshot
 
 LoginStatus = Literal[
     "pending",
@@ -50,10 +50,10 @@ class LoginSessionManager:
         with self._lock:
             # Cancel previous session for that user (best-effort).
             if (prev_id := self._active_by_user.get(user_id)) and prev_id in self._sessions:
-                prev = self._sessions[prev_id]
-                prev.cancel_event.set()
-                prev.status = "cancelled"
-                prev.message = "Cancelled by a newer login request."
+                self._mark_cancelled(
+                    self._sessions[prev_id],
+                    message="Cancelled by a newer login request.",
+                )
 
             session_id = str(uuid.uuid4())
             sess = LoginSession(
@@ -88,12 +88,16 @@ class LoginSessionManager:
             sess = self._sessions.get(session_id)
             if sess is None or sess.user_id != user_id:
                 return None
-            sess.cancel_event.set()
-            sess.status = "cancelled"
-            sess.message = "Cancelled by user."
+            self._mark_cancelled(sess, message="Cancelled by user.")
             if self._active_by_user.get(user_id) == session_id:
                 self._active_by_user.pop(user_id, None)
             return sess
+
+    @staticmethod
+    def _mark_cancelled(sess: LoginSession, *, message: str) -> None:
+        sess.cancel_event.set()
+        sess.status = "cancelled"
+        sess.message = message
 
     def _update(
         self,
@@ -164,7 +168,7 @@ class LoginSessionManager:
             )
 
             with LinkedInClient(config=cfg) as client:
-                cookies: list[dict[str, Any]] = client.login_and_get_cookies(
+                client.login_and_get_cookies(
                     method=LoginMethod(method),
                     identifier=identifier,
                     password=password,
@@ -176,7 +180,6 @@ class LoginSessionManager:
                     self._update(session_id, status="cancelled", message="Cancelled by user.")
                     return
 
-                snapshot: dict[str, Any] | None = None
                 try:
                     if not should_save_back(client.page.url):
                         self._update(
@@ -194,11 +197,10 @@ class LoginSessionManager:
                     )
                     return
 
-            account_id = persist_cookies(
+            account_id = persist_snapshot(
                 user_id=sess.user_id,
-                cookies=cookies,
+                snapshot=snapshot,
                 label=label,
-                session_snapshot=snapshot,
             )
             self._update(
                 session_id,

@@ -379,14 +379,11 @@ def login_and_export_snapshot(cfg: LinkedInClientConfig) -> dict[str, Any]:
 
 
 def _persist_snapshot(accounts: Any, *, user_id: str, account_id: str | None, snapshot: dict[str, Any], label: str | None) -> str:
-    cookies = snapshot.get("cookies") if isinstance(snapshot, dict) else None
-    cookie_list = cookies if isinstance(cookies, list) else []
     if account_id is None:
         created = accounts.create(
             user_id=user_id,
-            cookies_json=cookie_list,
-            label=label,
             session_snapshot=snapshot,
+            label=label,
         )
         return created["id"]
     accounts.update_session(account_id=account_id, session_snapshot=snapshot)
