@@ -1,4 +1,9 @@
-import Link from "next/link";
+"use client";
+
+import { useTranslations } from "next-intl";
+
+import { Link } from "@/i18n/navigation";
+import { LocaleSwitcher } from "@/components/LocaleSwitcher";
 
 export function AppHeader({
   title,
@@ -11,6 +16,7 @@ export function AppHeader({
   active?: "posts" | "account" | "prompts" | "admin";
   isAdmin?: boolean;
 }) {
+  const t = useTranslations("nav");
   return (
     <header className="border-b border-border/80 bg-background">
       <div className="mx-auto flex max-w-3xl items-center justify-between gap-4 px-6 py-4">
@@ -28,7 +34,7 @@ export function AppHeader({
             ].join(" ")}
             href="/posts"
           >
-            Посты
+            {t("posts")}
           </Link>
           <Link
             className={[
@@ -37,7 +43,7 @@ export function AppHeader({
             ].join(" ")}
             href="/prompts"
           >
-            Промпты
+            {t("prompts")}
           </Link>
           <Link
             className={[
@@ -46,7 +52,7 @@ export function AppHeader({
             ].join(" ")}
             href="/account"
           >
-            Личный кабинет
+            {t("account")}
           </Link>
           {isAdmin ? (
             <Link
@@ -56,14 +62,16 @@ export function AppHeader({
               ].join(" ")}
               href="/admin"
             >
-              Админ
+              {t("admin")}
             </Link>
           ) : null}
+
+          <LocaleSwitcher />
           <Link
             className="text-sm text-muted-foreground underline-offset-4 hover:text-foreground hover:underline"
             href="/logout"
           >
-            Выйти
+            {t("logout")}
           </Link>
         </nav>
       </div>

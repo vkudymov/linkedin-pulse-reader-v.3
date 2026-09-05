@@ -3,8 +3,8 @@ import { NextResponse, type NextRequest } from "next/server";
 
 import { getEnv } from "@/lib/env";
 
-export function updateSession(request: NextRequest) {
-  let response = NextResponse.next({ request });
+export function updateSession(request: NextRequest, initialResponse?: NextResponse) {
+  const response = initialResponse ?? NextResponse.next({ request });
 
   const supabase = createServerClient(
     getEnv("NEXT_PUBLIC_SUPABASE_URL"),
@@ -15,7 +15,6 @@ export function updateSession(request: NextRequest) {
           return request.cookies.getAll();
         },
         setAll(cookiesToSet) {
-          response = NextResponse.next({ request });
           cookiesToSet.forEach(({ name, value, options }) => {
             response.cookies.set(name, value, options);
           });

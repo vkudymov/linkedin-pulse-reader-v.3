@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Save, Sparkles } from "lucide-react";
+import { useTranslations } from "next-intl";
 
 import {
   COMMENT_REQUIRED_MARKERS,
@@ -22,7 +23,7 @@ export function PromptForm({
   initialCommentPrompt,
   saveUrl = "/api/account/prompts",
   fieldIdPrefix,
-  footerHint = "Сохранение происходит в таблицу user_prompts (видно только вам).",
+  footerHint,
   onSaved,
 }: {
   initialProfile: UserProfileRow | null;
@@ -33,6 +34,9 @@ export function PromptForm({
   footerHint?: string;
   onSaved?: () => void;
 }) {
+  const t = useTranslations("promptsForm");
+
+  const footerHintText = footerHint ?? t("footerHintDefault");
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
@@ -62,7 +66,7 @@ export function PromptForm({
   const isInvalid =
     issues.isSearchEmpty ||
     issues.searchMissing.length > 0 ||
-    (commentPrompt.trim() && issues.commentMissing.length > 0);
+    (commentPrompt.trim().length > 0 && issues.commentMissing.length > 0);
 
   async function onSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -78,7 +82,21 @@ export function PromptForm({
         search_prompt: trimmedSearch,
         comment_prompt: trimmedComment,
       });
-      if (!validated.ok) throw new Error(validated.error);
+      if (!validated.ok) {
+        const err = validated.error;
+        if (err.code === "search_required") {
+          throw new Error(t("errors.searchRequired"));
+        }
+        if (err.code === "search_missing_marker") {
+          throw new Error(t("errors.searchMissingMarker", { marker: err.marker }));
+        }
+        if (err.code === "comment_missing_markers") {
+          throw new Error(
+            t("errors.commentMissingMarkers", { markers: err.missing.join(", ") }),
+          );
+        }
+        throw new Error(t("errors.invalid"));
+      }
       const res = await fetch(saveUrl, {
         method: "POST",
         headers: { "content-type": "application/json" },
@@ -86,14 +104,14 @@ export function PromptForm({
       });
       if (!res.ok) {
         const data = (await res.json().catch(() => null)) as { error?: string } | null;
-        const message = data?.error || "Не удалось сохранить промпты.";
+        const message = data?.error || t("errors.saveFailed");
         throw new Error(message);
       }
 
-      setSuccess("Промпты сохранены.");
+      setSuccess(t("success.saved"));
       onSaved?.();
     } catch (e: unknown) {
-      const message = e instanceof Error ? e.message : "Не удалось сохранить промпты.";
+      const message = e instanceof Error ? e.message : t("errors.saveFailed");
       setError(message);
       void fetch("/api/log", {
         method: "POST",
@@ -119,7 +137,7 @@ export function PromptForm({
       <div className="space-y-2">
         <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
           <Label htmlFor={searchId} className="text-sm font-medium">
-            Промпт поиска (релевантность)
+            {t("search.title")}
           </Label>
 
           <Button
@@ -131,7 +149,7 @@ export function PromptForm({
             className="self-start sm:self-auto"
           >
             <Sparkles className="mr-2 h-4 w-4" />
-            Вставить шаблон
+            {t("actions.insertTemplate")}
           </Button>
         </div>
 
@@ -141,25 +159,25 @@ export function PromptForm({
           onChange={(e) => setSearchPrompt(e.target.value)}
           disabled={pending}
           className="min-h-56 font-mono text-xs leading-5 md:text-sm"
-          placeholder={`Должен содержать ${SEARCH_REQUIRED_MARKER} и просить строгий JSON-ответ.`}
+          placeholder={t("search.placeholder", { marker: SEARCH_REQUIRED_MARKER })}
         />
 
         <div className="space-y-1 text-xs leading-5 text-muted-foreground">
           <p>
-            Плейсхолдер (маркер) <code>{SEARCH_REQUIRED_MARKER}</code> — это место, куда система
-            подставляет реальный текст поста LinkedIn перед отправкой в LLM.
+            {t("search.helpMarker.before")} <code>{SEARCH_REQUIRED_MARKER}</code>{" "}
+            {t("search.helpMarker.after")}
           </p>
           <p>
-            Ответ модели должен быть JSON с полями <code>relevant</code>, <code>score</code>,{" "}
+            {t("search.helpJson.before")} <code>relevant</code>, <code>score</code>,{" "}
             <code>content_type</code>, <code>main_topics</code>, <code>reason</code>,{" "}
             <code>selection_reason</code>.
           </p>
           {issues.isSearchEmpty ? (
-            <p className="text-destructive">Промпт поиска не заполнен — worker не будет анализировать посты.</p>
+            <p className="text-destructive">{t("search.emptyWarning")}</p>
           ) : null}
           {issues.searchMissing.length > 0 ? (
             <p className="text-destructive">
-              Не хватает маркера: {issues.searchMissing.join(", ")}.
+              {t("search.missingMarker", { markers: issues.searchMissing.join(", ") })}
             </p>
           ) : null}
         </div>
@@ -168,7 +186,7 @@ export function PromptForm({
       <div className="space-y-2">
         <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
           <Label htmlFor={commentId} className="text-sm font-medium">
-            Промпт комментария (опционально)
+            {t("comment.title")}
           </Label>
 
           <Button
@@ -180,7 +198,7 @@ export function PromptForm({
             className="self-start sm:self-auto"
           >
             <Sparkles className="mr-2 h-4 w-4" />
-            Вставить шаблон
+            {t("actions.insertTemplate")}
           </Button>
         </div>
 
@@ -190,16 +208,16 @@ export function PromptForm({
           onChange={(e) => setCommentPrompt(e.target.value)}
           disabled={pending}
           className="min-h-56 font-mono text-xs leading-5 md:text-sm"
-          placeholder="Если оставить пустым, генерация комментариев будет отключена."
+          placeholder={t("comment.placeholder")}
         />
 
         <div className="space-y-1 text-xs leading-5 text-muted-foreground">
           <p>
-            Плейсхолдеры (маркеры) вида <code>{"<<<...>>>"}</code> — это переменные, которые система
-            подставляет перед генерацией комментария.
+            {t("comment.helpMarkers.before")} <code>{"<<<...>>>"}</code>{" "}
+            {t("comment.helpMarkers.after")}
           </p>
           <p>
-            Если заполняете, шаблон должен содержать маркеры:{" "}
+            {t("comment.helpRequiredMarkers")}{" "}
             {COMMENT_REQUIRED_MARKERS.map((m) => (
               <code key={m} className="mr-2">
                 {m}
@@ -207,13 +225,15 @@ export function PromptForm({
             ))}
           </p>
           <p>
-            Что подставляется: <code>{"<<<POST_TEXT>>>"}</code> — текст поста,{" "}
-            <code>{"<<<CONTENT_TYPE>>>"}</code> — тип контента, <code>{"<<<MAIN_TOPICS>>>"}</code>{" "}
-            — ключевые темы, <code>{"<<<TARGET_LANGUAGE>>>"}</code> — язык комментария.
+            {t("comment.helpSubstitutions.before")} <code>{"<<<POST_TEXT>>>"}</code>{" "}
+            {t("comment.helpSubstitutions.postText")} <code>{"<<<CONTENT_TYPE>>>"}</code>{" "}
+            {t("comment.helpSubstitutions.contentType")} <code>{"<<<MAIN_TOPICS>>>"}</code>{" "}
+            {t("comment.helpSubstitutions.mainTopics")} <code>{"<<<TARGET_LANGUAGE>>>"}</code>{" "}
+            {t("comment.helpSubstitutions.targetLanguage")}
           </p>
           {commentPrompt.trim() && issues.commentMissing.length > 0 ? (
             <p className="text-destructive">
-              Не хватает маркеров: {issues.commentMissing.join(", ")}.
+              {t("comment.missingMarkers", { markers: issues.commentMissing.join(", ") })}
             </p>
           ) : null}
         </div>
@@ -234,13 +254,13 @@ export function PromptForm({
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <p className={cn("text-xs text-muted-foreground", isInvalid ? "text-destructive" : "")}>
           {isInvalid
-            ? "Исправьте ошибки выше, чтобы сохранить."
-            : footerHint}
+            ? t("footer.invalid")
+            : footerHintText}
         </p>
 
         <Button type="submit" disabled={pending || isInvalid} className="rounded-full">
           <Save className="mr-2 h-4 w-4" />
-          Сохранить промпты
+          {pending ? t("actions.saving") : t("actions.save")}
         </Button>
       </div>
     </form>

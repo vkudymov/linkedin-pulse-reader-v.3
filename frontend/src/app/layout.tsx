@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { cookies } from "next/headers";
 import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
 
@@ -14,17 +15,20 @@ const geistMono = Geist_Mono({
 
 export const metadata: Metadata = {
   title: "LinkedIn Pulse Reader",
-  description: "Просмотр найденных постов и управление доступом.",
+  description: "Browse found posts and manage access.",
 };
 
-export default function RootLayout({
+export default async function RootLayout({
   children,
 }: Readonly<{
   children: React.ReactNode;
 }>) {
+  const cookieStore = await cookies();
+  const localeCookie = cookieStore.get("NEXT_LOCALE")?.value;
+  const lang = localeCookie === "en" ? "en" : "ru";
   return (
     <html
-      lang="ru"
+      lang={lang}
       className={`${geistSans.variable} ${geistMono.variable} dark h-full antialiased`}
     >
       <body className="min-h-full flex flex-col font-sans antialiased">

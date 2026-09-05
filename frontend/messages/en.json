@@ -1,0 +1,277 @@
+{
+  "nav": {
+    "posts": "Posts",
+    "prompts": "Prompts",
+    "account": "Account",
+    "admin": "Admin",
+    "logout": "Log out",
+    "language": "Language"
+  },
+  "common": {
+    "ru": "Русский",
+    "en": "English",
+    "saved": "Saved."
+  },
+  "auth": {
+    "password": "Password",
+    "login": {
+      "title": "Access",
+      "description": "Sign in to view the found posts.",
+      "submit": "Sign in",
+      "pending": "Signing in...",
+      "alt": "No account? Register"
+    },
+    "register": {
+      "title": "Register",
+      "description": "Create an account to access LinkedIn Pulse Reader.",
+      "submit": "Create account",
+      "pending": "Creating...",
+      "alt": "Already have an account? Sign in",
+      "createdInfo": "User created. If email confirmation is enabled, check your inbox and follow the link."
+    },
+    "errors": {
+      "authFailed": "Authentication error.",
+      "blockedUser": "User is blocked."
+    }
+  },
+  "posts": {
+    "filters": {
+      "all": "All",
+      "relevant": "Accepted",
+      "rejected": "Rejected"
+    },
+    "titleFound": "Found posts",
+    "subtitleAccounts": "LinkedIn accounts: {count}",
+    "feed": {
+      "title": "Post feed",
+      "description": "LinkedIn posts with AI analysis results — status, selection reason, and a draft comment are shown right in the list."
+    },
+    "stats": {
+      "total": "Total",
+      "accepted": "Accepted",
+      "rejected": "Rejected",
+      "pending": "Pending"
+    },
+    "empty": {
+      "noAccount": {
+        "title": "No LinkedIn account yet",
+        "beforeScript": "Run the post collection via",
+        "afterScript": "to create a row in",
+        "and": "and load"
+      },
+      "noPosts": {
+        "titleAll": "No posts yet",
+        "titleFiltered": "No posts for this filter",
+        "runScript": "Run",
+        "thenRefresh": "and then refresh the page.",
+        "tryAnotherFilter": "Try another filter or wait for new analysis results."
+      }
+    },
+    "shownCount": "Showing {shown} of {total}"
+  },
+  "account": {
+    "title": "Account",
+    "profile": {
+      "title": "Profile",
+      "description": "Update your basic details so they are shown in the UI and available to the project services."
+    }
+  },
+  "prompts": {
+    "title": "Prompts",
+    "settings": {
+      "title": "Prompt settings",
+      "description": "Edit the prompts and save them. After that you can run the post search."
+    },
+    "run": {
+      "title": "Run search",
+      "description": "After the search completes, the post feed will refresh automatically."
+    }
+  },
+  "admin": {
+    "title": "Admin"
+  },
+  "adminUsers": {
+    "title": "Users",
+    "status": {
+      "active": "Active",
+      "blocked": "Blocked"
+    },
+    "postRuns": {
+      "label": "Search runs:"
+    },
+    "actions": {
+      "details": "Details",
+      "collapse": "Collapse",
+      "prompts": "Prompts",
+      "block": "Block",
+      "unblock": "Unblock",
+      "resetCount": "Reset counter",
+      "save": "Save",
+      "saving": "Saving..."
+    },
+    "profile": {
+      "title": "Profile",
+      "description": "An admin can edit the user's details.",
+      "bioPlaceholder": "A few lines about the user"
+    },
+    "prompts": {
+      "footerHint": "Saving applies to the selected user."
+    },
+    "postSearch": {
+      "success": "Post search completed."
+    },
+    "loading": {
+      "profile": "Loading profile…",
+      "prompts": "Loading prompts…"
+    },
+    "errors": {
+      "request": "Request error",
+      "loadProfile": "Failed to load profile.",
+      "loadPrompts": "Failed to load prompts.",
+      "saveProfile": "Failed to save profile."
+    },
+    "common": {
+      "saved": "Saved."
+    }
+  },
+  "promptsForm": {
+    "footerHintDefault": "Saved in user_prompts table (visible only to you).",
+    "actions": {
+      "insertTemplate": "Insert template",
+      "save": "Save prompts",
+      "saving": "Saving..."
+    },
+    "success": {
+      "saved": "Prompts saved."
+    },
+    "footer": {
+      "invalid": "Fix the errors above to save."
+    },
+    "search": {
+      "title": "Search prompt (relevance)",
+      "placeholder": "Must include {marker} and request a strict JSON response.",
+      "helpMarker": {
+        "before": "The placeholder (marker)",
+        "after": "is where the system injects the real LinkedIn post text before sending it to the LLM."
+      },
+      "helpJson": {
+        "before": "The model response must be JSON with fields"
+      },
+      "emptyWarning": "Search prompt is empty — the worker will not analyze posts.",
+      "missingMarker": "Missing marker: {markers}."
+    },
+    "comment": {
+      "title": "Comment prompt (optional)",
+      "placeholder": "If left empty, comment generation will be disabled.",
+      "helpMarkers": {
+        "before": "Placeholders (markers) like",
+        "after": "are variables that the system injects before generating a comment."
+      },
+      "helpRequiredMarkers": "If you fill it, the template must include markers:",
+      "helpSubstitutions": {
+        "before": "Injected values:",
+        "postText": "— post text,",
+        "contentType": "— content type,",
+        "mainTopics": "— main topics,",
+        "targetLanguage": "— comment language."
+      },
+      "missingMarkers": "Missing markers: {markers}."
+    },
+    "errors": {
+      "invalid": "Invalid data.",
+      "saveFailed": "Failed to save prompts.",
+      "searchRequired": "Search prompt is required.",
+      "searchMissingMarker": "Search prompt must include marker {marker}.",
+      "commentMissingMarkers": "Comment prompt must include markers: {markers}."
+    }
+  },
+  "profileForm": {
+    "avatarAltFallback": "Profile",
+    "avatar": {
+      "title": "Avatar",
+      "hint": "PNG, JPG or WebP, up to 2MB.",
+      "chooseFile": "Choose file"
+    },
+    "fields": {
+      "fullName": { "label": "Name", "placeholder": "John Doe" },
+      "phone": { "label": "Phone" },
+      "company": { "label": "Company", "placeholder": "Company name" },
+      "jobTitle": { "label": "Job title", "placeholder": "Job title" },
+      "dob": { "label": "Date of birth" },
+      "city": { "label": "City", "placeholder": "City" },
+      "website": { "label": "Website" },
+      "bio": { "label": "About", "placeholder": "A few lines about you" }
+    },
+    "actions": {
+      "save": "Save",
+      "saving": "Saving..."
+    },
+    "success": {
+      "profileSaved": "Profile saved.",
+      "avatarUploaded": "Avatar uploaded. Click “Save” to persist it in your profile."
+    },
+    "errors": {
+      "profileSaveFailed": "Failed to save profile.",
+      "avatarUploadFailed": "Failed to upload avatar.",
+      "avatarLoadFailed": "Failed to load avatar."
+    }
+  },
+  "postSearch": {
+    "title": "Post search",
+    "description": "Runs the worker pipeline and refreshes the post feed.",
+    "statusLabel": "Status:",
+    "button": {
+      "idle": "Run post search",
+      "pending": "Searching..."
+    },
+    "successDefault": "Post list updated.",
+    "successRedirecting": "Post list updated. Opening the feed…",
+    "errors": {
+      "startFailed": "Failed to start post search.",
+      "statusFailed": "Failed to fetch run status.",
+      "runFailed": "Post search failed.",
+      "timeout": "Post search is taking too long. Check the worker API."
+    }
+  },
+  "postCard": {
+    "status": {
+      "accepted": "accepted",
+      "rejected": "rejected",
+      "pending": "pending"
+    },
+    "author": {
+      "unknown": "Unknown author",
+      "profile": "Profile"
+    },
+    "meta": {
+      "date": "Date",
+      "reactions": "Reactions",
+      "comments": "Comments",
+      "media": "Media",
+      "analyzed": "Analyzed"
+    },
+    "mediaAlt": "Post image",
+    "contentUnavailable": "Post text is unavailable",
+    "insights": {
+      "reasonTitle": "Selection reason",
+      "commentTitle": "Draft comment"
+    },
+    "details": {
+      "reasonLabel": "Selection reason: ",
+      "published": "Published",
+      "fetched": "Fetched",
+      "analyzed": "Analysis",
+      "source": "Source"
+    },
+    "actions": {
+      "details": "Details",
+      "collapse": "Collapse",
+      "openLinkedIn": "Open on LinkedIn",
+      "delete": "Delete"
+    },
+    "delete": {
+      "confirm": "Delete this post? This will remove it from the list and the database.",
+      "failed": "Failed to delete post."
+    }
+  }
+}

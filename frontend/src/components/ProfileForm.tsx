@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Lock, Save } from "lucide-react";
+import { useTranslations } from "next-intl";
 
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
@@ -31,6 +32,7 @@ export function ProfileForm({
   email: string;
   initialProfile: UserProfileRow | null;
 }) {
+  const t = useTranslations("profileForm");
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
@@ -47,7 +49,10 @@ export function ProfileForm({
   const [avatarImgSrc, setAvatarImgSrc] = useState<string>(initialProfile?.avatar_url ?? "");
   const avatarPreviewUrlRef = useRef<string | null>(null);
 
-  const avatarAlt = useMemo(() => (fullName || email || "Профиль").trim(), [email, fullName]);
+  const avatarAlt = useMemo(
+    () => (fullName || email || t("avatarAltFallback")).trim(),
+    [email, fullName, t],
+  );
   const avatarFallback = useMemo(() => initialsFromName(fullName || email), [email, fullName]);
 
   useEffect(() => {
@@ -92,7 +97,10 @@ export function ProfileForm({
     const json = (await resp.json().catch(() => null)) as ApiResponse | null;
     const publicUrl = json && json.ok === true ? json.publicUrl : null;
     if (!resp.ok || !publicUrl) {
-      throw new Error((json && "error" in json && typeof json.error === "string" && json.error) || "Не удалось загрузить аватар.");
+      throw new Error(
+        (json && "error" in json && typeof json.error === "string" && json.error) ||
+          t("errors.avatarUploadFailed"),
+      );
     }
     return publicUrl;
   }
@@ -123,12 +131,12 @@ export function ProfileForm({
       });
       if (!res.ok) {
         const data = (await res.json().catch(() => null)) as { error?: string } | null;
-        const message = data?.error || "Не удалось сохранить профиль.";
+        const message = data?.error || t("errors.profileSaveFailed");
         throw new Error(message);
       }
-      setSuccess("Профиль сохранён.");
+      setSuccess(t("success.profileSaved"));
     } catch (e: unknown) {
-      const message = e instanceof Error ? e.message : "Не удалось сохранить профиль.";
+      const message = e instanceof Error ? e.message : t("errors.profileSaveFailed");
       setError(message);
       void fetch("/api/log", {
         method: "POST",
@@ -161,9 +169,9 @@ export function ProfileForm({
       const publicUrl = await onUploadAvatar(file);
       setAvatarUrl(publicUrl);
       void userId;
-      setSuccess("Аватар загружен. Нажмите «Сохранить», чтобы закрепить его в профиле.");
+      setSuccess(t("success.avatarUploaded"));
     } catch (e: unknown) {
-      const message = e instanceof Error ? e.message : "Не удалось загрузить аватар.";
+      const message = e instanceof Error ? e.message : t("errors.avatarUploadFailed");
       setError(message);
     } finally {
       setPending(false);
@@ -189,9 +197,9 @@ export function ProfileForm({
           </Avatar>
 
           <div className="min-w-0">
-            <div className="text-sm font-medium text-foreground">Аватар</div>
+            <div className="text-sm font-medium text-foreground">{t("avatar.title")}</div>
             <div className="text-sm text-muted-foreground">
-              PNG, JPG или WebP, до 2MB.
+              {t("avatar.hint")}
             </div>
           </div>
         </div>
@@ -203,7 +211,7 @@ export function ProfileForm({
               pending && "pointer-events-none opacity-60",
             )}
           >
-            Выбрать файл
+            {t("avatar.chooseFile")}
             <input
               className="sr-only"
               type="file"
@@ -243,7 +251,7 @@ export function ProfileForm({
         </div>
 
         <div className="space-y-2">
-          <Label htmlFor="full_name">Имя</Label>
+          <Label htmlFor="full_name">{t("fields.fullName.label")}</Label>
           <Input
             id="full_name"
             className={fieldClassName}
@@ -251,12 +259,12 @@ export function ProfileForm({
             value={fullName}
             onChange={(e) => setFullName(e.target.value)}
             disabled={pending}
-            placeholder="Иван Иванов"
+            placeholder={t("fields.fullName.placeholder")}
           />
         </div>
 
         <div className="space-y-2">
-          <Label htmlFor="phone">Телефон</Label>
+          <Label htmlFor="phone">{t("fields.phone.label")}</Label>
           <Input
             id="phone"
             className={fieldClassName}
@@ -269,31 +277,31 @@ export function ProfileForm({
         </div>
 
         <div className="space-y-2">
-          <Label htmlFor="company">Компания</Label>
+          <Label htmlFor="company">{t("fields.company.label")}</Label>
           <Input
             id="company"
             className={fieldClassName}
             value={company}
             onChange={(e) => setCompany(e.target.value)}
             disabled={pending}
-            placeholder="Название компании"
+            placeholder={t("fields.company.placeholder")}
           />
         </div>
 
         <div className="space-y-2">
-          <Label htmlFor="job_title">Должность</Label>
+          <Label htmlFor="job_title">{t("fields.jobTitle.label")}</Label>
           <Input
             id="job_title"
             className={fieldClassName}
             value={jobTitle}
             onChange={(e) => setJobTitle(e.target.value)}
             disabled={pending}
-            placeholder="Должность"
+            placeholder={t("fields.jobTitle.placeholder")}
           />
         </div>
 
         <div className="space-y-2">
-          <Label htmlFor="date_of_birth">Дата рождения</Label>
+          <Label htmlFor="date_of_birth">{t("fields.dob.label")}</Label>
           <Input
             id="date_of_birth"
             className={fieldClassName}
@@ -305,19 +313,19 @@ export function ProfileForm({
         </div>
 
         <div className="space-y-2">
-          <Label htmlFor="city">Город</Label>
+          <Label htmlFor="city">{t("fields.city.label")}</Label>
           <Input
             id="city"
             className={fieldClassName}
             value={city}
             onChange={(e) => setCity(e.target.value)}
             disabled={pending}
-            placeholder="Город"
+            placeholder={t("fields.city.placeholder")}
           />
         </div>
 
         <div className="space-y-2">
-          <Label htmlFor="website">Сайт</Label>
+          <Label htmlFor="website">{t("fields.website.label")}</Label>
           <Input
             id="website"
             className={fieldClassName}
@@ -330,7 +338,7 @@ export function ProfileForm({
       </div>
 
       <div className="space-y-2">
-        <Label htmlFor="bio">О себе</Label>
+        <Label htmlFor="bio">{t("fields.bio.label")}</Label>
         <textarea
           id="bio"
           className={cn(
@@ -340,7 +348,7 @@ export function ProfileForm({
           value={bio}
           onChange={(e) => setBio(e.target.value)}
           disabled={pending}
-          placeholder="Несколько строк о вас"
+          placeholder={t("fields.bio.placeholder")}
         />
       </div>
 
@@ -350,7 +358,7 @@ export function ProfileForm({
         disabled={pending}
       >
         <Save className="mr-2 size-4" />
-        {pending ? "Сохраняем..." : "Сохранить"}
+        {pending ? t("actions.saving") : t("actions.save")}
       </Button>
     </form>
   );

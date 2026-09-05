@@ -10,10 +10,15 @@ export type PromptsPayload = {
   comment_prompt: string | null;
 };
 
+export type PromptValidationError =
+  | { code: "search_required" }
+  | { code: "search_missing_marker"; marker: string }
+  | { code: "comment_missing_markers"; missing: string[] };
+
 export function validatePromptPayload(input: {
   search_prompt?: unknown;
   comment_prompt?: unknown;
-}): { ok: true; value: PromptsPayload } | { ok: false; error: string } {
+}): { ok: true; value: PromptsPayload } | { ok: false; error: PromptValidationError } {
   const rawSearch = typeof input.search_prompt === "string" ? input.search_prompt : "";
   const rawComment = typeof input.comment_prompt === "string" ? input.comment_prompt : "";
 
@@ -22,12 +27,12 @@ export function validatePromptPayload(input: {
   const comment_prompt = comment_prompt_trimmed || null;
 
   if (!search_prompt) {
-    return { ok: false, error: "Промпт поиска обязателен." };
+    return { ok: false, error: { code: "search_required" } };
   }
   if (!search_prompt.includes(SEARCH_REQUIRED_MARKER)) {
     return {
       ok: false,
-      error: `Промпт поиска должен содержать маркер ${SEARCH_REQUIRED_MARKER}.`,
+      error: { code: "search_missing_marker", marker: SEARCH_REQUIRED_MARKER },
     };
   }
   if (comment_prompt) {
@@ -35,7 +40,7 @@ export function validatePromptPayload(input: {
     if (missing.length > 0) {
       return {
         ok: false,
-        error: `Промпт комментария должен содержать маркеры: ${missing.join(", ")}.`,
+        error: { code: "comment_missing_markers", missing },
       };
     }
   }

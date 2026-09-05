@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { cookies } from "next/headers";
 
 import { log } from "@/lib/log/logger";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
@@ -6,7 +7,11 @@ import { createSupabaseServerClient } from "@/lib/supabase/server";
 export async function GET(request: Request) {
   const url = new URL(request.url);
   const code = url.searchParams.get("code");
-  const next = url.searchParams.get("next") || "/posts";
+  const cookieStore = await cookies();
+  const localeCookie = cookieStore.get("NEXT_LOCALE")?.value;
+  const locale = localeCookie === "en" ? "en" : "ru";
+  const nextRaw = url.searchParams.get("next") || `/${locale}/posts`;
+  const next = nextRaw.startsWith("/ru/") || nextRaw.startsWith("/en/") ? nextRaw : `/${locale}${nextRaw.startsWith("/") ? "" : "/"}${nextRaw}`;
 
   if (code) {
     try {

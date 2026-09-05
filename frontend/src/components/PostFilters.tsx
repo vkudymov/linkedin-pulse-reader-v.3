@@ -1,4 +1,8 @@
-import Link from "next/link";
+"use client";
+
+import { useTranslations } from "next-intl";
+
+import { Link } from "@/i18n/navigation";
 
 import { buttonVariants } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
@@ -12,10 +16,15 @@ export type PostFilterCounts = {
   pending: number;
 };
 
-const FILTERS: { value: PostFilter; href: string; label: string; countKey: keyof Omit<PostFilterCounts, "pending"> }[] = [
-  { value: "all", href: "/posts?filter=all", label: "Все", countKey: "all" },
-  { value: "relevant", href: "/posts?filter=relevant", label: "Принято", countKey: "relevant" },
-  { value: "rejected", href: "/posts?filter=rejected", label: "Отклонено", countKey: "rejected" },
+const FILTERS: {
+  value: PostFilter;
+  href: string;
+  labelKey: "all" | "relevant" | "rejected";
+  countKey: keyof Omit<PostFilterCounts, "pending">;
+}[] = [
+  { value: "all", href: "/posts?filter=all", labelKey: "all", countKey: "all" },
+  { value: "relevant", href: "/posts?filter=relevant", labelKey: "relevant", countKey: "relevant" },
+  { value: "rejected", href: "/posts?filter=rejected", labelKey: "rejected", countKey: "rejected" },
 ];
 
 export function PostFilters({
@@ -25,6 +34,7 @@ export function PostFilters({
   filter: PostFilter;
   counts?: PostFilterCounts;
 }) {
+  const t = useTranslations("posts.filters");
   return (
     <div className="inline-flex flex-wrap gap-2">
       {FILTERS.map((item) => {
@@ -43,7 +53,7 @@ export function PostFilters({
               "h-9 gap-2 rounded-full px-4",
             )}
           >
-            {item.label}
+            {t(item.labelKey)}
             {typeof count === "number" ? (
               <span
                 className={cn(

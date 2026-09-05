@@ -46,6 +46,7 @@ export type FeedPostMediaRow = {
 export type UserProfileRow = {
   id: string;
   is_admin: boolean;
+  locale: "ru" | "en";
   full_name: string | null;
   phone: string | null;
   avatar_url: string | null;

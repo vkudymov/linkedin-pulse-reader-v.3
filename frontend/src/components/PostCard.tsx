@@ -2,6 +2,7 @@
 
 import { useRouter } from "next/navigation";
 import { useState, type ComponentType } from "react";
+import { useLocale, useTranslations } from "next-intl";
 import {
   Calendar,
   ChevronDown,
@@ -37,16 +38,6 @@ type PostStatus = {
   badgeVariant: "default" | "secondary" | "destructive" | "outline";
 };
 
-function postStatus(post: FeedPostRow): PostStatus {
-  if (post.is_relevant === true) {
-    return { label: "принято", badgeVariant: "default" };
-  }
-  if (post.is_relevant === false) {
-    return { label: "отклонено", badgeVariant: "destructive" };
-  }
-  return { label: "не проверено", badgeVariant: "secondary" };
-}
-
 function getReason(post: FeedPostRow): string | null {
   if (post.analysis_error) return post.analysis_error;
   const payload = post.analysis_payload;
@@ -62,10 +53,11 @@ function authorInitials(name: string | null): string {
   return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
 }
 
-function formatMetaDate(post: FeedPostRow): string | null {
+function formatMetaDate(post: FeedPostRow, locale: "ru" | "en"): string | null {
   if (post.published_at_text?.trim()) return post.published_at_text.trim();
   if (post.fetched_at) {
-    return new Date(post.fetched_at).toLocaleDateString("ru-RU", {
+    const l = locale === "en" ? "en-US" : "ru-RU";
+    return new Date(post.fetched_at).toLocaleDateString(l, {
       day: "numeric",
       month: "short",
     });
@@ -73,9 +65,10 @@ function formatMetaDate(post: FeedPostRow): string | null {
   return null;
 }
 
-function formatCount(value: number | null): string | null {
+function formatCount(value: number | null, locale: "ru" | "en"): string | null {
   if (typeof value !== "number" || value < 0) return null;
-  return value.toLocaleString("ru-RU");
+  const l = locale === "en" ? "en-US" : "ru-RU";
+  return value.toLocaleString(l);
 }
 
 function MetaChip({
@@ -113,7 +106,7 @@ function InsightPreview({
   );
 }
 
-function PostMediaGrid({ media }: { media: FeedPostMediaRow[] }) {
+function PostMediaGrid({ media, altText }: { media: FeedPostMediaRow[]; altText: string }) {
   if (!media || media.length === 0) return null;
 
   const items = media.slice(0, 4);
@@ -126,7 +119,7 @@ function PostMediaGrid({ media }: { media: FeedPostMediaRow[] }) {
         {/* eslint-disable-next-line @next/next/no-img-element -- Supabase Storage public URLs; keep simple <img> without next/image config. */}
         <img
           src={m.public_url}
-          alt="Изображение поста"
+          alt={altText}
           className="max-h-[520px] w-full object-cover"
           loading="lazy"
         />
@@ -141,7 +134,7 @@ function PostMediaGrid({ media }: { media: FeedPostMediaRow[] }) {
           {/* eslint-disable-next-line @next/next/no-img-element -- Supabase Storage public URLs; keep simple <img> without next/image config. */}
           <img
             src={m.public_url}
-            alt="Изображение поста"
+            alt={altText}
             className="h-full w-full object-cover"
             loading="lazy"
           />
@@ -158,11 +151,18 @@ function PostMediaGrid({ media }: { media: FeedPostMediaRow[] }) {
 
 export function PostCard({ post, media }: { post: FeedPostRow; media: FeedPostMediaRow[] }) {
   const router = useRouter();
+  const locale = useLocale() === "en" ? "en" : "ru";
+  const t = useTranslations("postCard");
   const [open, setOpen] = useState(false);
   const [deleted, setDeleted] = useState(false);
   const [deletePending, setDeletePending] = useState(false);
   const [deleteError, setDeleteError] = useState<string | null>(null);
-  const status = postStatus(post);
+  const status: PostStatus =
+    post.is_relevant === true
+      ? { label: t("status.accepted"), badgeVariant: "default" }
+      : post.is_relevant === false
+        ? { label: t("status.rejected"), badgeVariant: "destructive" }
+        : { label: t("status.pending"), badgeVariant: "secondary" };
   const authorName = post.author_json?.name || null;
   const authorHeadline = post.author_json?.headline || null;
   const authorProfileUrl =
@@ -180,13 +180,13 @@ export function PostCard({ post, media }: { post: FeedPostRow; media: FeedPostMe
     typeof post.comment_text === "string" && post.comment_text.trim()
       ? post.comment_text.trim()
       : null;
-  const metaDate = formatMetaDate(post);
-  const displayName = authorName || "Автор неизвестен";
-  const reactions = formatCount(post.reactions_count);
-  const comments = formatCount(post.comments_count);
+  const metaDate = formatMetaDate(post, locale);
+  const displayName = authorName || t("author.unknown");
+  const reactions = formatCount(post.reactions_count, locale);
+  const comments = formatCount(post.comments_count, locale);
   const hasMedia = post.media_urls.length > 0;
   const analyzedAt = post.analyzed_at
-    ? new Date(post.analyzed_at).toLocaleDateString("ru-RU", {
+    ? new Date(post.analyzed_at).toLocaleDateString(locale === "en" ? "en-US" : "ru-RU", {
         day: "numeric",
         month: "short",
         hour: "2-digit",
@@ -195,19 +195,19 @@ export function PostCard({ post, media }: { post: FeedPostRow; media: FeedPostMe
     : null;
 
   async function onDelete() {
-    if (!confirm("Удалить этот пост? Это удалит его из списка и из базы.")) return;
+    if (!confirm(t("delete.confirm"))) return;
     setDeletePending(true);
     setDeleteError(null);
     try {
       const res = await fetch(`/api/posts/${encodeURIComponent(post.id)}`, { method: "DELETE" });
       const json = (await res.json().catch(() => null)) as { ok?: boolean; error?: string } | null;
       if (!res.ok || !json?.ok) {
-        throw new Error(json?.error || "Не удалось удалить пост.");
+        throw new Error(json?.error || t("delete.failed"));
       }
       setDeleted(true);
       router.refresh();
     } catch (e: unknown) {
-      const message = e instanceof Error ? e.message : "Не удалось удалить пост.";
+      const message = e instanceof Error ? e.message : t("delete.failed");
       setDeleteError(message);
     } finally {
       setDeletePending(false);
@@ -239,7 +239,7 @@ export function PostCard({ post, media }: { post: FeedPostRow; media: FeedPostMe
                     target="_blank"
                     rel="noreferrer"
                   >
-                    Профиль
+                        {t("author.profile")}
                   </a>
                 ) : null}
               </CardTitle>
@@ -256,22 +256,22 @@ export function PostCard({ post, media }: { post: FeedPostRow; media: FeedPostMe
         </div>
 
         <div className="flex flex-wrap items-center gap-x-4 gap-y-1.5">
-          {metaDate ? <MetaChip icon={Calendar} label="Дата" value={metaDate} /> : null}
+          {metaDate ? <MetaChip icon={Calendar} label={t("meta.date")} value={metaDate} /> : null}
           {reactions ? (
-            <MetaChip icon={Heart} label="Реакции" value={reactions} />
+            <MetaChip icon={Heart} label={t("meta.reactions")} value={reactions} />
           ) : null}
           {comments ? (
-            <MetaChip icon={MessageCircle} label="Комментарии" value={comments} />
+            <MetaChip icon={MessageCircle} label={t("meta.comments")} value={comments} />
           ) : null}
           {hasMedia ? (
             <MetaChip
               icon={ImageIcon}
-              label="Медиа"
+              label={t("meta.media")}
               value={String(post.media_urls.length)}
             />
           ) : null}
           {analyzedAt ? (
-            <MetaChip icon={Sparkles} label="Проанализировано" value={analyzedAt} />
+            <MetaChip icon={Sparkles} label={t("meta.analyzed")} value={analyzedAt} />
           ) : null}
         </div>
       </CardHeader>
@@ -283,19 +283,19 @@ export function PostCard({ post, media }: { post: FeedPostRow; media: FeedPostMe
           ) : null}
 
           {!open && !post.content ? (
-            <p className="text-sm italic text-muted-foreground">Текст поста недоступен</p>
+            <p className="text-sm italic text-muted-foreground">{t("contentUnavailable")}</p>
           ) : null}
 
-          {!open ? <PostMediaGrid media={media} /> : null}
+          {!open ? <PostMediaGrid media={media} altText={t("mediaAlt")} /> : null}
 
           {!open && reason ? (
             <div className="space-y-2">
-              <InsightPreview title="Причина отбора" text={reason} />
+              <InsightPreview title={t("insights.reasonTitle")} text={reason} />
             </div>
           ) : null}
 
           {!open && comment ? (
-            <InsightPreview title="Черновик комментария" text={comment} />
+            <InsightPreview title={t("insights.commentTitle")} text={comment} />
           ) : null}
 
           <CollapsibleContent className="space-y-4">
@@ -304,14 +304,14 @@ export function PostCard({ post, media }: { post: FeedPostRow; media: FeedPostMe
                 {post.content}
               </div>
             ) : (
-              <p className="text-sm italic text-muted-foreground">Текст поста недоступен</p>
+              <p className="text-sm italic text-muted-foreground">{t("contentUnavailable")}</p>
             )}
 
-            <PostMediaGrid media={media} />
+            <PostMediaGrid media={media} altText={t("mediaAlt")} />
 
             {reason ? (
               <blockquote className="rounded-xl border border-border bg-background/60 px-3.5 py-2.5 text-sm text-muted-foreground">
-                <span className="font-medium text-foreground">Причина отбора: </span>
+                <span className="font-medium text-foreground">{t("details.reasonLabel")}</span>
                 {reason}
               </blockquote>
             ) : null}
@@ -319,7 +319,7 @@ export function PostCard({ post, media }: { post: FeedPostRow; media: FeedPostMe
             {comment ? (
               <div className="rounded-xl border border-border bg-background/60 px-3.5 py-2.5 text-sm">
                 <div className="text-xs font-medium text-muted-foreground">
-                  Черновик комментария
+                  {t("insights.commentTitle")}
                 </div>
                 <div className="mt-1 whitespace-pre-wrap text-foreground/90">{comment}</div>
               </div>
@@ -328,27 +328,27 @@ export function PostCard({ post, media }: { post: FeedPostRow; media: FeedPostMe
             <div className="grid gap-2 rounded-xl border border-border bg-background/40 p-3 text-xs text-muted-foreground sm:grid-cols-2">
               {post.published_at_text ? (
                 <div>
-                  <span className="font-medium text-foreground/80">Опубликовано</span>
+                  <span className="font-medium text-foreground/80">{t("details.published")}</span>
                   <div className="mt-0.5">{post.published_at_text}</div>
                 </div>
               ) : null}
               {post.fetched_at ? (
                 <div>
-                  <span className="font-medium text-foreground/80">Загружено</span>
+                  <span className="font-medium text-foreground/80">{t("details.fetched")}</span>
                   <div className="mt-0.5">
-                    {new Date(post.fetched_at).toLocaleString("ru-RU")}
+                    {new Date(post.fetched_at).toLocaleString(locale === "en" ? "en-US" : "ru-RU")}
                   </div>
                 </div>
               ) : null}
               {analyzedAt ? (
                 <div>
-                  <span className="font-medium text-foreground/80">Анализ</span>
+                  <span className="font-medium text-foreground/80">{t("details.analyzed")}</span>
                   <div className="mt-0.5">{analyzedAt}</div>
                 </div>
               ) : null}
               {post.source_key ? (
                 <div>
-                  <span className="font-medium text-foreground/80">Источник</span>
+                  <span className="font-medium text-foreground/80">{t("details.source")}</span>
                   <div className="mt-0.5 truncate">{post.source_key}</div>
                 </div>
               ) : null}
@@ -367,7 +367,7 @@ export function PostCard({ post, media }: { post: FeedPostRow; media: FeedPostMe
               <ChevronDown
                 className={cn("size-4 transition-transform", open && "rotate-180")}
               />
-              {open ? "Свернуть" : "Подробнее"}
+              {open ? t("actions.collapse") : t("actions.details")}
             </CollapsibleTrigger>
 
             <div className="flex flex-wrap items-center justify-end gap-2">
@@ -381,7 +381,7 @@ export function PostCard({ post, media }: { post: FeedPostRow; media: FeedPostMe
                   target="_blank"
                   rel="noreferrer"
                 >
-                  Открыть в LinkedIn
+                  {t("actions.openLinkedIn")}
                   <ExternalLink className="size-3.5" />
                 </a>
               ) : null}
@@ -395,7 +395,7 @@ export function PostCard({ post, media }: { post: FeedPostRow; media: FeedPostMe
                   "h-9 rounded-full px-4 text-destructive hover:text-destructive",
                 )}
               >
-                Удалить
+                {t("actions.delete")}
                 <Trash2 className="size-3.5" />
               </button>
             </div>

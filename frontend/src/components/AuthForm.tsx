@@ -1,9 +1,9 @@
 "use client";
 
-import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { Lock } from "lucide-react";
+import { useLocale, useTranslations } from "next-intl";
 
 import { Button } from "@/components/ui/button";
 import {
@@ -18,35 +18,29 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { cn } from "@/lib/utils";
 import { createSupabaseBrowserClient } from "@/lib/supabase/client";
+import { Link } from "@/i18n/navigation";
 
 type Variant = "login" | "register";
-
-const COPY = {
-  login: {
-    title: "Доступ к аккаунту",
-    description: "Войдите, чтобы просматривать найденные посты.",
-    submit: "Войти",
-    pending: "Входим...",
-    passwordLabel: "Пароль",
-    alt: { href: "/register", label: "Нет аккаунта? Зарегистрироваться" },
-  },
-  register: {
-    title: "Регистрация",
-    description: "Создайте аккаунт для доступа к LinkedIn Pulse Reader.",
-    submit: "Создать аккаунт",
-    pending: "Создаём...",
-    passwordLabel: "Пароль",
-    alt: { href: "/login", label: "Уже есть аккаунт? Войти" },
-  },
-} as const;
 
 const fieldClassName =
   "h-11 rounded-full border-border/80 bg-secondary px-4 text-sm text-foreground shadow-none";
 
 export function AuthForm({ variant }: { variant: Variant }) {
   const router = useRouter();
-  const copy = COPY[variant];
-  const nextPath = "/posts";
+  const locale = useLocale();
+  const t = useTranslations("auth");
+  const copy = {
+    title: t(`${variant}.title`),
+    description: t(`${variant}.description`),
+    submit: t(`${variant}.submit`),
+    pending: t(`${variant}.pending`),
+    passwordLabel: t("password"),
+    alt:
+      variant === "login"
+        ? { href: "/register", label: t("login.alt") }
+        : { href: "/login", label: t("register.alt") },
+  } as const;
+  const nextPath = `/${locale}/posts`;
 
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -65,9 +59,13 @@ export function AuthForm({ variant }: { variant: Variant }) {
       if (variant === "register") {
         const { error } = await supabase.auth.signUp({ email, password });
         if (error) throw error;
-        setInfo(
-          "Пользователь создан. Если включено подтверждение email, проверьте почту и перейдите по ссылке.",
-        );
+        // Best-effort: persist UI locale for the new user (if session exists).
+        void fetch("/api/account/locale", {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ locale }),
+        }).catch(() => {});
+        setInfo(t("register.createdInfo"));
         return;
       }
 
@@ -84,14 +82,34 @@ export function AuthForm({ variant }: { variant: Variant }) {
           .maybeSingle();
         if (profile?.is_blocked) {
           await supabase.auth.signOut();
-          setError("Пользователь заблокирован.");
+          setError(t("errors.blockedUser"));
           return;
         }
+
+        // Prefer server-stored locale for redirects after login.
+        const { data: pref } = await supabase
+          .from("user_profiles")
+          .select("locale")
+          .eq("id", uid)
+          .maybeSingle();
+        const storedLocale = pref?.locale === "en" ? "en" : pref?.locale === "ru" ? "ru" : null;
+        const target = storedLocale ? `/${storedLocale}/posts` : nextPath;
+
+        // Keep locale cookie in sync (also helps <html lang>).
+        void fetch("/api/account/locale", {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ locale: storedLocale || locale }),
+        }).catch(() => {});
+
+        router.push(target);
+        router.refresh();
+        return;
       }
       router.push(nextPath);
       router.refresh();
     } catch (e: unknown) {
-      const message = e instanceof Error ? e.message : "Ошибка авторизации.";
+      const message = e instanceof Error ? e.message : t("errors.authFailed");
       const scope = variant === "register" ? "auth.register" : "auth.login";
       console.error(`[ERROR] ${scope} ${message}`);
       void fetch("/api/log", {

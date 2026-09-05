@@ -3,6 +3,7 @@
 import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { ChevronDown, MessageSquareText, Save, Shield, UserX } from "lucide-react";
+import { useTranslations } from "next-intl";
 
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
@@ -72,6 +73,8 @@ async function postJson(path: string) {
 
 export function AdminUsersTable({ initialUsers }: { initialUsers: AdminUserRow[] }) {
   const router = useRouter();
+  const t = useTranslations("adminUsers");
+  const tProfile = useTranslations("profileForm");
   const [pendingId, setPendingId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [openDetailsById, setOpenDetailsById] = useState<Record<string, boolean>>({});
@@ -101,7 +104,7 @@ export function AdminUsersTable({ initialUsers }: { initialUsers: AdminUserRow[]
       });
       if (!resp.ok) {
         const text = await resp.text().catch(() => "");
-        throw new Error(text || "Не удалось загрузить профиль.");
+        throw new Error(text || t("errors.loadProfile"));
       }
       const json = (await resp.json()) as UserProfileDetails;
       setDetailsById((m) => ({ ...m, [userId]: json }));
@@ -109,7 +112,7 @@ export function AdminUsersTable({ initialUsers }: { initialUsers: AdminUserRow[]
       setDetailsById((m) => ({ ...m, [userId]: null }));
       setDetailsErrorById((m) => ({
         ...m,
-        [userId]: e instanceof Error ? e.message : "Не удалось загрузить профиль.",
+        [userId]: e instanceof Error ? e.message : t("errors.loadProfile"),
       }));
     }
   }
@@ -123,7 +126,7 @@ export function AdminUsersTable({ initialUsers }: { initialUsers: AdminUserRow[]
       });
       if (!resp.ok) {
         const text = await resp.text().catch(() => "");
-        throw new Error(text || "Не удалось загрузить промпты.");
+        throw new Error(text || t("errors.loadPrompts"));
       }
       const json = (await resp.json()) as UserPromptsDetails;
       setPromptsById((m) => ({ ...m, [userId]: json }));
@@ -131,7 +134,7 @@ export function AdminUsersTable({ initialUsers }: { initialUsers: AdminUserRow[]
       setPromptsById((m) => ({ ...m, [userId]: null }));
       setPromptsErrorById((m) => ({
         ...m,
-        [userId]: e instanceof Error ? e.message : "Не удалось загрузить промпты.",
+        [userId]: e instanceof Error ? e.message : t("errors.loadPrompts"),
       }));
     }
   }
@@ -145,7 +148,7 @@ export function AdminUsersTable({ initialUsers }: { initialUsers: AdminUserRow[]
       });
       if (!resp.ok) {
         const text = await resp.text().catch(() => "");
-        throw new Error(text || "Не удалось загрузить промпты.");
+        throw new Error(text || t("errors.loadPrompts"));
       }
       const json = (await resp.json()) as UserPromptsDetails;
       setPromptsById((m) => ({ ...m, [userId]: json }));
@@ -153,7 +156,7 @@ export function AdminUsersTable({ initialUsers }: { initialUsers: AdminUserRow[]
       setPromptsById((m) => ({ ...m, [userId]: null }));
       setPromptsErrorById((m) => ({
         ...m,
-        [userId]: e instanceof Error ? e.message : "Не удалось загрузить промпты.",
+        [userId]: e instanceof Error ? e.message : t("errors.loadPrompts"),
       }));
     }
   }
@@ -182,13 +185,13 @@ export function AdminUsersTable({ initialUsers }: { initialUsers: AdminUserRow[]
         body: JSON.stringify(payload),
       });
       const text = await resp.text().catch(() => "");
-      if (!resp.ok) throw new Error(text || "Не удалось сохранить профиль.");
-      setSaveSuccessById((m) => ({ ...m, [userId]: "Сохранено." }));
+      if (!resp.ok) throw new Error(text || t("errors.saveProfile"));
+      setSaveSuccessById((m) => ({ ...m, [userId]: t("common.saved") }));
       router.refresh();
     } catch (e: unknown) {
       setSaveErrorById((m) => ({
         ...m,
-        [userId]: e instanceof Error ? e.message : "Не удалось сохранить профиль.",
+        [userId]: e instanceof Error ? e.message : t("errors.saveProfile"),
       }));
     } finally {
       setSavePendingById((m) => ({ ...m, [userId]: false }));
@@ -202,7 +205,7 @@ export function AdminUsersTable({ initialUsers }: { initialUsers: AdminUserRow[]
       await postJson(`/api/admin/users/${encodeURIComponent(userId)}/block`);
       router.refresh();
     } catch (e: unknown) {
-      setError(e instanceof Error ? e.message : "Ошибка запроса");
+      setError(e instanceof Error ? e.message : t("errors.request"));
     } finally {
       setPendingId(null);
     }
@@ -215,7 +218,7 @@ export function AdminUsersTable({ initialUsers }: { initialUsers: AdminUserRow[]
       await postJson(`/api/admin/users/${encodeURIComponent(userId)}/unblock`);
       router.refresh();
     } catch (e: unknown) {
-      setError(e instanceof Error ? e.message : "Ошибка запроса");
+      setError(e instanceof Error ? e.message : t("errors.request"));
     } finally {
       setPendingId(null);
     }
@@ -228,7 +231,7 @@ export function AdminUsersTable({ initialUsers }: { initialUsers: AdminUserRow[]
       await postJson(`/api/admin/users/${encodeURIComponent(userId)}/reset-post-search-count`);
       router.refresh();
     } catch (e: unknown) {
-      setError(e instanceof Error ? e.message : "Ошибка запроса");
+      setError(e instanceof Error ? e.message : t("errors.request"));
     } finally {
       setPendingId(null);
     }
@@ -237,7 +240,7 @@ export function AdminUsersTable({ initialUsers }: { initialUsers: AdminUserRow[]
   return (
     <Card className="overflow-hidden rounded-2xl border border-border bg-card">
       <CardHeader className="border-b border-border px-6 py-5">
-        <CardTitle className="text-lg font-semibold tracking-tight">Пользователи</CardTitle>
+        <CardTitle className="text-lg font-semibold tracking-tight">{t("title")}</CardTitle>
       </CardHeader>
       <CardContent className="space-y-4 p-6">
         {error ? (
@@ -252,11 +255,11 @@ export function AdminUsersTable({ initialUsers }: { initialUsers: AdminUserRow[]
             const openDetails = Boolean(openDetailsById[u.id]);
             const openPrompts = Boolean(openPromptsById[u.id]);
             const email = u.email || "";
-            const statusLabel = u.is_blocked ? "Заблокирован" : "Активен";
+            const statusLabel = u.is_blocked ? t("status.blocked") : t("status.active");
             const displayName = u.full_name || "—";
             const details = detailsById[u.id];
             const prompts = promptsById[u.id] ?? null;
-            const avatarAlt = (displayName || email || "Профиль").trim();
+            const avatarAlt = (displayName || email || tProfile("avatarAltFallback")).trim();
             const avatarFallback = initialsFromName(displayName || email);
 
             return (
@@ -291,7 +294,7 @@ export function AdminUsersTable({ initialUsers }: { initialUsers: AdminUserRow[]
 
                     <div className="flex flex-wrap items-center justify-between gap-3 pt-1">
                       <div className="text-sm text-muted-foreground">
-                        Запуски поиска:{" "}
+                        {t("postRuns.label")}{" "}
                         <span className="font-medium text-foreground">{u.post_search_run_count ?? 0}</span>
                       </div>
 
@@ -309,7 +312,7 @@ export function AdminUsersTable({ initialUsers }: { initialUsers: AdminUserRow[]
                           }}
                         >
                           <ChevronDown className={cn("size-4 transition-transform", openDetails && "rotate-180")} />
-                          {openDetails ? "Свернуть" : "Подробнее"}
+                          {openDetails ? t("actions.collapse") : t("actions.details")}
                         </button>
 
                         <button
@@ -325,7 +328,7 @@ export function AdminUsersTable({ initialUsers }: { initialUsers: AdminUserRow[]
                           }}
                         >
                           <MessageSquareText className="size-4" aria-hidden />
-                          {openPrompts ? "Свернуть" : "Промпт"}
+                          {openPrompts ? t("actions.collapse") : t("actions.prompts")}
                         </button>
 
                         {u.is_blocked ? (
@@ -336,7 +339,7 @@ export function AdminUsersTable({ initialUsers }: { initialUsers: AdminUserRow[]
                             className="h-9 rounded-full px-4"
                             onClick={() => onUnblock(u.id)}
                           >
-                            Разблокировать
+                            {t("actions.unblock")}
                           </Button>
                         ) : (
                           <Button
@@ -346,7 +349,7 @@ export function AdminUsersTable({ initialUsers }: { initialUsers: AdminUserRow[]
                             className="h-9 rounded-full px-4 text-destructive hover:text-destructive"
                             onClick={() => onBlock(u.id)}
                           >
-                            Заблокировать
+                            {t("actions.block")}
                           </Button>
                         )}
 
@@ -357,7 +360,7 @@ export function AdminUsersTable({ initialUsers }: { initialUsers: AdminUserRow[]
                           className="h-9 rounded-full px-4"
                           onClick={() => onResetCount(u.id)}
                         >
-                          Обнулить счётчик
+                          {t("actions.resetCount")}
                         </Button>
                       </div>
                     </div>
@@ -402,9 +405,9 @@ export function AdminUsersTable({ initialUsers }: { initialUsers: AdminUserRow[]
                               </Avatar>
 
                               <div className="min-w-0">
-                                <div className="text-sm font-medium text-foreground">Профиль</div>
+                                <div className="text-sm font-medium text-foreground">{t("profile.title")}</div>
                                 <div className="text-sm text-muted-foreground">
-                                  Администратор может редактировать данные пользователя.
+                                  {t("profile.description")}
                                 </div>
                               </div>
                             </div>
@@ -412,7 +415,7 @@ export function AdminUsersTable({ initialUsers }: { initialUsers: AdminUserRow[]
 
                           <div className="grid gap-5 sm:grid-cols-2">
                             <div className="space-y-2">
-                              <Label htmlFor={`phone_${u.id}`}>Телефон</Label>
+                              <Label htmlFor={`phone_${u.id}`}>{tProfile("fields.phone.label")}</Label>
                               <Input
                                 id={`phone_${u.id}`}
                                 className={fieldClassName}
@@ -430,7 +433,7 @@ export function AdminUsersTable({ initialUsers }: { initialUsers: AdminUserRow[]
                             </div>
 
                             <div className="space-y-2">
-                              <Label htmlFor={`company_${u.id}`}>Компания</Label>
+                              <Label htmlFor={`company_${u.id}`}>{tProfile("fields.company.label")}</Label>
                               <Input
                                 id={`company_${u.id}`}
                                 className={fieldClassName}
@@ -442,12 +445,12 @@ export function AdminUsersTable({ initialUsers }: { initialUsers: AdminUserRow[]
                                   }))
                                 }
                                 disabled={Boolean(savePendingById[u.id])}
-                                placeholder="Название компании"
+                                placeholder={tProfile("fields.company.placeholder")}
                               />
                             </div>
 
                             <div className="space-y-2">
-                              <Label htmlFor={`job_title_${u.id}`}>Должность</Label>
+                              <Label htmlFor={`job_title_${u.id}`}>{tProfile("fields.jobTitle.label")}</Label>
                               <Input
                                 id={`job_title_${u.id}`}
                                 className={fieldClassName}
@@ -459,12 +462,12 @@ export function AdminUsersTable({ initialUsers }: { initialUsers: AdminUserRow[]
                                   }))
                                 }
                                 disabled={Boolean(savePendingById[u.id])}
-                                placeholder="Должность"
+                                placeholder={tProfile("fields.jobTitle.placeholder")}
                               />
                             </div>
 
                             <div className="space-y-2">
-                              <Label htmlFor={`date_of_birth_${u.id}`}>Дата рождения</Label>
+                              <Label htmlFor={`date_of_birth_${u.id}`}>{tProfile("fields.dob.label")}</Label>
                               <Input
                                 id={`date_of_birth_${u.id}`}
                                 className={fieldClassName}
@@ -484,7 +487,7 @@ export function AdminUsersTable({ initialUsers }: { initialUsers: AdminUserRow[]
                             </div>
 
                             <div className="space-y-2">
-                              <Label htmlFor={`city_${u.id}`}>Город</Label>
+                              <Label htmlFor={`city_${u.id}`}>{tProfile("fields.city.label")}</Label>
                               <Input
                                 id={`city_${u.id}`}
                                 className={fieldClassName}
@@ -496,12 +499,12 @@ export function AdminUsersTable({ initialUsers }: { initialUsers: AdminUserRow[]
                                   }))
                                 }
                                 disabled={Boolean(savePendingById[u.id])}
-                                placeholder="Город"
+                                placeholder={tProfile("fields.city.placeholder")}
                               />
                             </div>
 
                             <div className="space-y-2">
-                              <Label htmlFor={`website_${u.id}`}>Сайт</Label>
+                              <Label htmlFor={`website_${u.id}`}>{tProfile("fields.website.label")}</Label>
                               <Input
                                 id={`website_${u.id}`}
                                 className={fieldClassName}
@@ -539,7 +542,7 @@ export function AdminUsersTable({ initialUsers }: { initialUsers: AdminUserRow[]
                           </div>
 
                           <div className="space-y-2">
-                            <Label htmlFor={`bio_${u.id}`}>О себе</Label>
+                            <Label htmlFor={`bio_${u.id}`}>{tProfile("fields.bio.label")}</Label>
                             <Textarea
                               id={`bio_${u.id}`}
                               value={details?.bio || ""}
@@ -550,7 +553,7 @@ export function AdminUsersTable({ initialUsers }: { initialUsers: AdminUserRow[]
                                 }))
                               }
                               disabled={Boolean(savePendingById[u.id])}
-                              placeholder="Несколько строк о пользователе"
+                              placeholder={t("profile.bioPlaceholder")}
                               className={cn("min-h-28 resize-y rounded-xl")}
                             />
                           </div>
@@ -561,11 +564,11 @@ export function AdminUsersTable({ initialUsers }: { initialUsers: AdminUserRow[]
                             disabled={Boolean(savePendingById[u.id])}
                           >
                             <Save className="mr-2 size-4" />
-                            {savePendingById[u.id] ? "Сохраняем..." : "Сохранить"}
+                            {savePendingById[u.id] ? t("actions.saving") : t("actions.save")}
                           </Button>
                         </form>
                       ) : (
-                        <div className="text-sm text-muted-foreground">Загружаем профиль…</div>
+                        <div className="text-sm text-muted-foreground">{t("loading.profile")}</div>
                       )}
                     </CardContent>
                   ) : null}
@@ -596,10 +599,10 @@ export function AdminUsersTable({ initialUsers }: { initialUsers: AdminUserRow[]
                             initialCommentPrompt={prompts.comment_prompt}
                             saveUrl={`/api/admin/users/${encodeURIComponent(u.id)}/prompts`}
                             fieldIdPrefix={`prompts_${u.id}`}
-                            footerHint="Сохранение происходит для выбранного пользователя."
+                            footerHint={t("prompts.footerHint")}
                             onSaved={() => {
                               setSavePromptsErrorById((m) => ({ ...m, [u.id]: null }));
-                              setSavePromptsSuccessById((m) => ({ ...m, [u.id]: "Сохранено." }));
+                              setSavePromptsSuccessById((m) => ({ ...m, [u.id]: t("common.saved") }));
                               void refreshPrompts(u.id);
                             }}
                           />
@@ -611,7 +614,7 @@ export function AdminUsersTable({ initialUsers }: { initialUsers: AdminUserRow[]
                                 `/api/admin/users/${encodeURIComponent(u.id)}/post-search/run/${encodeURIComponent(sid)}`
                               }
                               redirectOnSuccess={false}
-                              successMessage="Поиск постов завершён."
+                              successMessage={t("postSearch.success")}
                               onSuccess={() => {
                                 void refreshPrompts(u.id);
                                 router.refresh();
@@ -620,7 +623,7 @@ export function AdminUsersTable({ initialUsers }: { initialUsers: AdminUserRow[]
                           </div>
                         </div>
                       ) : (
-                        <div className="text-sm text-muted-foreground">Загружаем промпты…</div>
+                        <div className="text-sm text-muted-foreground">{t("loading.prompts")}</div>
                       )}
                     </CardContent>
                   ) : null}

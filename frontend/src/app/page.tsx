@@ -1,11 +1,9 @@
+import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 
-import { createSupabaseServerClient } from "@/lib/supabase/server";
-
 export default async function Home() {
-  const supabase = await createSupabaseServerClient();
-  const { data } = await supabase.auth.getUser();
-
-  if (data.user) redirect("/posts");
-  redirect("/login");
+  const cookieStore = await cookies();
+  const localeCookie = cookieStore.get("NEXT_LOCALE")?.value;
+  const locale = localeCookie === "en" ? "en" : "ru";
+  redirect(`/${locale}`);
 }

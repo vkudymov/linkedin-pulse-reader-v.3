@@ -1,9 +1,14 @@
 import { NextResponse } from "next/server";
+import { cookies } from "next/headers";
 
 import { log } from "@/lib/log/logger";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 
 export async function GET(request: Request) {
+  const cookieStore = await cookies();
+  const localeCookie = cookieStore.get("NEXT_LOCALE")?.value;
+  const locale = localeCookie === "en" ? "en" : "ru";
+
   try {
     const supabase = await createSupabaseServerClient();
     const { error } = await supabase.auth.signOut();
@@ -18,6 +23,6 @@ export async function GET(request: Request) {
     log.error("auth.logout", message, { where: "src/app/logout/route.ts" });
     throw e;
   }
-  return NextResponse.redirect(new URL("/login", request.url));
+  return NextResponse.redirect(new URL(`/${locale}/login`, request.url));
 }
 
