@@ -126,6 +126,7 @@
     },
     "errors": {
       "request": "Request error",
+      "loadUsers": "Failed to load users. Start the worker API at http://127.0.0.1:8000.",
       "loadProfile": "Failed to load profile.",
       "loadPrompts": "Failed to load prompts.",
       "saveProfile": "Failed to save profile."

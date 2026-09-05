@@ -40,10 +40,13 @@ export default async function AdminPage({
   if (isBlocked) redirect(`/${locale}/login?blocked=1`);
 
   let users: AdminUserRow[] = [];
+  let loadError: string | null = null;
   try {
     const { data: sessionData } = await supabase.auth.getSession();
     const accessToken = sessionData.session?.access_token ?? null;
-    if (accessToken) {
+    if (!accessToken) {
+      loadError = "missing session";
+    } else {
       const baseUrl = (process.env.WORKER_API_URL || "http://127.0.0.1:8000")
         .trim()
         .replace(/\/+$/, "");
@@ -52,12 +55,18 @@ export default async function AdminPage({
         cache: "no-store",
         headers: { authorization: `Bearer ${accessToken}` },
       });
-      if (resp.ok) {
-        users = (await resp.json()) as AdminUserRow[];
+      const parsed: unknown = await resp.json().catch(() => null);
+      if (resp.ok && Array.isArray(parsed)) {
+        users = parsed as AdminUserRow[];
+      } else if (!resp.ok) {
+        loadError = `worker ${resp.status}`;
+      } else {
+        loadError = "invalid worker payload";
       }
     }
   } catch {
     users = [];
+    loadError = "worker unreachable";
   }
 
   return (
@@ -70,7 +79,7 @@ export default async function AdminPage({
       />
 
       <main className="mx-auto max-w-5xl px-6 py-6">
-        <AdminUsersTable initialUsers={users} />
+        <AdminUsersTable initialUsers={users} loadError={loadError} />
       </main>
     </div>
   );

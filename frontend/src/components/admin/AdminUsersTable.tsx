@@ -71,7 +71,13 @@ async function postJson(path: string) {
   return text;
 }
 
-export function AdminUsersTable({ initialUsers }: { initialUsers: AdminUserRow[] }) {
+export function AdminUsersTable({
+  initialUsers,
+  loadError = null,
+}: {
+  initialUsers: AdminUserRow[];
+  loadError?: string | null;
+}) {
   const router = useRouter();
   const t = useTranslations("adminUsers");
   const tProfile = useTranslations("profileForm");
@@ -243,6 +249,11 @@ export function AdminUsersTable({ initialUsers }: { initialUsers: AdminUserRow[]
         <CardTitle className="text-lg font-semibold tracking-tight">{t("title")}</CardTitle>
       </CardHeader>
       <CardContent className="space-y-4 p-6">
+        {loadError ? (
+          <div className="rounded-xl border border-destructive/30 bg-destructive/10 px-3 py-2 text-sm text-destructive">
+            {t("errors.loadUsers")}
+          </div>
+        ) : null}
         {error ? (
           <div className="rounded-xl border border-destructive/30 bg-destructive/10 px-3 py-2 text-sm text-destructive">
             {error}
