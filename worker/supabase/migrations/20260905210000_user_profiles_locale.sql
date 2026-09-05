@@ -11,8 +11,9 @@ alter table public.user_profiles
 comment on column public.user_profiles.locale is
   'UI language (short BCP-47). Separate from future LinkedIn contentLanguages.';
 
--- Keep user_profiles_view backward-compatible and include locale for UI.
-create or replace view public.user_profiles_view as
+-- Recreate the view: CREATE OR REPLACE cannot insert a column in the middle.
+drop view if exists public.user_profiles_view;
+create view public.user_profiles_view as
 select
   p.id,
   a.is_admin,

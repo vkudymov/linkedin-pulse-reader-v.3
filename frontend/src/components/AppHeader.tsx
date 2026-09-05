@@ -67,12 +67,12 @@ export function AppHeader({
           ) : null}
 
           <LocaleSwitcher />
-          <Link
+          <a
             className="text-sm text-muted-foreground underline-offset-4 hover:text-foreground hover:underline"
             href="/logout"
           >
             {t("logout")}
-          </Link>
+          </a>
         </nav>
       </div>
     </header>

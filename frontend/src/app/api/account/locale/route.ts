@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 
+import { log } from "@/lib/log/logger";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 
 type Body = {
@@ -33,17 +34,46 @@ export async function POST(request: Request) {
   }
 
   const payload = {
-    id: data.user.id,
     locale,
     updated_at: new Date().toISOString(),
   };
 
-  const { error } = await supabase.from("user_profiles").upsert(payload);
+  const { data: updated, error } = await supabase
+    .from("user_profiles")
+    .update(payload)
+    .eq("id", data.user.id)
+    .select("id")
+    .maybeSingle();
+
   if (error) {
-    return NextResponse.json(
-      { ok: false, error: error.message || "supabase error" },
-      { status: 400 },
-    );
+    log.error("account.locale", error.message || "supabase error", {
+      where: "src/app/api/account/locale/route.ts",
+      meta: { code: error.code },
+    });
+    const missingColumn =
+      error.code === "PGRST204" ||
+      /could not find the 'locale' column/i.test(error.message || "");
+    if (!missingColumn) {
+      return NextResponse.json(
+        { ok: false, error: error.message || "supabase error" },
+        { status: 400 },
+      );
+    }
+  } else if (!updated) {
+    const { error: insertError } = await supabase.from("user_profiles").insert({
+      id: data.user.id,
+      ...payload,
+    });
+    if (insertError) {
+      log.error("account.locale", insertError.message || "insert failed", {
+        where: "src/app/api/account/locale/route.ts",
+        meta: { code: insertError.code },
+      });
+      return NextResponse.json(
+        { ok: false, error: insertError.message || "supabase error" },
+        { status: 400 },
+      );
+    }
   }
 
   const resp = NextResponse.json({ ok: true, locale }, { status: 200 });
