@@ -81,7 +81,7 @@ export function PostSearchRunner({
           if (redirectOnSuccess) {
             // Give UI a moment to render success.
             await sleep(300);
-            router.push(`/${locale}/posts`);
+            router.push("/posts");
             router.refresh();
           }
           return;

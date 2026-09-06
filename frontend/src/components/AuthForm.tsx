@@ -1,6 +1,5 @@
 "use client";
 
-import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { Lock } from "lucide-react";
 import { useLocale, useTranslations } from "next-intl";
@@ -17,8 +16,7 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { cn } from "@/lib/utils";
-import { createSupabaseBrowserClient } from "@/lib/supabase/client";
-import { Link } from "@/i18n/navigation";
+import { Link, useRouter } from "@/i18n/navigation";
 
 type Variant = "login" | "register";
 
@@ -40,13 +38,18 @@ export function AuthForm({ variant }: { variant: Variant }) {
         ? { href: "/register", label: t("login.alt") }
         : { href: "/login", label: t("register.alt") },
   } as const;
-  const nextPath = `/${locale}/posts`;
-
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [info, setInfo] = useState<string | null>(null);
+
+  function messageForCode(code: string | undefined): string {
+    if (code === "network") return t("errors.network");
+    if (code === "invalid_credentials") return t("errors.invalidCredentials");
+    if (code === "blocked") return t("errors.blockedUser");
+    return t("errors.authFailed");
+  }
 
   async function onSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -54,75 +57,39 @@ export function AuthForm({ variant }: { variant: Variant }) {
     setError(null);
     setInfo(null);
 
+    const path = variant === "register" ? "/api/auth/register" : "/api/auth/login";
     try {
-      const supabase = createSupabaseBrowserClient();
+      const res = await fetch(path, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify(
+          variant === "register" ? { email, password, locale } : { email, password },
+        ),
+      });
+
+      let json: { ok?: boolean; error?: string; locale?: string } = {};
+      try {
+        json = (await res.json()) as { ok?: boolean; error?: string; locale?: string };
+      } catch {
+        setError(t("errors.network"));
+        return;
+      }
+
+      if (!res.ok || !json.ok) {
+        setError(messageForCode(json.error));
+        return;
+      }
+
       if (variant === "register") {
-        const { error } = await supabase.auth.signUp({ email, password });
-        if (error) throw error;
-        // Best-effort: persist UI locale for the new user (if session exists).
-        void fetch("/api/account/locale", {
-          method: "POST",
-          headers: { "content-type": "application/json" },
-          body: JSON.stringify({ locale }),
-        }).catch(() => {});
         setInfo(t("register.createdInfo"));
         return;
       }
 
-      const { error } = await supabase.auth.signInWithPassword({ email, password });
-      if (error) throw error;
-
-      const { data: userData } = await supabase.auth.getUser();
-      const uid = userData.user?.id ?? null;
-      if (uid) {
-        const { data: profile } = await supabase
-          .from("user_admin_state")
-          .select("is_blocked")
-          .eq("id", uid)
-          .maybeSingle();
-        if (profile?.is_blocked) {
-          await supabase.auth.signOut();
-          setError(t("errors.blockedUser"));
-          return;
-        }
-
-        // Prefer server-stored locale for redirects after login.
-        const { data: pref } = await supabase
-          .from("user_profiles")
-          .select("locale")
-          .eq("id", uid)
-          .maybeSingle();
-        const storedLocale = pref?.locale === "en" ? "en" : pref?.locale === "ru" ? "ru" : null;
-        const target = storedLocale ? `/${storedLocale}/posts` : nextPath;
-
-        // Keep locale cookie in sync (also helps <html lang>).
-        void fetch("/api/account/locale", {
-          method: "POST",
-          headers: { "content-type": "application/json" },
-          body: JSON.stringify({ locale: storedLocale || locale }),
-        }).catch(() => {});
-
-        router.push(target);
-        router.refresh();
-        return;
-      }
-      router.push(nextPath);
+      const nextLocale = json.locale === "en" ? "en" : "ru";
+      router.replace("/posts", { locale: nextLocale });
       router.refresh();
-    } catch (e: unknown) {
-      const message = e instanceof Error ? e.message : t("errors.authFailed");
-      const scope = variant === "register" ? "auth.register" : "auth.login";
-      console.error(`[ERROR] ${scope} ${message}`);
-      void fetch("/api/log", {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({
-          level: "error",
-          scope,
-          message,
-          where: "src/components/AuthForm.tsx",
-        }),
-      }).catch(() => {});
-      setError(message);
+    } catch {
+      setError(t("errors.network"));
     } finally {
       setPending(false);
     }
@@ -159,6 +126,14 @@ export function AuthForm({ variant }: { variant: Variant }) {
             <div className="space-y-2">
               <div className="flex items-center justify-between gap-3">
                 <Label htmlFor="password">{copy.passwordLabel}</Label>
+                {variant === "login" ? (
+                  <Link
+                    className="text-xs text-muted-foreground underline-offset-4 hover:text-foreground hover:underline"
+                    href="/forgot-password"
+                  >
+                    {t("forgot.link")}
+                  </Link>
+                ) : null}
               </div>
               <Input
                 id="password"

@@ -14,6 +14,32 @@
   },
   "auth": {
     "password": "Password",
+    "forgot": {
+      "link": "Forgot password?",
+      "title": "Reset password",
+      "description": "Enter your email and we will send you a password reset link.",
+      "submit": "Send reset link",
+      "pending": "Sending...",
+      "success": "If an account exists for this email, a reset link has been sent.",
+      "backToLogin": "Back to login",
+      "errors": {
+        "failed": "Failed to send reset email."
+      }
+    },
+    "reset": {
+      "title": "Choose a new password",
+      "description": "Enter and confirm your new password.",
+      "newPassword": "New password",
+      "confirmPassword": "Confirm new password",
+      "submit": "Update password",
+      "pending": "Updating...",
+      "success": "Password updated.",
+      "errors": {
+        "failed": "Failed to update password.",
+        "mismatch": "Passwords do not match.",
+        "tooShort": "Password must be at least 6 characters."
+      }
+    },
     "login": {
       "title": "Access",
       "description": "Sign in to view the found posts.",
@@ -31,7 +57,9 @@
     },
     "errors": {
       "authFailed": "Authentication error.",
-      "blockedUser": "User is blocked."
+      "blockedUser": "User is blocked.",
+      "network": "Network error. Please check your connection and try again.",
+      "invalidCredentials": "Invalid email or password."
     }
   },
   "posts": {
@@ -74,6 +102,23 @@
     "profile": {
       "title": "Profile",
       "description": "Update your basic details so they are shown in the UI and available to the project services."
+    },
+    "security": {
+      "title": "Security",
+      "description": "Change your password.",
+      "currentPassword": "Current password",
+      "newPassword": "New password",
+      "confirmPassword": "Confirm new password",
+      "forgotLink": "Forgot password?",
+      "submit": "Change password",
+      "pending": "Updating...",
+      "success": "Password changed.",
+      "errors": {
+        "failed": "Failed to change password.",
+        "mismatch": "Passwords do not match.",
+        "tooShort": "Password must be at least 6 characters.",
+        "sameAsCurrent": "New password should be different from the old password."
+      }
     }
   },
   "prompts": {
