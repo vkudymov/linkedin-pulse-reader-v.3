@@ -7,6 +7,7 @@ EN: Feature navigation layer.
 """
 
 from .feed import FeedNavigator
+from .jobs import JobsNavigator
 
-__all__ = ["FeedNavigator"]
+__all__ = ["FeedNavigator", "JobsNavigator"]
 

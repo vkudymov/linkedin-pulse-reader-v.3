@@ -26,9 +26,10 @@ from .auth.social import SocialLoginFlow, SocialLoginParams
 from .browser import BrowserConfig, BrowserManager
 from .config import LinkedInClientConfig
 from .exceptions import BrowserLifecycleError, FeedLoadError, LinkedInClientError
-from .loading import FeedWaiter, HumanScroller
-from .navigation import FeedNavigator
-from .parsing import PostParser
+from .loading import FeedWaiter, HumanScroller, JobsWaiter
+from .navigation import FeedNavigator, JobsNavigator
+from .parsing import JobParser, PostParser
+from .models.job import Job
 from .models.post import Author, Post, merge_authors
 
 _ACTIVITY_RE = re.compile(r"urn:li:activity:(\d+)")
@@ -303,7 +304,7 @@ class LinkedInClient:
         password: str | None = None,
         cancelled: Callable[[], bool] | None = None,
         on_checkpoint: Callable[[], None] | None = None,
-    ) -> list[dict]:
+    ) -> list[dict[str, Any]]:
         """
         RU: Интерактивная аутентификация (UI -> cookies).
             Возвращаем cookies наружу, чтобы вызывающее приложение могло их сохранить.
@@ -324,7 +325,7 @@ class LinkedInClient:
                 "Cookies were provided; manual login is not supported in this mode."
             )
         if self._manual_login_completed:
-            return list(self._browser.handle.context.cookies())
+            return [dict(c) for c in self._browser.handle.context.cookies()]
 
         # Ensure we're on the LinkedIn login page before starting a UI flow.
         with suppress(Exception):
@@ -334,28 +335,28 @@ class LinkedInClient:
         ctx = self._browser.handle.context
 
         if method == LoginMethod.email:
-            flow = EmailPasswordLoginFlow(
+            flow_email = EmailPasswordLoginFlow(
                 timeout_ms=timeout_ms,
                 params=EmailPasswordLoginParams(identifier=identifier, password=password),
                 cancelled=cancelled,
                 on_checkpoint=on_checkpoint,
             )
-            flow.run(page=self.page, context=ctx)
+            flow_email.run(page=self.page, context=ctx)
         elif method in (LoginMethod.google, LoginMethod.apple):
-            flow = SocialLoginFlow(
+            flow_social = SocialLoginFlow(
                 timeout_ms=timeout_ms,
                 params=SocialLoginParams(method=method),
                 cancelled=cancelled,
                 on_checkpoint=on_checkpoint,
             )
-            flow.run(page=self.page, context=ctx)
+            flow_social.run(page=self.page, context=ctx)
         else:
             raise LinkedInClientError(f"Unsupported login method: {method!r}")
 
         self._manual_login_completed = True
-        return list(ctx.cookies())
+        return [dict(c) for c in ctx.cookies()]
 
-    def get_cookies(self) -> list[dict]:
+    def get_cookies(self) -> list[dict[str, Any]]:
         """
         Playwright cookie list from the current context.
         Pulse persist uses export_session_snapshot, not this method.
@@ -364,7 +365,7 @@ class LinkedInClient:
             raise BrowserLifecycleError(
                 "Client not started. Use LinkedInClient as a context manager."
             )
-        return list(self._browser.handle.context.cookies())
+        return [dict(c) for c in self._browser.handle.context.cookies()]
 
     def export_session_snapshot(self, base: dict[str, Any] | None = None) -> dict[str, Any]:
         """
@@ -532,6 +533,121 @@ class LinkedInClient:
                     self.page.reload(wait_until="domcontentloaded")
                     continue
                 raise
+        # Unreachable: loop either returns results or raises.
+        return []
+
+    def fetch_jobs(
+        self,
+        *,
+        keywords: str,
+        location: str | None = None,
+        limit: int = 25,
+    ) -> list[Job]:
+        """
+        High-level “fetch LinkedIn jobs search results” operation.
+
+        Best-effort: selectors vary between accounts/AB tests. Returns partial data when needed.
+        """
+        if not self._entered:
+            raise BrowserLifecycleError(
+                "Client not started. Use LinkedInClient as a context manager."
+            )
+        if limit <= 0:
+            return []
+        if not isinstance(keywords, str) or not keywords.strip():
+            return []
+
+        navigator = JobsNavigator()
+        waiter = JobsWaiter(timeout_ms=self._client_cfg.browser.timeout_ms)
+        scroller = HumanScroller(config=self._client_cfg.scroll)
+        parser = JobParser()
+
+        def job_key(j: Job) -> str | None:
+            if isinstance(j.job_id, str) and j.job_id.strip():
+                return f"id:{j.job_id.strip()}"
+            if isinstance(j.job_url, str) and j.job_url.strip():
+                return f"url:{j.job_url.strip()}"
+            return None
+
+        for attempt in range(2):
+            try:
+                navigator.goto_search(self.page, keywords=keywords.strip(), location=location)
+                waiter.wait_for_jobs_ready(self.page)
+
+                results: list[Job] = []
+                seen: set[str] = set()
+                seen_job_ids: set[str] = set()
+
+                def merge(new_jobs: list[Job]) -> None:
+                    for j in new_jobs:
+                        k = job_key(j)
+                        if not k or k in seen:
+                            continue
+                        seen.add(k)
+                        if isinstance(j.job_id, str) and j.job_id.strip():
+                            seen_job_ids.add(j.job_id.strip())
+                        results.append(j)
+
+                def stay_on_search() -> None:
+                    if "/jobs/view/" not in (self.page.url or ""):
+                        return
+                    with suppress(Exception):
+                        self.page.keyboard.press("Escape")
+                    with suppress(Exception):
+                        self.page.go_back(wait_until="domcontentloaded")
+                    if "/jobs/view/" in (self.page.url or ""):
+                        navigator.goto_search(
+                            self.page,
+                            keywords=keywords.strip(),
+                            location=location,
+                        )
+                        waiter.wait_for_jobs_ready(self.page)
+
+                parse_limit = min(max(limit * 2, 50), 250)
+                parsed = parser.parse_jobs(
+                    self.page,
+                    limit=parse_limit,
+                    skip_ids=seen_job_ids,
+                )
+                merge(parsed)
+                stay_on_search()
+                if len(results) >= limit:
+                    return results[:limit]
+
+                no_progress = 0
+                max_scrolls = self._client_cfg.scroll.max_scrolls
+                for _ in range(max_scrolls):
+                    stay_on_search()
+                    before_len = len(results)
+                    scroller.scroll_batch(page=self.page)
+                    with suppress(Exception):
+                        self.page.wait_for_load_state("networkidle", timeout=1500)
+                    self.page.wait_for_timeout(250)
+
+                    parsed = parser.parse_jobs(
+                        self.page,
+                        limit=min(max(limit * 2, 50), 250),
+                        skip_ids=seen_job_ids,
+                    )
+                    merge(parsed)
+                    if len(results) >= limit:
+                        return results[:limit]
+
+                    if len(results) > before_len:
+                        no_progress = 0
+                    else:
+                        no_progress += 1
+                        if no_progress >= self._client_cfg.scroll.max_no_progress_scrolls:
+                            break
+
+                return results[:limit]
+            except FeedLoadError:
+                if attempt == 0:
+                    self.page.reload(wait_until="domcontentloaded")
+                    continue
+                raise
+        # Unreachable: loop either returns results or raises.
+        return []
 
     def is_logged_in(self) -> bool:
         if not self._entered:
@@ -548,7 +664,7 @@ class LinkedInClient:
         if is_logged_out(self.page.url):
             return False
         try:
-            return has_auth_cookie(list(self.context.cookies()))
+            return has_auth_cookie([dict(c) for c in self.context.cookies()])
         except Exception:
             return False
 

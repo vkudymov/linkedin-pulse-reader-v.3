@@ -1,8 +1,9 @@
 from __future__ import annotations
 
 import hashlib
-from datetime import datetime, timezone
-from typing import Any, Mapping
+from collections.abc import Mapping
+from datetime import UTC, datetime
+from typing import Any
 
 from storage.core.response import expect_list
 from storage.errors import StorageResponseError
@@ -21,7 +22,7 @@ class FeedPostRepository:
         linkedin_account_id: str,
         posts: list[dict[str, Any]],
     ) -> int:
-        fetched_at = datetime.now(timezone.utc).isoformat()
+        fetched_at = datetime.now(UTC).isoformat()
         rows: list[FeedPostUpsert] = [
             _to_upsert_row(
                 linkedin_account_id=linkedin_account_id,
@@ -56,7 +57,7 @@ class FeedPostRepository:
         analysis_payload: dict[str, Any] | None,
     ) -> None:
         # Updates one row by (linkedin_account_id, source_key); does not touch post body fields.
-        now = datetime.now(timezone.utc).isoformat()
+        now = datetime.now(UTC).isoformat()
         payload: dict[str, Any] = {
             "is_relevant": is_relevant,
             "comment_text": comment_text,
@@ -189,10 +190,16 @@ def _to_upsert_row(
         "author_json": author_json,
         "content": post.get("content") if isinstance(post.get("content"), str) else None,
         "published_at_text": (
-            post.get("published_at_text") if isinstance(post.get("published_at_text"), str) else None
+            post.get("published_at_text")
+            if isinstance(post.get("published_at_text"), str)
+            else None
         ),
-        "reactions_count": post.get("reactions_count") if isinstance(post.get("reactions_count"), int) else None,
-        "comments_count": post.get("comments_count") if isinstance(post.get("comments_count"), int) else None,
+        "reactions_count": (
+            post.get("reactions_count") if isinstance(post.get("reactions_count"), int) else None
+        ),
+        "comments_count": (
+            post.get("comments_count") if isinstance(post.get("comments_count"), int) else None
+        ),
         "media_urls": media_urls,
         "raw_extra": raw_extra,
     }

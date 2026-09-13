@@ -46,6 +46,7 @@ export async function middleware(request: NextRequest) {
 
   const isProtected =
     path.startsWith("/posts") ||
+    path.startsWith("/jobs") ||
     path.startsWith("/account") ||
     path.startsWith("/prompts") ||
     path.startsWith("/admin");

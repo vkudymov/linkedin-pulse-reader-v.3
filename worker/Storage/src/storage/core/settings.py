@@ -23,7 +23,7 @@ class SupabaseSettings:
     user_jwt: str | None = None
 
     @staticmethod
-    def from_env(*, user_jwt: str | None = None) -> "SupabaseSettings":
+    def from_env(*, user_jwt: str | None = None) -> SupabaseSettings:
         url = os.getenv("SUPABASE_URL", "").strip()
         key = (
             os.getenv("SUPABASE_SERVICE_ROLE_KEY", "").strip()

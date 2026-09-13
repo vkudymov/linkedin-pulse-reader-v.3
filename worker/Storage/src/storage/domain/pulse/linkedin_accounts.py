@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import Any
 
 from storage.core.response import expect_list, expect_single
@@ -47,7 +47,7 @@ class LinkedInAccountRepository:
         label: str | None = None,
         li_profile_url: str | None = None,
     ) -> LinkedInAccountRow:
-        now = datetime.now(timezone.utc).isoformat()
+        now = datetime.now(UTC).isoformat()
         payload: LinkedInAccountCreate = {
             "user_id": user_id,
             "cookies_json": _playwright_cookies_from_snapshot(session_snapshot),
@@ -67,7 +67,7 @@ class LinkedInAccountRepository:
         account_id: str,
         session_snapshot: dict[str, Any],
     ) -> LinkedInAccountRow:
-        now = datetime.now(timezone.utc).isoformat()
+        now = datetime.now(UTC).isoformat()
         resp = (
             self._client.table("linkedin_accounts")
             .update(

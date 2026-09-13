@@ -159,11 +159,40 @@ class FakeLLMClient:
             return self._fixed_response
 
         u = (user or "").lower()
+        # Job analysis must win over the post "relevant"+"json" heuristic:
+        # job descriptions often contain the word "relevant".
+        if _looks_like_job_analysis_prompt(u):
+            return json.dumps(
+                {
+                    "match": False,
+                    "score": 0,
+                    "reason": (
+                        "Fake LLM is configured. "
+                        "Set POST_ANALYZER_LLM_PROVIDER to openai or ollama for real analysis."
+                    ),
+                    "matched_requirements": [],
+                    "missing_requirements": [],
+                    "red_flags": [],
+                }
+            )
         if "relevant" in u and "json" in u:
             return json.dumps({"relevant": False})
         if "comment" in u:
             return "Thanks for sharing—interesting point!"
         return "ok"
+
+
+def _looks_like_job_analysis_prompt(user_lower: str) -> bool:
+    if "matched_requirements" in user_lower or "missing_requirements" in user_lower:
+        return True
+    if "red_flags" in user_lower:
+        return True
+    return (
+        "match" in user_lower
+        and "score" in user_lower
+        and "reason" in user_lower
+        and "requirement" in user_lower
+    )
 
 
 def _is_local_base_url(base_url: str) -> bool:

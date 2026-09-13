@@ -134,6 +134,10 @@ def _launch_persistent_context(
     *,
     args: list[str],
 ) -> BrowserContext:
+    if cfg.user_data_dir is None:
+        raise BrowserLifecycleError(
+            "BrowserConfig.user_data_dir must be set to use a persistent context."
+        )
     try:
         return pw.chromium.launch_persistent_context(
             user_data_dir=cfg.user_data_dir,

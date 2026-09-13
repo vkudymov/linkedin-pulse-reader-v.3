@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import Any, TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 from .settings import SupabaseSettings
 
@@ -13,7 +13,7 @@ def create_supabase_client(
     supabase_url: str | None = None,
     supabase_key: str | None = None,
     user_jwt: str | None = None,
-) -> "Client":
+) -> Client:
     """
     Create a Supabase client.
 

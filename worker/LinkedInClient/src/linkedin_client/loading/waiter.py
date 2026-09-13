@@ -12,6 +12,7 @@ EN: Waiting and stabilization for a dynamic feed.
 
 import time
 from dataclasses import dataclass
+from typing import Literal
 
 from playwright.sync_api import Page, TimeoutError as PlaywrightTimeoutError
 
@@ -145,7 +146,7 @@ class FeedWaiter:
         selectors: tuple[str, ...],
         deadline: float,
         *,
-        state: str = "visible",
+        state: Literal["attached", "detached", "hidden", "visible"] = "visible",
     ) -> None:
         last_error: Exception | None = None
         for idx, sel in enumerate(selectors):

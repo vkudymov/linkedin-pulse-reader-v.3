@@ -3,6 +3,7 @@ from __future__ import annotations
 from typing import Any
 
 from .core.client import create_supabase_client
+from .domain.jobs import JobAnalysisRepository, JobRepository, JobSearchRepository
 from .domain.pulse import FeedPostRepository, LinkedInAccountRepository
 
 
@@ -17,4 +18,8 @@ class PulseStorage:
         self.client = client or create_supabase_client()
         self.linkedin_accounts = LinkedInAccountRepository(self.client)
         self.feed_posts = FeedPostRepository(self.client)
+        # Job Search MVP storage (kept separate from feed_posts).
+        self.job_searches = JobSearchRepository(self.client)
+        self.jobs = JobRepository(self.client)
+        self.job_analyses = JobAnalysisRepository(self.client)
 

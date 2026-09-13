@@ -1,6 +1,7 @@
 {
   "nav": {
     "posts": "Posts",
+    "jobs": "Jobs",
     "prompts": "Prompts",
     "account": "Account",
     "admin": "Admin",
@@ -123,6 +124,10 @@
   },
   "prompts": {
     "title": "Prompts",
+    "tabs": {
+      "posts": "Posts",
+      "jobs": "Jobs"
+    },
     "settings": {
       "title": "Prompt settings",
       "description": "Edit the prompts and save them. After that you can run the post search."
@@ -130,6 +135,110 @@
     "run": {
       "title": "Run search",
       "description": "After the search completes, the post feed will refresh automatically."
+    }
+  },
+  "jobs": {
+    "page": {
+      "title": "Jobs",
+      "filters": {
+        "all": "All",
+        "match": "Matching",
+        "noMatch": "Rejected"
+      },
+      "match": "Match",
+      "noMatch": "No match",
+      "reason": "Reason",
+      "description": "Description",
+      "matched": "Matched",
+      "missing": "Missing",
+      "redFlags": "Red flags",
+      "openLinkedIn": "Open on LinkedIn",
+      "contentUnavailable": "Job description is unavailable",
+      "status": {
+        "accepted": "accepted",
+        "rejected": "rejected"
+      },
+      "meta": {
+        "analyzed": "Analyzed",
+        "fetched": "Fetched",
+        "company": "Company",
+        "location": "Location"
+      },
+      "insights": {
+        "on_site": "On-site",
+        "remote": "Remote",
+        "hybrid": "Hybrid",
+        "full_time": "Full-time",
+        "part_time": "Part-time",
+        "contract": "Contract",
+        "temporary": "Temporary",
+        "internship": "Internship",
+        "freelance": "Freelance"
+      },
+      "actions": {
+        "details": "Details",
+        "collapse": "Collapse",
+        "openLinkedIn": "Open on LinkedIn",
+        "delete": "Delete"
+      },
+      "delete": {
+        "confirm": "Delete this job? This will remove it from the list and the database.",
+        "failed": "Failed to delete job."
+      },
+      "emptySearches": "Create a job search first.",
+      "goToPrompts": "Go to Prompts",
+      "emptyResults": "No results yet. Run the search from Prompts."
+    },
+    "prompts": {
+      "create": {
+        "title": "Create job search",
+        "description": "Define what to search on LinkedIn and how to filter jobs with AI.",
+        "submit": "Create",
+        "pending": "Creating..."
+      },
+      "list": {
+        "title": "Job searches",
+        "empty": "No job searches yet.",
+        "newMatches": "{count} new matching jobs"
+      },
+      "status": {
+        "active": "Active",
+        "paused": "Paused"
+      },
+      "edit": {
+        "toggle": "Edit",
+        "collapse": "Collapse",
+        "save": "Save",
+        "saving": "Saving...",
+        "saved": "Saved",
+        "delete": "Delete"
+      },
+      "fields": {
+        "title": "Title",
+        "searchQuery": "Search query (LinkedIn Jobs)",
+        "searchQueryPlaceholder": "\"Prompt Engineer\" OR \"LLM Engineer\"",
+        "location": "Location",
+        "locationPlaceholder": "Europe / Remote / Berlin",
+        "filterPrompt": "AI filter prompt",
+        "markerHint": "Must include marker: {marker}"
+      },
+      "defaultFilterPrompt": "Return strict JSON only (match/score/reason/requirements).",
+      "errors": {
+        "loadFailed": "Failed to load job searches.",
+        "saveFailed": "Failed to save job search.",
+        "deleteFailed": "Failed to delete job search."
+      }
+    },
+    "runner": {
+      "idle": "Run",
+      "pending": "Running...",
+      "statusLabel": "Status:",
+      "errors": {
+        "startFailed": "Failed to start job search.",
+        "statusFailed": "Failed to get status.",
+        "runFailed": "Job search failed.",
+        "timeout": "Job search takes too long."
+      }
     }
   },
   "admin": {

@@ -13,7 +13,7 @@ export function AppHeader({
 }: {
   title: string;
   subtitle?: string | null;
-  active?: "posts" | "account" | "prompts" | "admin";
+  active?: "posts" | "jobs" | "account" | "prompts" | "admin";
   isAdmin?: boolean;
 }) {
   const t = useTranslations("nav");
@@ -35,6 +35,15 @@ export function AppHeader({
             href="/posts"
           >
             {t("posts")}
+          </Link>
+          <Link
+            className={[
+              "text-sm underline-offset-4 hover:text-foreground hover:underline",
+              active === "jobs" ? "text-foreground" : "text-muted-foreground",
+            ].join(" ")}
+            href="/jobs"
+          >
+            {t("jobs")}
           </Link>
           <Link
             className={[

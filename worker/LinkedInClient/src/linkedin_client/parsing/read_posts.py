@@ -188,12 +188,12 @@ def read_posts(page: Page, limit: int) -> list[dict[str, Any]]:
         for sel in _TEXT_BLOCK_FALLBACK_SELECTORS:
             try:
                 loc = page.locator(sel)
-                c = loc.count()
+                count = loc.count()
             except Exception:
                 continue
-            if c > 0:
+            if count > 0:
                 text_boxes = loc
-                total = c
+                total = count
                 break
 
     results: list[dict[str, Any]] = []

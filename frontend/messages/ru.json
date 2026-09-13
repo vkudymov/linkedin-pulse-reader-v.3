@@ -1,6 +1,7 @@
 {
   "nav": {
     "posts": "Посты",
+    "jobs": "Вакансии",
     "prompts": "Промпты",
     "account": "Личный кабинет",
     "admin": "Админ",
@@ -123,6 +124,10 @@
   },
   "prompts": {
     "title": "Промпты",
+    "tabs": {
+      "posts": "Посты",
+      "jobs": "Вакансии"
+    },
     "settings": {
       "title": "Настройки промптов",
       "description": "Отредактируйте промпты и сохраните. После этого можно запустить поиск постов."
@@ -130,6 +135,110 @@
     "run": {
       "title": "Запуск поиска",
       "description": "После завершения поиска лента постов обновится автоматически."
+    }
+  },
+  "jobs": {
+    "page": {
+      "title": "Вакансии",
+      "filters": {
+        "all": "Все",
+        "match": "Подходящие",
+        "noMatch": "Не подходят"
+      },
+      "match": "Подходит",
+      "noMatch": "Не подходит",
+      "reason": "Причина",
+      "description": "Описание",
+      "matched": "Совпало",
+      "missing": "Не хватает",
+      "redFlags": "Риски",
+      "openLinkedIn": "Открыть в LinkedIn",
+      "contentUnavailable": "Описание вакансии недоступно",
+      "status": {
+        "accepted": "принято",
+        "rejected": "отклонено"
+      },
+      "meta": {
+        "analyzed": "Анализ",
+        "fetched": "Загружено",
+        "company": "Компания",
+        "location": "Локация"
+      },
+      "insights": {
+        "on_site": "Работа в офисе",
+        "remote": "Удалённо",
+        "hybrid": "Гибрид",
+        "full_time": "Полный рабочий день",
+        "part_time": "Частичная занятость",
+        "contract": "Контракт",
+        "temporary": "Временная",
+        "internship": "Стажировка",
+        "freelance": "Фриланс"
+      },
+      "actions": {
+        "details": "Подробнее",
+        "collapse": "Свернуть",
+        "openLinkedIn": "Открыть в LinkedIn",
+        "delete": "Удалить"
+      },
+      "delete": {
+        "confirm": "Удалить эту вакансию? Это удалит её из списка и из базы.",
+        "failed": "Не удалось удалить вакансию."
+      },
+      "emptySearches": "Сначала создай поиск вакансий.",
+      "goToPrompts": "Перейти в Промпты",
+      "emptyResults": "Пока нет результатов. Запусти поиск в Промптах."
+    },
+    "prompts": {
+      "create": {
+        "title": "Создать поиск вакансий",
+        "description": "Определите, что искать на LinkedIn, и как фильтровать вакансии через AI.",
+        "submit": "Создать",
+        "pending": "Создаём..."
+      },
+      "list": {
+        "title": "Поиски вакансий",
+        "empty": "Пока нет поисков вакансий.",
+        "newMatches": "{count} новых подходящих вакансий"
+      },
+      "status": {
+        "active": "Активен",
+        "paused": "Пауза"
+      },
+      "edit": {
+        "toggle": "Редактировать",
+        "collapse": "Свернуть",
+        "save": "Сохранить",
+        "saving": "Сохраняем...",
+        "saved": "Сохранено",
+        "delete": "Удалить"
+      },
+      "fields": {
+        "title": "Название",
+        "searchQuery": "Поисковый запрос (LinkedIn Jobs)",
+        "searchQueryPlaceholder": "\"Prompt Engineer\" OR \"LLM Engineer\"",
+        "location": "Локация",
+        "locationPlaceholder": "Европа / Remote / Berlin",
+        "filterPrompt": "AI промпт-фильтр",
+        "markerHint": "Должен содержать маркер: {marker}"
+      },
+      "defaultFilterPrompt": "Верни только строгий JSON (match/score/reason/requirements).",
+      "errors": {
+        "loadFailed": "Не удалось загрузить поиски вакансий.",
+        "saveFailed": "Не удалось сохранить поиск вакансий.",
+        "deleteFailed": "Не удалось удалить поиск вакансий."
+      }
+    },
+    "runner": {
+      "idle": "Запустить",
+      "pending": "Запускаем...",
+      "statusLabel": "Статус:",
+      "errors": {
+        "startFailed": "Не удалось запустить поиск вакансий.",
+        "statusFailed": "Не удалось получить статус.",
+        "runFailed": "Поиск вакансий завершился ошибкой.",
+        "timeout": "Поиск вакансий выполняется слишком долго."
+      }
     }
   },
   "admin": {

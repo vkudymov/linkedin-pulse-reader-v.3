@@ -12,12 +12,14 @@ EN: Navigation to LinkedIn feed and auth-redirect detection.
 
 from contextlib import suppress
 from dataclasses import dataclass
+from typing import Any
 
 from playwright.sync_api import Error as PlaywrightError
 from playwright.sync_api import Page, TimeoutError as PlaywrightTimeoutError
 
 from ..exceptions import FeedLoadError, LoginRequiredError
 
+_session_is_logged_out: Any
 try:
     from session_snapshot import is_logged_out as _session_is_logged_out
 except ImportError:  # pragma: no cover
