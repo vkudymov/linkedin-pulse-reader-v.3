@@ -6,7 +6,6 @@ from dataclasses import dataclass
 from job_search.analysis import JobMatchResult, parse_job_match_json
 from job_search.domain import Job, JobSearchSpec
 
-
 def _extract_json(text: str) -> str:
     """
     Best-effort extraction of a JSON object from LLM output.

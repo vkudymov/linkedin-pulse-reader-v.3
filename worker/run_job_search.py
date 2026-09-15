@@ -117,9 +117,38 @@ def main() -> None:
     )
 
     from post_analyzer.llm_manager import LLMProviderManager  # type: ignore[import-not-found]
-    from post_analyzer.config import load_llm_manager_settings_from_env  # type: ignore[import-not-found]
+    from post_analyzer.config import (  # type: ignore[import-not-found]
+        LLMProviderSettings,
+        load_llm_manager_settings_from_env,
+    )
 
     mgr = LLMProviderManager(settings=load_llm_manager_settings_from_env())
+    desc = mgr.describe()
+    # Auto-switch to a local OpenAI-compatible server (LM Studio) if LLM is left in fake mode.
+    # Mirrors behavior in run_post_search.py to avoid confusing score=0 everywhere.
+    if desc.get("provider") == "fake" and desc.get("mode") == "fake":
+        lmstudio_base_url = (
+            os.getenv("POST_ANALYZER_OPENAI_BASE_URL")
+            or os.getenv("OPENAI_BASE_URL")
+            or "http://127.0.0.1:1234/v1"
+        )
+        lmstudio_model = (
+            os.getenv("POST_ANALYZER_LLM_MODEL")
+            or os.getenv("POST_ANALYZER_OPENAI_MODEL")
+            or os.getenv("OPENAI_MODEL")
+            or "deepseek-coder-v2-lite-instruct"
+        )
+        mgr.switch(
+            primary=LLMProviderSettings(
+                provider="openai",
+                mode="real",
+                model=lmstudio_model,
+                base_url=lmstudio_base_url,
+            ),
+            fallback=None,
+        )
+        # Fail fast if LM Studio isn't reachable.
+        mgr.test_connection()
     analyzer = LlmJobAnalyzer(llm_client=mgr)
 
     with LinkedInClient(config=cfg, session_snapshot=snapshot) as client:
