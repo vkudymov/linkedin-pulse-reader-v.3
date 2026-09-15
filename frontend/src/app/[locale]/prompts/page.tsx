@@ -8,6 +8,7 @@ import { JobSearchesPanel } from "@/components/jobs/JobSearchesPanel";
 import { Link } from "@/i18n/navigation";
 import { requireNotBlocked } from "@/lib/auth/blocked";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
+import { loadJobSearchRows } from "@/lib/jobSearches";
 import type { UserProfileRow } from "@/types/database";
 
 export default async function PromptsPage({
@@ -34,6 +35,28 @@ export default async function PromptsPage({
 
   const profile = (profileResp.data || null) as UserProfileRow | null;
   const activeTab = tab === "jobs" ? "jobs" : "posts";
+
+  let jobSearchesInitial: any[] = [];
+  let supportsLinkedinFilters = false;
+  if (activeTab === "jobs") {
+    const loaded = await loadJobSearchRows(supabase, data.user.id);
+    supportsLinkedinFilters = loaded.usedFiltersColumn;
+    const rows = loaded.rows;
+    const withCounts = await Promise.all(
+      rows.map(async (s) => {
+        const lastRunAt = typeof s.last_run_at === "string" ? s.last_run_at : null;
+        if (!lastRunAt) return { ...s, new_match_count: 0 };
+        const { count } = await supabase
+          .from("job_analyses")
+          .select("id", { count: "exact", head: true })
+          .eq("job_search_id", s.id)
+          .eq("match", true)
+          .gte("analyzed_at", lastRunAt);
+        return { ...s, new_match_count: count ?? 0 };
+      }),
+    );
+    jobSearchesInitial = withCounts as any[];
+  }
 
   return (
     <div className="min-h-screen bg-background text-foreground">
@@ -71,33 +94,7 @@ export default async function PromptsPage({
         </div>
 
         {activeTab === "jobs" ? (
-          <JobSearchesPanel
-            initial={await (async () => {
-              const { data: searches } = await supabase
-                .from("job_searches")
-                .select(
-                  "id,title,search_query,location,filter_prompt,status,last_run_at,created_at,updated_at",
-                )
-                .eq("user_id", data.user.id)
-                .order("created_at", { ascending: true });
-
-              const rows = Array.isArray(searches) ? searches : [];
-              const withCounts = await Promise.all(
-                rows.map(async (s) => {
-                  const lastRunAt = typeof s.last_run_at === "string" ? s.last_run_at : null;
-                  if (!lastRunAt) return { ...s, new_match_count: 0 };
-                  const { count } = await supabase
-                    .from("job_analyses")
-                    .select("id", { count: "exact", head: true })
-                    .eq("job_search_id", s.id)
-                    .eq("match", true)
-                    .gte("analyzed_at", lastRunAt);
-                  return { ...s, new_match_count: count ?? 0 };
-                }),
-              );
-              return withCounts as any;
-            })()}
-          />
+          <JobSearchesPanel initial={jobSearchesInitial as any} supportsLinkedinFilters={supportsLinkedinFilters} />
         ) : (
           <>
             <div className="overflow-hidden rounded-2xl border border-border bg-card">

@@ -1,10 +1,23 @@
 import { createSupabaseServerClient } from "@/lib/supabase/server";
+import { normalizeLinkedInJobFilters } from "@/lib/linkedinJobFilters";
 
 const MARKER = "<<<JOB_TEXT>>>";
+const SELECT_WITH_FILTERS =
+  "id,title,search_query,location,filter_prompt,status,last_run_at,linkedin_filters,created_at,updated_at";
+const SELECT_WITHOUT_FILTERS =
+  "id,title,search_query,location,filter_prompt,status,last_run_at,created_at,updated_at";
 
 function normalizeStatus(v: unknown): "active" | "paused" | null {
   if (v === "active" || v === "paused") return v;
   return null;
+}
+
+function isMissingLinkedinFiltersColumn(error: unknown): boolean {
+  if (!error || typeof error !== "object") return false;
+  const e = error as { code?: unknown; message?: unknown };
+  const code = typeof e.code === "string" ? e.code : "";
+  const msg = typeof e.message === "string" ? e.message : "";
+  return code === "42703" || msg.includes("linkedin_filters");
 }
 
 export async function PATCH(request: Request, ctx: { params: Promise<{ job_search_id: string }> }) {
@@ -35,17 +48,36 @@ export async function PATCH(request: Request, ctx: { params: Promise<{ job_searc
   }
   const st = normalizeStatus(body.status);
   if (st) payload.status = st;
+  if (body.linkedin_filters !== undefined) {
+    payload.linkedin_filters = normalizeLinkedInJobFilters(body.linkedin_filters);
+  }
 
-  const { data: updated, error } = await supabase
+  const first = await supabase
     .from("job_searches")
     .update(payload)
     .eq("id", job_search_id)
     .eq("user_id", data.user.id)
-    .select("id,title,search_query,location,filter_prompt,status,last_run_at,created_at,updated_at")
+    .select(SELECT_WITH_FILTERS)
     .maybeSingle();
 
-  if (error) return Response.json({ ok: false, error: error.message }, { status: 400 });
-  return Response.json({ ok: true, job_search: updated }, { status: 200 });
+  if (!first.error) return Response.json({ ok: true, job_search: first.data }, { status: 200 });
+
+  // Backward-compatible: if DB migration wasn't applied yet, ignore linkedin_filters.
+  if (!isMissingLinkedinFiltersColumn(first.error) || payload.linkedin_filters === undefined) {
+    return Response.json({ ok: false, error: first.error.message }, { status: 400 });
+  }
+
+  delete payload.linkedin_filters;
+  const second = await supabase
+    .from("job_searches")
+    .update(payload)
+    .eq("id", job_search_id)
+    .eq("user_id", data.user.id)
+    .select(SELECT_WITHOUT_FILTERS)
+    .maybeSingle();
+
+  if (second.error) return Response.json({ ok: false, error: second.error.message }, { status: 400 });
+  return Response.json({ ok: true, job_search: second.data }, { status: 200 });
 }
 
 export async function DELETE(_request: Request, ctx: { params: Promise<{ job_search_id: string }> }) {

@@ -42,6 +42,7 @@ class JobSearchRepository:
         location: str | None,
         filter_prompt: str,
         status: str = "active",
+        linkedin_filters: dict[str, Any] | None = None,
     ) -> JobSearchRow:
         payload: JobSearchCreate = {
             "user_id": user_id,
@@ -52,6 +53,8 @@ class JobSearchRepository:
             "status": status,
             "last_run_at": None,
         }
+        if linkedin_filters is not None:
+            payload["linkedin_filters"] = linkedin_filters
         resp = self._client.table("job_searches").insert(payload).execute()
         return expect_single(resp)  # type: ignore[return-value]
 
@@ -65,6 +68,7 @@ class JobSearchRepository:
         filter_prompt: str | None = None,
         status: str | None = None,
         last_run_at: str | None = None,
+        linkedin_filters: dict[str, Any] | None = None,
     ) -> JobSearchRow:
         now = datetime.now(UTC).isoformat()
         payload: dict[str, Any] = {"updated_at": now}
@@ -80,6 +84,8 @@ class JobSearchRepository:
             payload["status"] = status
         if last_run_at is not None:
             payload["last_run_at"] = last_run_at
+        if linkedin_filters is not None:
+            payload["linkedin_filters"] = linkedin_filters
 
         resp = (
             self._client.table("job_searches")

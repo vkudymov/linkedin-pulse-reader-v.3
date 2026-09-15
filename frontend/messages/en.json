@@ -222,6 +222,36 @@
         "filterPrompt": "AI filter prompt",
         "markerHint": "Must include marker: {marker}"
       },
+      "linkedinFilters": {
+        "title": "LinkedIn filters",
+        "remote": "Remote",
+        "easyApply": "Easy Apply",
+        "company": "Company",
+        "hint": "These filters are applied when the LinkedIn job search starts.",
+        "datePosted": {
+          "any": "Date posted",
+          "day": "Past 24 hours",
+          "week": "Past week",
+          "month": "Past month"
+        },
+        "experience": {
+          "any": "Experience",
+          "internship": "Internship",
+          "entry": "Entry level",
+          "associate": "Associate",
+          "midSenior": "Mid-Senior",
+          "director": "Director",
+          "executive": "Executive"
+        },
+        "employment": {
+          "any": "Employment type",
+          "fullTime": "Full-time",
+          "partTime": "Part-time",
+          "contract": "Contract",
+          "temporary": "Temporary",
+          "internship": "Internship"
+        }
+      },
       "defaultFilterPrompt": "Return strict JSON only (match/score/reason/requirements).",
       "errors": {
         "loadFailed": "Failed to load job searches.",

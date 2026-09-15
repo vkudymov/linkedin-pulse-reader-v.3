@@ -41,6 +41,7 @@ class JobSearchSpec:
     location: str | None
     filter_prompt: str
     limit: int = 25
+    linkedin_filters: Mapping[str, Any] | None = None
 
 
 @dataclass(frozen=True, slots=True)

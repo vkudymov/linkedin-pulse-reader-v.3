@@ -80,6 +80,7 @@ def main() -> None:
     search_query = str(js_row.get("search_query") or "").strip()
     location = js_row.get("location") if isinstance(js_row.get("location"), str) else None
     filter_prompt = str(js_row.get("filter_prompt") or "")
+    linkedin_filters = js_row.get("linkedin_filters") if isinstance(js_row.get("linkedin_filters"), dict) else None
 
     if not search_query:
         raise SystemExit("ERROR: search_query is empty")
@@ -112,6 +113,7 @@ def main() -> None:
         location=location,
         filter_prompt=filter_prompt,
         limit=limit,
+        linkedin_filters=linkedin_filters,
     )
 
     from post_analyzer.llm_manager import LLMProviderManager  # type: ignore[import-not-found]

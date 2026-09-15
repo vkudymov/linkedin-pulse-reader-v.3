@@ -542,6 +542,7 @@ class LinkedInClient:
         keywords: str,
         location: str | None = None,
         limit: int = 25,
+        filters: Mapping[str, Any] | None = None,
     ) -> list[Job]:
         """
         High-level “fetch LinkedIn jobs search results” operation.
@@ -561,6 +562,7 @@ class LinkedInClient:
         waiter = JobsWaiter(timeout_ms=self._client_cfg.browser.timeout_ms)
         scroller = HumanScroller(config=self._client_cfg.scroll)
         parser = JobParser()
+        location_text = location.strip() if isinstance(location, str) else None
 
         def job_key(j: Job) -> str | None:
             if isinstance(j.job_id, str) and j.job_id.strip():
@@ -571,8 +573,16 @@ class LinkedInClient:
 
         for attempt in range(2):
             try:
-                navigator.goto_search(self.page, keywords=keywords.strip(), location=location)
+                navigator.goto_search(
+                    self.page,
+                    keywords=keywords.strip(),
+                    # Do not rely on URL `location=` guessing; we set it via UI below.
+                    location=None,
+                    filters=filters,
+                )
                 waiter.wait_for_jobs_ready(self.page)
+                if location_text:
+                    navigator.apply_location_first_match(self.page, location=location_text)
 
                 results: list[Job] = []
                 seen: set[str] = set()
@@ -599,9 +609,12 @@ class LinkedInClient:
                         navigator.goto_search(
                             self.page,
                             keywords=keywords.strip(),
-                            location=location,
+                            location=None,
+                            filters=filters,
                         )
                         waiter.wait_for_jobs_ready(self.page)
+                        if location_text:
+                            navigator.apply_location_first_match(self.page, location=location_text)
 
                 parse_limit = min(max(limit * 2, 50), 250)
                 parsed = parser.parse_jobs(

@@ -9,6 +9,12 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { JobSearchRunButton } from "@/components/jobs/JobSearchRunButton";
+import { LinkedInJobFiltersBar } from "@/components/jobs/LinkedInJobFiltersBar";
+import {
+  DEFAULT_LINKEDIN_JOB_FILTERS,
+  normalizeLinkedInJobFilters,
+  type LinkedInJobFilters,
+} from "@/lib/linkedinJobFilters";
 import { cn } from "@/lib/utils";
 
 export type JobSearchDto = {
@@ -19,12 +25,19 @@ export type JobSearchDto = {
   filter_prompt: string;
   status: "active" | "paused" | string;
   last_run_at: string | null;
+  linkedin_filters?: LinkedInJobFilters | Record<string, unknown> | null;
   new_match_count?: number;
 };
 
 const MARKER = "<<<JOB_TEXT>>>";
 
-export function JobSearchesPanel({ initial }: { initial: JobSearchDto[] }) {
+export function JobSearchesPanel({
+  initial,
+  supportsLinkedinFilters = true,
+}: {
+  initial: JobSearchDto[];
+  supportsLinkedinFilters?: boolean;
+}) {
   const t = useTranslations("jobs.prompts");
   const [items, setItems] = useState<JobSearchDto[]>(initial);
   const [pending, setPending] = useState(false);
@@ -36,6 +49,7 @@ export function JobSearchesPanel({ initial }: { initial: JobSearchDto[] }) {
   const [filterPrompt, setFilterPrompt] = useState(
     `${t("defaultFilterPrompt")}\n\n${MARKER}\n`,
   );
+  const [linkedinFilters, setLinkedinFilters] = useState<LinkedInJobFilters>(DEFAULT_LINKEDIN_JOB_FILTERS);
 
   const canCreate = useMemo(() => {
     return (
@@ -69,6 +83,7 @@ export function JobSearchesPanel({ initial }: { initial: JobSearchDto[] }) {
           search_query: searchQuery,
           location: location.trim() || null,
           filter_prompt: filterPrompt,
+          linkedin_filters: linkedinFilters,
           status: "active",
         }),
       });
@@ -77,6 +92,7 @@ export function JobSearchesPanel({ initial }: { initial: JobSearchDto[] }) {
       setTitle("");
       setSearchQuery("");
       setLocation("");
+      setLinkedinFilters(DEFAULT_LINKEDIN_JOB_FILTERS);
       await refresh();
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : t("errors.saveFailed"));
@@ -133,6 +149,20 @@ export function JobSearchesPanel({ initial }: { initial: JobSearchDto[] }) {
               placeholder={t("fields.locationPlaceholder")}
             />
           </div>
+          <LinkedInJobFiltersBar
+            value={linkedinFilters}
+            onChange={setLinkedinFilters}
+            disabled={pending || !supportsLinkedinFilters}
+          />
+          {!supportsLinkedinFilters ? (
+            <p className="text-xs text-muted-foreground">
+              Фильтры LinkedIn не сохраняются, пока не применена миграция{" "}
+              <code className="rounded bg-muted px-1 py-0.5">
+                20260913180000_job_searches_linkedin_filters.sql
+              </code>
+              .
+            </p>
+          ) : null}
           <div className="grid gap-2">
             <Label htmlFor="job_filter">{t("fields.filterPrompt")}</Label>
             <Textarea
@@ -170,6 +200,7 @@ export function JobSearchesPanel({ initial }: { initial: JobSearchDto[] }) {
             busy={pending}
             onSaved={refresh}
             onRemove={remove}
+            supportsLinkedinFilters={supportsLinkedinFilters}
           />
         ))}
       </div>
@@ -182,11 +213,13 @@ function JobSearchCard({
   busy,
   onSaved,
   onRemove,
+  supportsLinkedinFilters,
 }: {
   item: JobSearchDto;
   busy: boolean;
   onSaved: () => Promise<void>;
   onRemove: (id: string) => Promise<void>;
+  supportsLinkedinFilters: boolean;
 }) {
   const t = useTranslations("jobs.prompts");
   const [open, setOpen] = useState(false);
@@ -197,12 +230,16 @@ function JobSearchCard({
   const [searchQuery, setSearchQuery] = useState(item.search_query);
   const [location, setLocation] = useState(item.location ?? "");
   const [filterPrompt, setFilterPrompt] = useState(item.filter_prompt);
+  const [linkedinFilters, setLinkedinFilters] = useState<LinkedInJobFilters>(
+    normalizeLinkedInJobFilters(item.linkedin_filters),
+  );
 
   useEffect(() => {
     setTitle(item.title);
     setSearchQuery(item.search_query);
     setLocation(item.location ?? "");
     setFilterPrompt(item.filter_prompt);
+    setLinkedinFilters(normalizeLinkedInJobFilters(item.linkedin_filters));
   }, [item]);
 
   const matchCount = typeof item.new_match_count === "number" ? item.new_match_count : 0;
@@ -225,9 +262,11 @@ function JobSearchCard({
           search_query: searchQuery,
           location,
           filter_prompt: filterPrompt,
+          ...(supportsLinkedinFilters ? { linkedin_filters: linkedinFilters } : {}),
         }),
       });
       const json = (await resp.json().catch(() => null)) as { ok?: boolean; error?: string } | null;
+
       if (!resp.ok || !json?.ok) throw new Error(json?.error || t("errors.saveFailed"));
       await onSaved();
       setSaved(true);
@@ -286,6 +325,11 @@ function JobSearchCard({
               disabled={busy || saving}
             />
           </div>
+          <LinkedInJobFiltersBar
+            value={linkedinFilters}
+            onChange={setLinkedinFilters}
+            disabled={busy || saving}
+          />
           <div className="grid gap-2">
             <Label>{t("fields.filterPrompt")}</Label>
             <Textarea

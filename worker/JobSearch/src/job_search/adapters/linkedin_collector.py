@@ -39,6 +39,7 @@ class LinkedInJobCollector:
             keywords=spec.search_query,
             location=spec.location,
             limit=spec.limit,
+            filters=spec.linkedin_filters,
         )
 
         out: list[Job] = []

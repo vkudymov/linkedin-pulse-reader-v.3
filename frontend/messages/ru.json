@@ -222,6 +222,36 @@
         "filterPrompt": "AI промпт-фильтр",
         "markerHint": "Должен содержать маркер: {marker}"
       },
+      "linkedinFilters": {
+        "title": "Фильтры LinkedIn",
+        "remote": "Удаленная работа",
+        "easyApply": "Простая подача заявки",
+        "company": "Компания",
+        "hint": "Эти фильтры применяются при запуске поиска на LinkedIn.",
+        "datePosted": {
+          "any": "Дата размещения",
+          "day": "За сутки",
+          "week": "За неделю",
+          "month": "За месяц"
+        },
+        "experience": {
+          "any": "Опыт работы",
+          "internship": "Стажировка",
+          "entry": "Начальный",
+          "associate": "Младший",
+          "midSenior": "Средний уровень",
+          "director": "Директор",
+          "executive": "Руководитель"
+        },
+        "employment": {
+          "any": "Тип занятости",
+          "fullTime": "Полный день",
+          "partTime": "Частичная",
+          "contract": "Контракт",
+          "temporary": "Временная",
+          "internship": "Стажировка"
+        }
+      },
       "defaultFilterPrompt": "Верни только строгий JSON (match/score/reason/requirements).",
       "errors": {
         "loadFailed": "Не удалось загрузить поиски вакансий.",

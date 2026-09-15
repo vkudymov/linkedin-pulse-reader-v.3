@@ -12,6 +12,7 @@ class JobSearchRow(TypedDict):
     filter_prompt: str
     status: str  # "active" | "paused"
     last_run_at: str | None
+    linkedin_filters: NotRequired[dict[str, Any] | None]
     created_at: str
     updated_at: str
 
@@ -24,6 +25,7 @@ class JobSearchCreate(TypedDict):
     location: NotRequired[str | None]
     status: NotRequired[str]
     last_run_at: NotRequired[str | None]
+    linkedin_filters: NotRequired[dict[str, Any] | None]
 
 
 class JobRow(TypedDict):
