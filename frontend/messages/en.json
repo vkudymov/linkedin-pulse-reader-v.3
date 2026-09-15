@@ -69,6 +69,18 @@
       "relevant": "Accepted",
       "rejected": "Rejected"
     },
+    "search": {
+      "placeholder": "Search posts",
+      "empty": "No posts match this search."
+    },
+    "sort": {
+      "label": "Sort by",
+      "posted": "Posted",
+      "searched": "Found",
+      "score": "Match %",
+      "desc": "Sort descending",
+      "asc": "Sort ascending"
+    },
     "titleFound": "Found posts",
     "subtitleAccounts": "LinkedIn accounts: {count}",
     "feed": {
@@ -144,6 +156,18 @@
         "all": "All",
         "match": "Matching",
         "noMatch": "Rejected"
+      },
+      "search": {
+        "placeholder": "Search jobs",
+        "empty": "No jobs match this search."
+      },
+      "sort": {
+        "label": "Sort by",
+        "posted": "Posted",
+        "searched": "Found",
+        "score": "Match %",
+        "desc": "Sort descending",
+        "asc": "Sort ascending"
       },
       "match": "Match",
       "noMatch": "No match",

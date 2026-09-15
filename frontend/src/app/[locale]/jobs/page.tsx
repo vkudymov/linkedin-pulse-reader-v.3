@@ -2,7 +2,8 @@ import { redirect } from "next/navigation";
 import { getTranslations } from "next-intl/server";
 
 import { AppHeader } from "@/components/AppHeader";
-import { JobCard, type JobAnalysisRow, type JobRow } from "@/components/jobs/JobCard";
+import { type JobAnalysisRow, type JobRow } from "@/components/jobs/JobCard";
+import { JobsResults } from "@/components/jobs/JobsResults";
 import { buttonVariants } from "@/components/ui/button";
 import { Link } from "@/i18n/navigation";
 import { requireNotBlocked } from "@/lib/auth/blocked";
@@ -37,6 +38,7 @@ function asJob(job: unknown): JobRow | null {
   return {
     ...row,
     company_url: row.company_url || stringFromRaw(raw, "company_url"),
+    posted_at_text: row.posted_at_text || stringFromRaw(raw, "posted_at_text"),
     workplace_type: row.workplace_type || stringFromRaw(raw, "workplace_type"),
     employment_type: row.employment_type || stringFromRaw(raw, "employment_type"),
     insights: row.insights?.length ? row.insights : stringsFromRaw(raw, "insights"),
@@ -138,54 +140,47 @@ export default async function JobsPage({
               ))}
             </div>
 
-            <div className="mb-6 inline-flex flex-wrap gap-2">
-              {(
-                [
-                  ["all", t("filters.all"), counts.all],
-                  ["match", t("filters.match"), counts.match],
-                  ["no_match", t("filters.noMatch"), counts.noMatch],
-                ] as const
-              ).map(([value, label, count]) => {
-                const active = filter === value;
-                return (
-                  <Link
-                    key={value}
-                    href={`/jobs?search=${encodeURIComponent(selectedId as string)}&filter=${value}`}
-                    className={cn(
-                      buttonVariants({
-                        variant: active ? "default" : "outline",
-                        size: "sm",
-                      }),
-                      "h-9 gap-2 rounded-full px-4",
-                    )}
-                  >
-                    {label}
-                    <span
-                      className={cn(
-                        "inline-flex min-w-5 items-center justify-center rounded-full px-1.5 text-xs tabular-nums",
-                        active
-                          ? "bg-primary-foreground/15 text-primary-foreground"
-                          : "bg-muted text-muted-foreground",
-                      )}
-                    >
-                      {count}
-                    </span>
-                  </Link>
-                );
-              })}
-            </div>
-
-            {rows.length === 0 ? (
-              <div className="rounded-2xl border border-border/80 bg-muted/40 px-6 py-5 text-sm text-muted-foreground">
-                {t("emptyResults")}
-              </div>
-            ) : (
-              <div className="space-y-4">
-                {rows.map((r, idx) => (
-                  <JobCard key={`${r.job?.id ?? r.job?.job_url ?? "job"}-${idx}`} row={r} />
-                ))}
-              </div>
-            )}
+            <JobsResults
+              rows={rows}
+              filters={
+                <div className="inline-flex flex-wrap gap-2">
+                  {(
+                    [
+                      ["all", t("filters.all"), counts.all],
+                      ["match", t("filters.match"), counts.match],
+                      ["no_match", t("filters.noMatch"), counts.noMatch],
+                    ] as const
+                  ).map(([value, label, count]) => {
+                    const active = filter === value;
+                    return (
+                      <Link
+                        key={value}
+                        href={`/jobs?search=${encodeURIComponent(selectedId as string)}&filter=${value}`}
+                        className={cn(
+                          buttonVariants({
+                            variant: active ? "default" : "outline",
+                            size: "sm",
+                          }),
+                          "h-9 gap-2 rounded-full px-4",
+                        )}
+                      >
+                        {label}
+                        <span
+                          className={cn(
+                            "inline-flex min-w-5 items-center justify-center rounded-full px-1.5 text-xs tabular-nums",
+                            active
+                              ? "bg-primary-foreground/15 text-primary-foreground"
+                              : "bg-muted text-muted-foreground",
+                          )}
+                        >
+                          {count}
+                        </span>
+                      </Link>
+                    );
+                  })}
+                </div>
+              }
+            />
           </>
         )}
       </main>

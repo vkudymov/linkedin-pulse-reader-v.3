@@ -32,6 +32,7 @@ export type JobRow = {
   location: string | null;
   description: string | null;
   fetched_at: string | null;
+  posted_at_text?: string | null;
   workplace_type?: string | null;
   employment_type?: string | null;
   insights?: string[];
