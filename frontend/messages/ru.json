@@ -461,6 +461,10 @@
     },
     "mediaAlt": "Изображение поста",
     "contentUnavailable": "Текст поста недоступен",
+    "reason": "Причина",
+    "matched": "Совпало",
+    "missing": "Не хватает",
+    "redFlags": "Риски",
     "insights": {
       "reasonTitle": "Причина отбора",
       "commentTitle": "Черновик комментария"

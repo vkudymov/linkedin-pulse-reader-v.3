@@ -30,6 +30,7 @@ import {
   CollapsibleTrigger,
 } from "@/components/ui/collapsible";
 import { Separator } from "@/components/ui/separator";
+import { MatchInsightGrid } from "@/components/MatchInsightGrid";
 import { cn } from "@/lib/utils";
 import { FeedPostMediaRow, FeedPostRow } from "@/types/database";
 
@@ -39,10 +40,19 @@ type PostStatus = {
 };
 
 function getReason(post: FeedPostRow): string | null {
-  if (post.analysis_error) return post.analysis_error;
   const payload = post.analysis_payload;
   const reason = payload?.reason;
   return typeof reason === "string" && reason.trim() ? reason.trim() : null;
+}
+
+function payloadScore(payload: FeedPostRow["analysis_payload"]): number | null {
+  const raw = payload?.score;
+  if (typeof raw === "number" && Number.isFinite(raw)) return raw;
+  if (typeof raw === "string" && raw.trim()) {
+    const n = Number(raw);
+    if (Number.isFinite(n)) return n;
+  }
+  return null;
 }
 
 function authorInitials(name: string | null): string {
@@ -176,6 +186,7 @@ export function PostCard({ post, media }: { post: FeedPostRow; media: FeedPostMe
       ? post.author_json.avatar_url.trim()
       : null;
   const reason = getReason(post);
+  const score = payloadScore(post.analysis_payload);
   const comment =
     typeof post.comment_text === "string" && post.comment_text.trim()
       ? post.comment_text.trim()
@@ -250,9 +261,14 @@ export function PostCard({ post, media }: { post: FeedPostRow; media: FeedPostMe
               ) : null}
             </div>
           </div>
-          <Badge variant={status.badgeVariant} className="shrink-0 rounded-full px-2.5 py-0.5">
-            {status.label}
-          </Badge>
+          <div className="flex shrink-0 flex-col items-end gap-1.5">
+            <Badge variant={status.badgeVariant} className="rounded-full px-2.5 py-0.5">
+              {status.label}
+            </Badge>
+            {score != null ? (
+              <div className="text-lg font-semibold tabular-nums">{score}%</div>
+            ) : null}
+          </div>
         </div>
 
         <div className="flex flex-wrap items-center gap-x-4 gap-y-1.5">
@@ -278,6 +294,28 @@ export function PostCard({ post, media }: { post: FeedPostRow; media: FeedPostMe
 
       <Collapsible open={open} onOpenChange={setOpen}>
         <CardContent className="space-y-3 px-6 pb-6 pt-5">
+          {post.analysis_error ? (
+            <div className="rounded-xl border border-destructive/40 bg-destructive/10 px-4 py-3 text-sm text-destructive">
+              {post.analysis_error}
+            </div>
+          ) : null}
+
+          {reason ? (
+            <blockquote className="rounded-xl border border-border bg-background/60 px-3.5 py-2.5 text-sm text-muted-foreground">
+              <span className="font-medium text-foreground">{t("reason")}: </span>
+              {reason}
+            </blockquote>
+          ) : null}
+
+          <MatchInsightGrid
+            matchedTitle={t("matched")}
+            missingTitle={t("missing")}
+            redFlagsTitle={t("redFlags")}
+            matched={post.analysis_payload?.matched_requirements}
+            missing={post.analysis_payload?.missing_requirements}
+            redFlags={post.analysis_payload?.red_flags}
+          />
+
           {!open && post.content ? (
             <p className="line-clamp-3 text-sm leading-6 text-foreground/85">{post.content}</p>
           ) : null}
@@ -287,12 +325,6 @@ export function PostCard({ post, media }: { post: FeedPostRow; media: FeedPostMe
           ) : null}
 
           {!open ? <PostMediaGrid media={media} altText={t("mediaAlt")} /> : null}
-
-          {!open && reason ? (
-            <div className="space-y-2">
-              <InsightPreview title={t("insights.reasonTitle")} text={reason} />
-            </div>
-          ) : null}
 
           {!open && comment ? (
             <InsightPreview title={t("insights.commentTitle")} text={comment} />
@@ -308,13 +340,6 @@ export function PostCard({ post, media }: { post: FeedPostRow; media: FeedPostMe
             )}
 
             <PostMediaGrid media={media} altText={t("mediaAlt")} />
-
-            {reason ? (
-              <blockquote className="rounded-xl border border-border bg-background/60 px-3.5 py-2.5 text-sm text-muted-foreground">
-                <span className="font-medium text-foreground">{t("details.reasonLabel")}</span>
-                {reason}
-              </blockquote>
-            ) : null}
 
             {comment ? (
               <div className="rounded-xl border border-border bg-background/60 px-3.5 py-2.5 text-sm">

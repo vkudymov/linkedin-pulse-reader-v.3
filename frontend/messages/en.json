@@ -461,6 +461,10 @@
     },
     "mediaAlt": "Post image",
     "contentUnavailable": "Post text is unavailable",
+    "reason": "Reason",
+    "matched": "Matched",
+    "missing": "Missing",
+    "redFlags": "Red flags",
     "insights": {
       "reasonTitle": "Selection reason",
       "commentTitle": "Draft comment"

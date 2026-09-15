@@ -70,3 +70,15 @@ def parse_job_match_json(text: str) -> JobMatchResult:
         raw_payload=payload,
     )
 
+
+def match_result_to_payload(result: JobMatchResult) -> dict[str, Any]:
+    return {
+        "match": bool(result.match),
+        "score": int(result.score),
+        "reason": result.reason,
+        "matched_requirements": list(result.matched_requirements),
+        "missing_requirements": list(result.missing_requirements),
+        "red_flags": list(result.red_flags),
+        "raw_payload": dict(result.raw_payload) if isinstance(result.raw_payload, dict) else None,
+    }
+

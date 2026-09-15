@@ -20,6 +20,7 @@ import {
   CollapsibleTrigger,
 } from "@/components/ui/collapsible";
 import { Separator } from "@/components/ui/separator";
+import { MatchInsightGrid } from "@/components/MatchInsightGrid";
 import { resolveJobInsights, stripInsightPhrases } from "@/lib/jobInsights";
 import { cn } from "@/lib/utils";
 
@@ -49,11 +50,6 @@ export type JobAnalysisRow = {
   analyzed_at: string;
   job: JobRow | null;
 };
-
-function asStringList(v: unknown): string[] {
-  if (!Array.isArray(v)) return [];
-  return v.filter((x): x is string => typeof x === "string" && x.trim().length > 0);
-}
 
 function companyPageHref(company: string, companyUrl: string | null | undefined): string {
   const raw = (companyUrl || "").trim();
@@ -107,9 +103,6 @@ export function JobCard({ row }: { row: JobAnalysisRow }) {
   if (!job || deleted) return null;
   const currentJob = job;
 
-  const matched = asStringList(row.matched_requirements);
-  const missing = asStringList(row.missing_requirements);
-  const redFlags = asStringList(row.red_flags);
   const accepted = row.match === true;
   const analyzedAt = formatDateTime(row.analyzed_at, locale);
   const insightChips = resolveJobInsights({
@@ -213,11 +206,14 @@ export function JobCard({ row }: { row: JobAnalysisRow }) {
             </blockquote>
           ) : null}
 
-          <div className="grid gap-3 sm:grid-cols-3">
-            <ReqList title={t("matched")} items={matched} />
-            <ReqList title={t("missing")} items={missing} />
-            <ReqList title={t("redFlags")} items={redFlags} />
-          </div>
+          <MatchInsightGrid
+            matchedTitle={t("matched")}
+            missingTitle={t("missing")}
+            redFlagsTitle={t("redFlags")}
+            matched={row.matched_requirements}
+            missing={row.missing_requirements}
+            redFlags={row.red_flags}
+          />
 
           {!open && currentJob.description ? (
             <p className="line-clamp-3 text-sm leading-6 text-foreground/85">{currentJob.description}</p>
@@ -291,24 +287,5 @@ export function JobCard({ row }: { row: JobAnalysisRow }) {
         </CardContent>
       </Collapsible>
     </Card>
-  );
-}
-
-function ReqList({ title, items }: { title: string; items: string[] }) {
-  return (
-    <div className="rounded-xl border border-border/80 bg-background/40 px-4 py-3">
-      <div className="text-sm font-medium">{title}</div>
-      {items.length ? (
-        <ul className="mt-2 space-y-1 text-sm text-muted-foreground">
-          {items.slice(0, 8).map((x) => (
-            <li key={x} className="truncate">
-              {x}
-            </li>
-          ))}
-        </ul>
-      ) : (
-        <div className="mt-2 text-sm text-muted-foreground">—</div>
-      )}
-    </div>
   );
 }

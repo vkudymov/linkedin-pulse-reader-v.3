@@ -168,9 +168,9 @@ export function PromptForm({
             {t("search.helpMarker.after")}
           </p>
           <p>
-            {t("search.helpJson.before")} <code>relevant</code>, <code>score</code>,{" "}
-            <code>content_type</code>, <code>main_topics</code>, <code>reason</code>,{" "}
-            <code>selection_reason</code>.
+            {t("search.helpJson.before")} <code>match</code>, <code>score</code>,{" "}
+            <code>reason</code>, <code>matched_requirements</code>,{" "}
+            <code>missing_requirements</code>, <code>red_flags</code>.
           </p>
           {issues.isSearchEmpty ? (
             <p className="text-destructive">{t("search.emptyWarning")}</p>

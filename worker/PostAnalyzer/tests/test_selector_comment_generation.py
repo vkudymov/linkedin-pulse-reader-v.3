@@ -1,16 +1,17 @@
 from __future__ import annotations
 
-import pytest
-
 from post_analyzer import LLMPostSelector, PostAnalyzerConfig
 
 
 class _TestLLM:
     def complete(self, *, system: str | None, user: str) -> str:
         u = (user or "").lower()
-        if "reply with strict json only" in u or '"relevant"' in u:
-            return '{"relevant": true}'
-        if "сгенерируй комментарий" in u:
+        if "matched_requirements" in u or "<<<post_text>>>" in u or "cds" in u:
+            return (
+                '{"match":true,"score":80,"reason":"SAP CDS",'
+                '"matched_requirements":["CDS"],"missing_requirements":[],"red_flags":[]}'
+            )
+        if "сгенерируй комментарий" in u or "<<<target_language>>>" in u or "тип контента" in u:
             return "Хороший разбор. Особенно важно учитывать производительность и качество данных на практике."
         return "ok"
 
@@ -34,15 +35,16 @@ def test_selector_adds_comment_from_file_prompt(tmp_path):
     )
 
     cfg = PostAnalyzerConfig(
-        relevance_system_prompt="Return strict JSON only. Use schema: {\"relevant\": true|false}.",
-        relevance_user_prompt=(
-            "Post URL:\n{post_url}\n\nPost text:\n{text}\n\n"
-            "Reply with strict JSON only: {{\"relevant\": true|false}}"
-        ),
+        relevance_system_prompt="Return ONLY valid JSON.",
+        relevance_user_prompt="unused: {post_url} {text}",
         comment_system_prompt=None,
         comment_user_prompt="unused",
         comment_prompt_path=str(prompt),
         comment_target_language="ru",
+        search_prompt_template=(
+            "Return JSON with match, score, reason, matched_requirements, "
+            "missing_requirements, red_flags.\n<<<POST_TEXT>>>"
+        ),
     )
 
     selector = LLMPostSelector(analyzer_config=cfg, llm_client=_TestLLM())
@@ -57,5 +59,5 @@ def test_selector_adds_comment_from_file_prompt(tmp_path):
 
     assert len(selected) == 1
     assert selected[0].get("comment")
-    assert selected[0]["comment_error"] if "comment_error" in selected[0] else None is None
-
+    assert selected[0].get("relevance_analysis", {}).get("score") == 80
+    assert selected[0].get("comment_error") is None

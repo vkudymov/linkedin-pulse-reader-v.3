@@ -5,36 +5,32 @@
 Проанализируй текст поста LinkedIn и определи, представляет ли он
 профессиональную ценность для SAP-разработчика или архитектора.
 
-ПОДХОДЯЩИЙ пост:
+ПОДХОДЯЩИЙ пост (match=true):
 - SAP, ABAP, S/4HANA, SAP HANA, CDS View, OData, RAP, Fiori
 - архитектура решений, best practices
 - производительность, оптимизация, SQL, HANA-specific подходы
 - реальные кейсы, опыт внедрения, проблемы и их решения
 - технические детали, примеры, цифры, trade-offs
 
-НЕПОДХОДЯЩИЙ пост:
+НЕПОДХОДЯЩИЙ пост (match=false):
 - мотивационные истории без технического содержания
 - HR, вакансии, «ищем ABAP-разработчика»
 - прямой маркетинг курсов, услуг, продуктов
 - общие рассуждения без практической ценности
 
 Правила оценки:
-- Даже простой, но технически полезный пост может быть relevant=true
+- Даже простой, но технически полезный пост может быть match=true
 - Если пост упоминает SAP/ABAP, но не содержит технической сути —
-  relevant=false с низким score
-- Если пост содержит рекламу — content_type = promo
+  match=false с низким score
+- Рекламу, HR и мотивацию без практики помещай в red_flags
 
-Верни результат СТРОГО в формате JSON без пояснений и markdown.
-
-Поля:
-- relevant: true | false
-- score: число от 0 до 100 (ценность для SAP-практика)
-- content_type: один из [expert, case, news, opinion, promo, motivation, personal]
-- main_topics: массив ключевых тем (1–5), например:
-  ["ABAP", "CDS View", "SAP HANA"]
-- reason: краткое объяснение оценки (1 предложение)
-- selection_reason: почему этот пост стоит или не стоит комментировать
-  с точки зрения SAP-профессионала
+Верни ТОЛЬКО валидный JSON без markdown и без лишних ключей:
+- match: boolean
+- score: integer 0..100
+- reason: string (1-3 предложения)
+- matched_requirements: array of strings
+- missing_requirements: array of strings
+- red_flags: array of strings
 
 Текст поста:
 <<<POST_TEXT>>>

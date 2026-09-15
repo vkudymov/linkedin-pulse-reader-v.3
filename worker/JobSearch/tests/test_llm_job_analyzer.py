@@ -4,7 +4,7 @@ from dataclasses import dataclass
 
 import pytest
 
-from job_search.adapters.llm_job_analyzer import LlmJobAnalyzer
+from job_search.adapters.llm_job_analyzer import LlmJobAnalyzer, analyze_template
 from job_search.domain import Job, JobSearchSpec
 
 
@@ -48,4 +48,23 @@ def test_llm_job_analyzer_requires_marker() -> None:
     llm = FakeLLM(reply="{}")
     with pytest.raises(ValueError):
         LlmJobAnalyzer(llm_client=llm).analyze(spec=spec, job=job)
+
+
+def test_analyze_template_parses_post_marker() -> None:
+    llm = FakeLLM(
+        reply=(
+            '{"match":true,"score":72,"reason":"SAP CDS",'
+            '"matched_requirements":["CDS"],"missing_requirements":[],"red_flags":[]}'
+        ),
+    )
+    r = analyze_template(
+        llm_client=llm,
+        template="Check:\n<<<POST_TEXT>>>",
+        marker="<<<POST_TEXT>>>",
+        body_text="Post about CDS views",
+    )
+    assert r.match is True
+    assert r.score == 72
+    assert "CDS" in r.matched_requirements
+
 

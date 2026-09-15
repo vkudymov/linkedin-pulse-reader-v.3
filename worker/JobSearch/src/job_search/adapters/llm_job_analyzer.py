@@ -6,7 +6,13 @@ from dataclasses import dataclass
 from job_search.analysis import JobMatchResult, parse_job_match_json
 from job_search.domain import Job, JobSearchSpec
 
-def _extract_json(text: str) -> str:
+DEFAULT_MATCH_SYSTEM_PROMPT = (
+    "You are a strict JSON generator. "
+    "Return ONLY valid JSON (no markdown, no commentary)."
+)
+
+
+def extract_llm_json(text: str) -> str:
     """
     Best-effort extraction of a JSON object from LLM output.
     Handles common wrapping like ```json ... ```.
@@ -23,6 +29,30 @@ def _extract_json(text: str) -> str:
     if start >= 0 and end > start:
         return t[start : end + 1]
     return t
+
+
+def analyze_template(
+    *,
+    llm_client: object,
+    template: str,
+    marker: str,
+    body_text: str,
+    system_prompt: str | None = DEFAULT_MATCH_SYSTEM_PROMPT,
+) -> JobMatchResult:
+    """Run a marker-based prompt through an LLM and parse JobMatchResult JSON."""
+    complete = getattr(llm_client, "complete", None)
+    if not callable(complete):  # pragma: no cover - runtime guard
+        raise TypeError("llm_client must have .complete(system, user) -> str")
+
+    tmpl = (template or "").strip()
+    if not tmpl:
+        raise ValueError("filter_prompt is empty")
+    if marker not in tmpl:
+        raise ValueError(f"filter_prompt must contain marker {marker}")
+
+    user_prompt = tmpl.replace(marker, body_text)
+    raw = complete(system=system_prompt, user=user_prompt)
+    return parse_job_match_json(extract_llm_json(raw))
 
 
 def _job_text(job: Job) -> str:
@@ -54,27 +84,14 @@ class LlmJobAnalyzer:
     """
 
     llm_client: object
-    system_prompt: str | None = (
-        "You are a strict JSON generator. "
-        "Return ONLY valid JSON (no markdown, no commentary)."
-    )
+    system_prompt: str | None = DEFAULT_MATCH_SYSTEM_PROMPT
     marker: str = "<<<JOB_TEXT>>>"
 
     def analyze(self, *, spec: JobSearchSpec, job: Job) -> JobMatchResult:
-        complete = getattr(self.llm_client, "complete", None)
-        if not callable(complete):  # pragma: no cover - runtime guard
-            raise TypeError("LlmJobAnalyzer.llm_client must have .complete(system, user) -> str")
-
-        template = (spec.filter_prompt or "").strip()
-        if not template:
-            raise ValueError("filter_prompt is empty")
-        if self.marker not in template:
-            raise ValueError(f"filter_prompt must contain marker {self.marker}")
-
-        job_text = _job_text(job)
-        user_prompt = template.replace(self.marker, job_text)
-
-        raw = complete(system=self.system_prompt, user=user_prompt)
-        extracted = _extract_json(raw)
-        return parse_job_match_json(extracted)
-
+        return analyze_template(
+            llm_client=self.llm_client,
+            template=spec.filter_prompt or "",
+            marker=self.marker,
+            body_text=_job_text(job),
+            system_prompt=self.system_prompt,
+        )

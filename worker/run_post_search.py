@@ -17,6 +17,7 @@ ROOT = Path(__file__).resolve().parent
 LINKEDIN_SRC = ROOT / "LinkedInClient" / "src"
 POST_ANALYZER_SRC = ROOT / "PostAnalyzer" / "src"
 STORAGE_SRC = ROOT / "Storage" / "src"
+JOB_SEARCH_SRC = ROOT / "JobSearch" / "src"
 SESSION_SNAPSHOT_SRC = ROOT / "session_snapshot" / "src"
 POSTS_PATH = ROOT / "posts.json"
 SELECTED_POSTS_PATH = ROOT / "selected_posts.json"
@@ -47,6 +48,8 @@ if str(POST_ANALYZER_SRC) not in sys.path:
     sys.path.insert(0, str(POST_ANALYZER_SRC))
 if str(STORAGE_SRC) not in sys.path:
     sys.path.insert(0, str(STORAGE_SRC))
+if str(JOB_SEARCH_SRC) not in sys.path:
+    sys.path.insert(0, str(JOB_SEARCH_SRC))
 if str(SESSION_SNAPSHOT_SRC) not in sys.path:
     sys.path.insert(0, str(SESSION_SNAPSHOT_SRC))
 
@@ -154,22 +157,63 @@ def write_run_snapshot(path: Path, *, run_at: str, posts: list[dict[str, Any]]) 
     )
 
 
-def default_post_analyzer_config() -> PostAnalyzerConfig:
+def load_user_prompts(storage: Any, *, user_id: str) -> tuple[str | None, str | None]:
+    if not user_id:
+        return None, None
+    try:
+        resp = (
+            storage.client.table("user_prompts")
+            .select("search_prompt,comment_prompt")
+            .eq("id", user_id)
+            .limit(1)
+            .execute()
+        )
+    except Exception as e:  # noqa: BLE001 - best-effort load
+        log.warning("Failed to load user_prompts: %s", e)
+        return None, None
+    rows = getattr(resp, "data", None)
+    if not isinstance(rows, list) or not rows:
+        return None, None
+    row = rows[0] if isinstance(rows[0], dict) else {}
+    search = row.get("search_prompt") if isinstance(row.get("search_prompt"), str) else None
+    comment = row.get("comment_prompt") if isinstance(row.get("comment_prompt"), str) else None
+    search = search.strip() if search and search.strip() else None
+    comment = comment.strip() if comment and comment.strip() else None
+    return search, comment
+
+
+def default_search_prompt_template() -> str:
+    prompt_path = ROOT / "PostAnalyzer" / "prompts" / "linkedin_post_relevance.prompt"
+    if prompt_path.exists():
+        return prompt_path.read_text(encoding="utf-8").strip()
+    return (
+        "Return ONLY valid JSON with keys match, score, reason, "
+        "matched_requirements, missing_requirements, red_flags.\n\n"
+        "Post text:\n<<<POST_TEXT>>>"
+    )
+
+
+def default_post_analyzer_config(
+    *,
+    search_prompt: str | None = None,
+    comment_prompt: str | None = None,
+) -> PostAnalyzerConfig:
     comment_prompt_path = (
         ROOT / "PostAnalyzer" / "prompts" / "linkedin_comment_generation.prompt"
     )
+    template = (search_prompt or "").strip() or default_search_prompt_template()
     return PostAnalyzerConfig(
         relevance_system_prompt=(
-            'Return strict JSON only. Use schema: {"relevant": true|false, "reason": "short explanation"}.'
+            "You are a strict JSON generator. Return ONLY valid JSON (no markdown, no commentary)."
         ),
-        relevance_user_prompt=(
-            "Post URL:\n{post_url}\n\nPost text:\n{text}\n\n"
-            'Reply with strict JSON only: {{"relevant": true|false, "reason": "short explanation"}}'
-        ),
+        relevance_user_prompt="unused: {post_url} {text}",
         comment_system_prompt=None,
         comment_user_prompt="unused: {post_url} {text}",
-        comment_prompt_path=str(comment_prompt_path),
+        comment_prompt_path=None if comment_prompt else str(comment_prompt_path),
+        comment_prompt_template=comment_prompt,
         comment_target_language=os.getenv("POST_ANALYZER_COMMENT_LANGUAGE", "ru"),
+        search_prompt_template=template,
+        search_marker="<<<POST_TEXT>>>",
     )
 
 
@@ -498,10 +542,16 @@ def fetch_and_store_posts(
         )
         mgr = None
 
+    user_id = os.environ.get("STORAGE_USER_ID", "")
+    search_prompt, comment_prompt = load_user_prompts(storage, user_id=user_id)
+    analyzer_config = default_post_analyzer_config(
+        search_prompt=search_prompt,
+        comment_prompt=comment_prompt,
+    )
     selector = (
-        LLMPostSelector(analyzer_config=default_post_analyzer_config(), llm_manager=mgr)
+        LLMPostSelector(analyzer_config=analyzer_config, llm_manager=mgr)
         if mgr is not None
-        else LLMPostSelector(analyzer_config=default_post_analyzer_config())
+        else LLMPostSelector(analyzer_config=analyzer_config)
     )
     selection_succeeded = True
     analyzed_by_key: dict[str, dict[str, Any]] = {}

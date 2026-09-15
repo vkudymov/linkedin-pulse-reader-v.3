@@ -20,6 +20,9 @@ class PostAnalyzerConfig:
     # If provided, LLMPostSelector uses it instead of comment_prompt_path.
     comment_prompt_template: str | None = None
     comment_target_language: str = "ru"
+    # Job-style match analysis: template must contain search_marker.
+    search_prompt_template: str | None = None
+    search_marker: str = "<<<POST_TEXT>>>"
 
     def format_relevance_user(self, *, text: str, post_url: str) -> str:
         return self.relevance_user_prompt.format(text=text, post_url=post_url)
