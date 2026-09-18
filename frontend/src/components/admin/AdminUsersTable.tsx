@@ -2,7 +2,7 @@
 
 import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
-import { ChevronDown, MessageSquareText, Save, Shield, UserX } from "lucide-react";
+import { ChevronDown, MessageSquareText, Newspaper, Save, Shield, UserX } from "lucide-react";
 
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
@@ -12,6 +12,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { PostSearchRunner } from "@/components/PostSearchRunner";
 import { PromptForm } from "@/components/PromptForm";
+import { AdminUserPostsSection } from "@/components/admin/AdminUserPostsSection";
 import { Textarea } from "@/components/ui/textarea";
 import { cn } from "@/lib/utils";
 
@@ -76,6 +77,7 @@ export function AdminUsersTable({ initialUsers }: { initialUsers: AdminUserRow[]
   const [error, setError] = useState<string | null>(null);
   const [openDetailsById, setOpenDetailsById] = useState<Record<string, boolean>>({});
   const [openPromptsById, setOpenPromptsById] = useState<Record<string, boolean>>({});
+  const [openPostsById, setOpenPostsById] = useState<Record<string, boolean>>({});
   const [detailsById, setDetailsById] = useState<Record<string, UserProfileDetails | null>>({});
   const [detailsErrorById, setDetailsErrorById] = useState<Record<string, string | null>>({});
   const [savePendingById, setSavePendingById] = useState<Record<string, boolean>>({});
@@ -251,6 +253,7 @@ export function AdminUsersTable({ initialUsers }: { initialUsers: AdminUserRow[]
             const pending = pendingId === u.id;
             const openDetails = Boolean(openDetailsById[u.id]);
             const openPrompts = Boolean(openPromptsById[u.id]);
+            const openPosts = Boolean(openPostsById[u.id]);
             const email = u.email || "";
             const statusLabel = u.is_blocked ? "Заблокирован" : "Активен";
             const displayName = u.full_name || "—";
@@ -308,8 +311,14 @@ export function AdminUsersTable({ initialUsers }: { initialUsers: AdminUserRow[]
                             if (next) void ensureDetails(u.id);
                           }}
                         >
-                          <ChevronDown className={cn("size-4 transition-transform", openDetails && "rotate-180")} />
-                          {openDetails ? "Свернуть" : "Подробнее"}
+                          {openDetails ? "Свернуть" : "Профиль"}
+                          <ChevronDown
+                            className={cn(
+                              "ml-1 size-4 transition-transform",
+                              openDetails && "rotate-180",
+                            )}
+                            aria-hidden
+                          />
                         </button>
 
                         <button
@@ -326,6 +335,35 @@ export function AdminUsersTable({ initialUsers }: { initialUsers: AdminUserRow[]
                         >
                           <MessageSquareText className="size-4" aria-hidden />
                           {openPrompts ? "Свернуть" : "Промпт"}
+                          <ChevronDown
+                            className={cn(
+                              "ml-1 size-4 transition-transform",
+                              openPrompts && "rotate-180",
+                            )}
+                            aria-hidden
+                          />
+                        </button>
+
+                        <button
+                          type="button"
+                          className={cn(
+                            buttonVariants({ variant: "outline", size: "sm" }),
+                            "h-9 rounded-full px-4 text-muted-foreground hover:text-foreground",
+                          )}
+                          onClick={() => {
+                            const next = !openPosts;
+                            setOpenPostsById((m) => ({ ...m, [u.id]: next }));
+                          }}
+                        >
+                          <Newspaper className="size-4" aria-hidden />
+                          {openPosts ? "Свернуть" : "Посты"}
+                          <ChevronDown
+                            className={cn(
+                              "ml-1 size-4 transition-transform",
+                              openPosts && "rotate-180",
+                            )}
+                            aria-hidden
+                          />
                         </button>
 
                         {u.is_blocked ? (
@@ -519,26 +557,6 @@ export function AdminUsersTable({ initialUsers }: { initialUsers: AdminUserRow[]
                           </div>
 
                           <div className="space-y-2">
-                            <Label htmlFor={`avatar_url_${u.id}`}>Avatar URL</Label>
-                            <Input
-                              id={`avatar_url_${u.id}`}
-                              className={fieldClassName}
-                              value={details?.avatar_url || ""}
-                              onChange={(e) =>
-                                setDetailsById((m) => ({
-                                  ...m,
-                                  [u.id]: {
-                                    ...(m[u.id] as UserProfileDetails),
-                                    avatar_url: e.target.value,
-                                  },
-                                }))
-                              }
-                              disabled={Boolean(savePendingById[u.id])}
-                              placeholder="https://..."
-                            />
-                          </div>
-
-                          <div className="space-y-2">
                             <Label htmlFor={`bio_${u.id}`}>О себе</Label>
                             <Textarea
                               id={`bio_${u.id}`}
@@ -551,7 +569,9 @@ export function AdminUsersTable({ initialUsers }: { initialUsers: AdminUserRow[]
                               }
                               disabled={Boolean(savePendingById[u.id])}
                               placeholder="Несколько строк о пользователе"
-                              className={cn("min-h-28 resize-y rounded-xl")}
+                              className={cn(
+                                "min-h-28 resize-y rounded-xl border-border/80 bg-secondary px-4 py-3 text-sm text-foreground shadow-none",
+                              )}
                             />
                           </div>
 
@@ -622,6 +642,12 @@ export function AdminUsersTable({ initialUsers }: { initialUsers: AdminUserRow[]
                       ) : (
                         <div className="text-sm text-muted-foreground">Загружаем промпты…</div>
                       )}
+                    </CardContent>
+                  ) : null}
+
+                  {openPosts ? (
+                    <CardContent className="space-y-3 border-t border-border px-6 pb-6 pt-6">
+                      <AdminUserPostsSection userId={u.id} />
                     </CardContent>
                   ) : null}
               </Card>
