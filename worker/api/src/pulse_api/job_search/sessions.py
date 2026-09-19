@@ -30,6 +30,7 @@ def _extract_error_line(output: str) -> str | None:
 class JobSearchSession:
     session_id: str
     user_id: str
+    search_run_id: str | None
     status: RunStatus
     message: str | None
     future: Future[None] | None = None
@@ -48,17 +49,21 @@ class JobSearchSessionManager:
         job_search_id: str,
         limit: int,
         account_label: str | None,
+        search_run_id: str | None = None,
     ) -> JobSearchSession:
         with self._lock:
             session_id = str(uuid.uuid4())
             sess = JobSearchSession(
                 session_id=session_id,
                 user_id=user_id,
+                search_run_id=search_run_id,
                 status="running",
                 message="Job search started.",
             )
             self._sessions[session_id] = sess
-            fut = self._executor.submit(self._run, sess.session_id, job_search_id, limit, account_label)
+            fut = self._executor.submit(
+                self._run, sess.session_id, job_search_id, limit, account_label, search_run_id
+            )
             sess.future = fut
             return sess
 
@@ -89,7 +94,14 @@ class JobSearchSessionManager:
         found = next((p for p in candidates if (p / "run_job_search.py").exists()), None)
         return found if found is not None else here.parents[5]
 
-    def _run(self, session_id: str, job_search_id: str, limit: int, account_label: str | None) -> None:
+    def _run(
+        self,
+        session_id: str,
+        job_search_id: str,
+        limit: int,
+        account_label: str | None,
+        search_run_id: str | None,
+    ) -> None:
         worker_root = self._worker_root()
         script = worker_root / "run_job_search.py"
         try:
@@ -102,6 +114,8 @@ class JobSearchSessionManager:
             env["STORAGE_USER_ID"] = str(sess_any.user_id)
             if account_label:
                 env["STORAGE_ACCOUNT_LABEL"] = account_label
+            if search_run_id:
+                env["SEARCH_RUN_ID"] = search_run_id
 
             argv = [
                 sys.executable,
@@ -130,24 +144,29 @@ class JobSearchSessionManager:
                 self._update(session_id, status="done", message="Job search completed.")
             else:
                 error_line = _extract_error_line(output)
-                if code == LLM_CONNECT_FAILED_EXIT_CODE:
-                    self._update(
-                        session_id,
-                        status="error",
-                        message=(error_line or "Не удалось подключиться к LLM. Поиск вакансий не запущен."),
-                    )
-                    return
-                self._update(
-                    session_id,
-                    status="error",
-                    message=(
-                        error_line
-                        or (output[-4000:] if output else f"Job search failed with exit code {code}.")
-                    ),
+                msg = (
+                    error_line
+                    or (output[-4000:] if output else f"Job search failed with exit code {code}.")
                 )
+                if code == LLM_CONNECT_FAILED_EXIT_CODE:
+                    msg = error_line or "Не удалось подключиться к LLM. Поиск вакансий не запущен."
+                self._finalize_run(search_run_id, msg)
+                self._update(session_id, status="error", message=msg)
         except Exception as e:
             detail = str(e).splitlines()[0] if str(e).strip() else type(e).__name__
             tb = traceback.format_exc(limit=10)
             print(tb)
+            self._finalize_run(search_run_id, f"ERROR: {detail}")
             self._update(session_id, status="error", message=f"ERROR: {detail}")
+
+    @staticmethod
+    def _finalize_run(search_run_id: str | None, error: str | None) -> None:
+        if not search_run_id:
+            return
+        try:
+            from ..search_runs.service import finalize_run_error  # noqa: PLC0415
+
+            finalize_run_error(run_id=search_run_id, error=error)
+        except Exception:
+            pass
 

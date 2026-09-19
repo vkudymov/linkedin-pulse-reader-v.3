@@ -11,11 +11,15 @@ from ..job_search.sessions import JobSearchSessionManager
 from ..post_search.routes import _ensure_not_blocked_and_increment_counter  # type: ignore
 from ..post_search.schemas import PostSearchRunResponse
 from ..post_search.sessions import PostSearchSessionManager
+from ..search_runs.helpers import start_job_search_session, start_post_search_session
 from ..settings import get_settings
 from .schemas import (
     AdminJobSearchRow,
     AdminJobSearchUpdate,
+    AdminPostSearchRow,
     AdminPostSearchStartRequest,
+    AdminSearchRunRow,
+    AdminSearchRunsListResponse,
     AdminUserProfileDetails,
     AdminUserProfileUpdate,
     AdminUserPromptsDetails,
@@ -435,7 +439,7 @@ def update_user_job_search(
 def admin_start_post_search_run(
     target_user_id: str,
     req: AdminPostSearchStartRequest,
-    _: str = Depends(require_admin_user_id),
+    admin_user_id: str = Depends(require_admin_user_id),
 ) -> PostSearchRunResponse:
     client = _get_service_client()
 
@@ -479,11 +483,14 @@ def admin_start_post_search_run(
         post_search_id = str(row.get("id"))
 
     _ensure_not_blocked_and_increment_counter(user_id=target_user_id)
-    sess = _admin_sessions.start(
+    sess = start_post_search_session(
+        sessions=_admin_sessions,
         user_id=target_user_id,
         post_search_id=post_search_id,
         limit=req.limit,
         account_label=req.account_label,
+        initiated_by="admin",
+        admin_actor_id=admin_user_id,
     )
     return PostSearchRunResponse(session_id=sess.session_id, status=sess.status, message=sess.message)
 
@@ -504,7 +511,7 @@ def admin_get_post_search_status(
 def admin_start_job_search_run(
     target_user_id: str,
     req: JobSearchStartRequest,
-    _: str = Depends(require_admin_user_id),
+    admin_user_id: str = Depends(require_admin_user_id),
 ) -> JobSearchRunResponse:
     client = _get_service_client()
 
@@ -525,13 +532,109 @@ def admin_start_job_search_run(
     if not isinstance(row, dict) or not row.get("id"):
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Job search not found.")
 
-    sess = _admin_job_sessions.start(
+    sess = start_job_search_session(
+        sessions=_admin_job_sessions,
         user_id=target_user_id,
         job_search_id=req.job_search_id,
         limit=req.limit,
         account_label=req.account_label,
+        initiated_by="admin",
+        admin_actor_id=admin_user_id,
     )
     return JobSearchRunResponse(session_id=sess.session_id, status=sess.status, message=sess.message)
+
+
+@router.get("/users/{target_user_id}/post-searches", response_model=list[AdminPostSearchRow])
+def list_user_post_searches(
+    target_user_id: str, _: str = Depends(require_admin_user_id)
+) -> list[AdminPostSearchRow]:
+    client = _get_service_client()
+    try:
+        resp = (
+            client.table("post_searches")
+            .select("id,user_id,title,status,last_run_at,created_at")
+            .eq("user_id", target_user_id)
+            .order("created_at", desc=False)
+            .execute()
+        )
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Failed to load post searches."
+        ) from e
+    rows_raw = getattr(resp, "data", None)
+    rows: list[dict[str, Any]] = (
+        [r for r in rows_raw if isinstance(r, dict)] if isinstance(rows_raw, list) else []
+    )
+    return [AdminPostSearchRow(**r) for r in rows if r.get("id")]
+
+
+@router.get("/search-runs", response_model=AdminSearchRunsListResponse)
+def list_search_runs(
+    user_id: str | None = None,
+    kind: str | None = None,
+    post_search_id: str | None = None,
+    job_search_id: str | None = None,
+    status: str | None = None,
+    date_from: str | None = None,
+    date_to: str | None = None,
+    order: str = "desc",
+    limit: int = 50,
+    offset: int = 0,
+    _: str = Depends(require_admin_user_id),
+) -> AdminSearchRunsListResponse:
+    from storage.domain.pulse.search_runs import SearchRunRepository  # type: ignore[import-not-found]
+
+    kind_val = kind if kind in ("post", "job") else None
+    status_val = status if status in ("running", "done", "error") else None
+    order_val = "asc" if order == "asc" else "desc"
+
+    repo = SearchRunRepository(_get_service_client())
+    rows, total = repo.list_for_admin(
+        user_id=user_id,
+        kind=kind_val,  # type: ignore[arg-type]
+        post_search_id=post_search_id,
+        job_search_id=job_search_id,
+        status=status_val,  # type: ignore[arg-type]
+        date_from=date_from,
+        date_to=date_to,
+        order=order_val,
+        limit=limit,
+        offset=offset,
+    )
+
+    uids = list({str(r.get("user_id")) for r in rows if r.get("user_id")})
+    names: dict[str, str | None] = {}
+    if uids:
+        try:
+            prof = (
+                _get_service_client()
+                .table("user_profiles")
+                .select("id,full_name")
+                .in_("id", uids)
+                .execute()
+            )
+            data = getattr(prof, "data", None)
+            if isinstance(data, list):
+                for p in data:
+                    if isinstance(p, dict) and p.get("id"):
+                        names[str(p["id"])] = p.get("full_name") if isinstance(p.get("full_name"), str) else None
+        except Exception:
+            names = {}
+
+    items: list[AdminSearchRunRow] = []
+    for r in rows:
+        uid = str(r.get("user_id") or "")
+        items.append(
+            AdminSearchRunRow(
+                **{
+                    **r,
+                    "user_email": None,
+                    "user_full_name": names.get(uid),
+                }
+            )
+        )
+
+    return AdminSearchRunsListResponse(items=items, total=total, limit=limit, offset=offset)
 
 
 @router.get("/users/{target_user_id}/job-search/run/{session_id}", response_model=JobSearchRunResponse)

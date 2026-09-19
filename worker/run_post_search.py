@@ -489,6 +489,31 @@ def fetch_and_store_posts(
     return run_at, payload
 
 
+def _finalize_search_run(
+    storage: Any,
+    run_id: str | None,
+    *,
+    status: str,
+    fetched_count: int | None = None,
+    analyzed_count: int | None = None,
+    matched_count: int | None = None,
+    error: str | None = None,
+) -> None:
+    if not run_id:
+        return
+    try:
+        storage.search_runs.finalize(
+            run_id=run_id,
+            status=status,  # type: ignore[arg-type]
+            fetched_count=fetched_count,
+            analyzed_count=analyzed_count,
+            matched_count=matched_count,
+            error=error,
+        )
+    except Exception as e:
+        log.warning("Failed to finalize search_run %s: %s", run_id, e)
+
+
 def analyze_and_store_posts(
     *,
     storage: Any,
@@ -497,7 +522,7 @@ def analyze_and_store_posts(
     posts: list[dict[str, Any]],
     search_prompt: str,
     comment_prompt: str | None,
-) -> None:
+) -> tuple[int, int]:
     from storage import compute_source_key  # type: ignore[import-not-found]
 
     posts_repo = storage.feed_posts
@@ -565,7 +590,9 @@ def analyze_and_store_posts(
         )
 
     written = storage.post_analyses.upsert_analyses(analyses=upserts)
+    matched = sum(1 for u in upserts if u.get("match"))
     log.info("Wrote %s post_analyses row(s) (post_search=%s)", written, post_search_id)
+    return written, matched
 
 
 def main() -> None:
@@ -595,6 +622,7 @@ def main() -> None:
     # STORAGE_USER_ID = auth.users.id; service role links rows to that user.
     user_id = _required_env("STORAGE_USER_ID")
     post_search_id = str(args.post_search_id)
+    search_run_id = (os.getenv("SEARCH_RUN_ID") or "").strip() or None
     storage = PulseStorage()
 
     ps_row = storage.post_searches.get_by_id(post_search_id=post_search_id)
@@ -673,7 +701,7 @@ def main() -> None:
             cfg=cfg,
             limit=args.limit,
         )
-        analyze_and_store_posts(
+        analyzed, matched = analyze_and_store_posts(
             storage=storage,
             linkedin_account_id=account_id,
             post_search_id=post_search_id,
@@ -682,6 +710,14 @@ def main() -> None:
             comment_prompt=comment_prompt,
         )
         storage.post_searches.update(post_search_id=post_search_id, last_run_at=run_at)
+        _finalize_search_run(
+            storage,
+            search_run_id,
+            status="done",
+            fetched_count=len(payload),
+            analyzed_count=analyzed,
+            matched_count=matched,
+        )
     except LoginRequiredError:
         log.info("Stored session is expired. Re-login and retry once.")
         snapshot = login_and_export_snapshot(cfg)
@@ -699,7 +735,7 @@ def main() -> None:
             cfg=cfg,
             limit=args.limit,
         )
-        analyze_and_store_posts(
+        analyzed, matched = analyze_and_store_posts(
             storage=storage,
             linkedin_account_id=account_id,
             post_search_id=post_search_id,
@@ -708,11 +744,21 @@ def main() -> None:
             comment_prompt=comment_prompt,
         )
         storage.post_searches.update(post_search_id=post_search_id, last_run_at=run_at)
+        _finalize_search_run(
+            storage,
+            search_run_id,
+            status="done",
+            fetched_count=len(payload),
+            analyzed_count=analyzed,
+            matched_count=matched,
+        )
     except FeedLoadError as e:
         log.error("%s", e)
+        _finalize_search_run(storage, search_run_id, status="error", error=str(e))
         raise SystemExit(1) from None
-    except Exception:
+    except Exception as e:
         log.exception("LinkedInClient demo failed")
+        _finalize_search_run(storage, search_run_id, status="error", error=str(e))
         raise
 
 

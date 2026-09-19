@@ -3,6 +3,7 @@ import { getTranslations } from "next-intl/server";
 
 import { AppHeader } from "@/components/AppHeader";
 import { AdminUsersTable } from "@/components/admin/AdminUsersTable";
+import { Link } from "@/i18n/navigation";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 
 type AdminUserRow = {
@@ -79,6 +80,11 @@ export default async function AdminPage({
       />
 
       <main className="mx-auto max-w-5xl px-6 py-6">
+        <p className="mb-4 text-sm">
+          <Link href="/admin/search-runs" className="text-muted-foreground underline-offset-4 hover:text-foreground hover:underline">
+            {t("searchRunsLink")}
+          </Link>
+        </p>
         <AdminUsersTable initialUsers={users} loadError={loadError} />
       </main>
     </div>

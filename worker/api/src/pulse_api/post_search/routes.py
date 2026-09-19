@@ -3,6 +3,7 @@ from __future__ import annotations
 from fastapi import APIRouter, Depends, HTTPException, status
 
 from ..deps.auth import _get_supabase_admin_client, require_user_id
+from ..search_runs.helpers import start_post_search_session
 from .schemas import PostSearchRunResponse, PostSearchStartRequest
 from .sessions import PostSearchSessionManager
 
@@ -60,11 +61,13 @@ def start_run(
     if not isinstance(row, dict) or not row.get("id"):
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Post search not found.")
 
-    sess = _sessions.start(
+    sess = start_post_search_session(
+        sessions=_sessions,
         user_id=user_id,
         post_search_id=req.post_search_id,
         limit=req.limit,
         account_label=req.account_label,
+        initiated_by="user",
     )
     return PostSearchRunResponse(session_id=sess.session_id, status=sess.status, message=sess.message)
 

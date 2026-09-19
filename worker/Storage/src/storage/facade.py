@@ -9,6 +9,7 @@ from .domain.pulse import (
     LinkedInAccountRepository,
     PostAnalysisRepository,
     PostSearchRepository,
+    SearchRunRepository,
 )
 
 
@@ -25,6 +26,7 @@ class PulseStorage:
         self.feed_posts = FeedPostRepository(self.client)
         self.post_searches = PostSearchRepository(self.client)
         self.post_analyses = PostAnalysisRepository(self.client)
+        self.search_runs = SearchRunRepository(self.client)
         # Job Search MVP storage (kept separate from feed_posts).
         self.job_searches = JobSearchRepository(self.client)
         self.jobs = JobRepository(self.client)

@@ -355,7 +355,59 @@
     }
   },
   "admin": {
-    "title": "Admin"
+    "title": "Admin",
+    "searchRunsLink": "Search runs report →"
+  },
+  "adminSearchRuns": {
+    "title": "Search runs report",
+    "backToUsers": "← Users",
+    "empty": "No runs yet (or no matches for filters).",
+    "initiatedByAdmin": "Started by admin",
+    "kind": {
+      "post": "Posts",
+      "job": "Jobs"
+    },
+    "status": {
+      "running": "Running",
+      "done": "Done",
+      "error": "Error"
+    },
+    "filters": {
+      "user": "User",
+      "allUsers": "All users",
+      "kind": "Type",
+      "allKinds": "All types",
+      "posts": "Posts",
+      "jobs": "Jobs",
+      "search": "Search",
+      "allSearches": "All searches",
+      "status": "Status",
+      "allStatuses": "All statuses",
+      "sort": "Sort",
+      "newest": "Newest first",
+      "oldest": "Oldest first"
+    },
+    "criteria": {
+      "limit": "Limit: {count}"
+    },
+    "metrics": {
+      "line": "Fetched: {fetched} · Analyzed: {analyzed} · Matched: {matched}"
+    },
+    "prompts": {
+      "search": "Search prompt",
+      "comment": "Comment prompt",
+      "filter": "Filter prompt"
+    },
+    "actions": {
+      "refresh": "Refresh",
+      "prompts": "Prompts"
+    },
+    "meta": {
+      "total": "Total: {count}"
+    },
+    "errors": {
+      "load": "Failed to load report."
+    }
   },
   "adminUsers": {
     "title": "Users",

@@ -3,6 +3,7 @@ from __future__ import annotations
 from fastapi import APIRouter, Depends, HTTPException, status
 
 from ..deps.auth import _get_supabase_admin_client, require_user_id
+from ..search_runs.helpers import start_job_search_session
 from .schemas import JobSearchRunResponse, JobSearchStartRequest
 from .sessions import JobSearchSessionManager
 
@@ -38,11 +39,29 @@ def start_run(
     user_id: str = Depends(require_user_id),
 ) -> JobSearchRunResponse:
     _ensure_not_blocked(user_id=user_id)
-    sess = _sessions.start(
+    client = _get_supabase_admin_client()
+    try:
+        resp = (
+            client.table("job_searches")
+            .select("id")
+            .eq("id", req.job_search_id)
+            .eq("user_id", user_id)
+            .maybe_single()
+            .execute()
+        )
+    except Exception as e:
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Failed to load job search.") from e
+    row = getattr(resp, "data", None)
+    if not isinstance(row, dict) or not row.get("id"):
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Job search not found.")
+
+    sess = start_job_search_session(
+        sessions=_sessions,
         user_id=user_id,
         job_search_id=req.job_search_id,
         limit=req.limit,
         account_label=req.account_label,
+        initiated_by="user",
     )
     return JobSearchRunResponse(session_id=sess.session_id, status=sess.status, message=sess.message)
 

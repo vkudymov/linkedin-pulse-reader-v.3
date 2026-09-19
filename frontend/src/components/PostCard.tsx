@@ -15,6 +15,7 @@ import {
 } from "lucide-react";
 
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import { authorInitials } from "@/lib/authorInitials";
 import { Badge } from "@/components/ui/badge";
 import { buttonVariants } from "@/components/ui/button";
 import {
@@ -53,14 +54,6 @@ function payloadScore(payload: FeedPostRow["analysis_payload"]): number | null {
     if (Number.isFinite(n)) return n;
   }
   return null;
-}
-
-function authorInitials(name: string | null): string {
-  if (!name?.trim()) return "?";
-  const parts = name.trim().split(/\s+/).filter(Boolean);
-  if (parts.length === 0) return "?";
-  if (parts.length === 1) return parts[0].slice(0, 2).toUpperCase();
-  return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
 }
 
 function formatMetaDate(post: FeedPostRow, locale: "ru" | "en"): string | null {
@@ -236,7 +229,10 @@ export function PostCard({ post, media }: { post: FeedPostRow; media: FeedPostMe
               {authorAvatarUrl ? (
                 <AvatarImage src={authorAvatarUrl} alt={displayName} />
               ) : null}
-              <AvatarFallback className="bg-background text-sm font-medium text-foreground">
+              <AvatarFallback
+                suppressHydrationWarning
+                className="bg-background text-sm font-medium text-foreground"
+              >
                 {authorInitials(authorName)}
               </AvatarFallback>
             </Avatar>

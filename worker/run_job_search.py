@@ -96,6 +96,7 @@ def main() -> None:
 
     user_id = _required_env("STORAGE_USER_ID")
     job_search_id = str(args.job_search_id)
+    search_run_id = (os.getenv("SEARCH_RUN_ID") or "").strip() or None
     limit = int(args.limit or 25)
     account_label = str(args.account_label) if args.account_label else os.getenv("STORAGE_ACCOUNT_LABEL")
 
@@ -153,27 +154,46 @@ def main() -> None:
     mgr.test_connection()
     analyzer = LlmJobAnalyzer(llm_client=mgr)
 
-    with LinkedInClient(config=cfg, session_snapshot=snapshot) as client:
-        collector = LinkedInJobCollector(client=client)
-        repo = StorageJobRepository(
-            storage=storage,
-            user_id=user_id,
-            linkedin_account_id=linkedin_account_id,
+    try:
+        with LinkedInClient(config=cfg, session_snapshot=snapshot) as client:
+            collector = LinkedInJobCollector(client=client)
+            repo = StorageJobRepository(
+                storage=storage,
+                user_id=user_id,
+                linkedin_account_id=linkedin_account_id,
+            )
+            svc = JobSearchService(collector=collector, analyzer=analyzer, repository=repo)
+            r = svc.run(spec=spec)
+
+        now = datetime.now(UTC).isoformat()
+        storage.job_searches.update(job_search_id=job_search_id, last_run_at=now)
+
+        if search_run_id:
+            storage.search_runs.finalize(
+                run_id=search_run_id,
+                status="done",
+                fetched_count=int(r.collected),
+                analyzed_count=int(r.analyzed),
+                matched_count=int(r.matched),
+            )
+
+        log.info(
+            "Job search done: collected=%s unique=%s analyzed=%s matched=%s errors=%s",
+            r.collected,
+            r.unique,
+            r.analyzed,
+            r.matched,
+            r.errors,
         )
-        svc = JobSearchService(collector=collector, analyzer=analyzer, repository=repo)
-        r = svc.run(spec=spec)
-
-    now = datetime.now(UTC).isoformat()
-    storage.job_searches.update(job_search_id=job_search_id, last_run_at=now)
-
-    log.info(
-        "Job search done: collected=%s unique=%s analyzed=%s matched=%s errors=%s",
-        r.collected,
-        r.unique,
-        r.analyzed,
-        r.matched,
-        r.errors,
-    )
+    except SystemExit:
+        raise
+    except Exception as e:
+        if search_run_id:
+            try:
+                storage.search_runs.finalize(run_id=search_run_id, status="error", error=str(e))
+            except Exception:
+                pass
+        raise
 
 
 if __name__ == "__main__":

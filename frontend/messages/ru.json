@@ -355,7 +355,59 @@
     }
   },
   "admin": {
-    "title": "Администратор"
+    "title": "Администратор",
+    "searchRunsLink": "Отчёт о запусках поисков →"
+  },
+  "adminSearchRuns": {
+    "title": "Отчёт о запусках",
+    "backToUsers": "← Пользователи",
+    "empty": "Запусков пока нет (или нет совпадений с фильтром).",
+    "initiatedByAdmin": "Запуск от админа",
+    "kind": {
+      "post": "Посты",
+      "job": "Вакансии"
+    },
+    "status": {
+      "running": "В процессе",
+      "done": "Завершён",
+      "error": "Ошибка"
+    },
+    "filters": {
+      "user": "Пользователь",
+      "allUsers": "Все пользователи",
+      "kind": "Тип",
+      "allKinds": "Все типы",
+      "posts": "Посты",
+      "jobs": "Вакансии",
+      "search": "Search",
+      "allSearches": "Все searches",
+      "status": "Статус",
+      "allStatuses": "Все статусы",
+      "sort": "Сортировка",
+      "newest": "Сначала новые",
+      "oldest": "Сначала старые"
+    },
+    "criteria": {
+      "limit": "Лимит: {count}"
+    },
+    "metrics": {
+      "line": "Загружено: {fetched} · Проанализировано: {analyzed} · Подошло: {matched}"
+    },
+    "prompts": {
+      "search": "Промпт поиска",
+      "comment": "Промпт комментария",
+      "filter": "Промпт фильтра"
+    },
+    "actions": {
+      "refresh": "Обновить",
+      "prompts": "Промпты"
+    },
+    "meta": {
+      "total": "Всего записей: {count}"
+    },
+    "errors": {
+      "load": "Не удалось загрузить отчёт."
+    }
   },
   "adminUsers": {
     "title": "Пользователи",
