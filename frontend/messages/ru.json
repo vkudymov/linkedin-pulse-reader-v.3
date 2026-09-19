@@ -356,7 +356,10 @@
   },
   "admin": {
     "title": "Администратор",
-    "searchRunsLink": "Отчёт о запусках поисков →"
+    "tabs": {
+      "users": "Пользователи",
+      "searchRuns": "Отчёт о запусках"
+    }
   },
   "adminSearchRuns": {
     "title": "Отчёт о запусках",

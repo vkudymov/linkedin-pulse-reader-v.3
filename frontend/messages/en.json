@@ -356,7 +356,10 @@
   },
   "admin": {
     "title": "Admin",
-    "searchRunsLink": "Search runs report →"
+    "tabs": {
+      "users": "Users",
+      "searchRuns": "Search runs"
+    }
   },
   "adminSearchRuns": {
     "title": "Search runs report",

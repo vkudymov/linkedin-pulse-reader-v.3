@@ -3,7 +3,7 @@ import { getTranslations } from "next-intl/server";
 
 import { AppHeader } from "@/components/AppHeader";
 import { AdminSearchRunsPanel } from "@/components/admin/AdminSearchRunsPanel";
-import { Link } from "@/i18n/navigation";
+import { AdminSectionTabs } from "@/components/admin/AdminSectionTabs";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 
 export default async function AdminSearchRunsPage({
@@ -13,7 +13,7 @@ export default async function AdminSearchRunsPage({
 }) {
   const { locale } = await params;
   const loc = locale === "en" ? "en" : "ru";
-  const t = await getTranslations("adminSearchRuns");
+  const t = await getTranslations("admin");
 
   const supabase = await createSupabaseServerClient();
   const { data } = await supabase.auth.getUser();
@@ -35,11 +35,7 @@ export default async function AdminSearchRunsPage({
       <AppHeader title={t("title")} subtitle={data.user.email ?? null} active="admin" isAdmin />
 
       <main className="mx-auto max-w-3xl px-6 py-6">
-        <p className="mb-4 text-sm text-muted-foreground">
-          <Link href="/admin" className="underline-offset-4 hover:underline">
-            {t("backToUsers")}
-          </Link>
-        </p>
+        <AdminSectionTabs active="searchRuns" />
         <AdminSearchRunsPanel locale={loc} />
       </main>
     </div>
