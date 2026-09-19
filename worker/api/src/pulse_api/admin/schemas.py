@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from datetime import date, datetime
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 
 class AdminUserRow(BaseModel):
@@ -55,4 +55,31 @@ class AdminUserPromptsDetails(BaseModel):
 class AdminUserPromptsUpdate(BaseModel):
     search_prompt: str | None = None
     comment_prompt: str | None = None
+
+
+class AdminJobSearchRow(BaseModel):
+    id: str
+    user_id: str
+    title: str
+    search_query: str
+    location: str | None = None
+    filter_prompt: str
+    status: str | None = None
+    last_run_at: datetime | None = None
+    created_at: datetime | None = None
+    updated_at: datetime | None = None
+
+
+class AdminJobSearchUpdate(BaseModel):
+    title: str | None = None
+    search_query: str | None = None
+    location: str | None = None
+    filter_prompt: str | None = None
+    status: str | None = None
+
+
+class AdminPostSearchStartRequest(BaseModel):
+    post_search_id: str | None = None
+    limit: int = Field(default=10, ge=1, le=200)
+    account_label: str | None = None
 

@@ -6,11 +6,16 @@ from typing import Any
 from fastapi import APIRouter, Depends, HTTPException, status
 
 from ..deps.auth import require_user_id
+from ..job_search.schemas import JobSearchRunResponse, JobSearchStartRequest
+from ..job_search.sessions import JobSearchSessionManager
 from ..post_search.routes import _ensure_not_blocked_and_increment_counter  # type: ignore
-from ..post_search.schemas import PostSearchRunResponse, PostSearchStartRequest
+from ..post_search.schemas import PostSearchRunResponse
 from ..post_search.sessions import PostSearchSessionManager
 from ..settings import get_settings
 from .schemas import (
+    AdminJobSearchRow,
+    AdminJobSearchUpdate,
+    AdminPostSearchStartRequest,
     AdminUserProfileDetails,
     AdminUserProfileUpdate,
     AdminUserPromptsDetails,
@@ -20,6 +25,7 @@ from .schemas import (
 
 router = APIRouter(prefix="/v1/admin", tags=["admin"])
 _admin_sessions = PostSearchSessionManager()
+_admin_job_sessions = JobSearchSessionManager()
 
 
 def _get_service_client() -> Any:
@@ -27,6 +33,24 @@ def _get_service_client() -> Any:
     from supabase import create_client  # type: ignore[import-untyped]
 
     return create_client(settings.supabase_url, settings.supabase_service_role_key)
+
+
+def _ensure_not_blocked(*, user_id: str) -> None:
+    client = _get_service_client()
+    try:
+        resp = (
+            client.table("user_admin_state")
+            .select("is_blocked")
+            .eq("id", user_id)
+            .maybe_single()
+            .execute()
+        )
+    except Exception as e:
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Profile check failed.") from e
+    row = getattr(resp, "data", None)
+    is_blocked = bool(row.get("is_blocked")) if isinstance(row, dict) else False
+    if is_blocked:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Пользователь заблокирован.")
 
 
 def require_admin_user_id(user_id: str = Depends(require_user_id)) -> str:
@@ -43,9 +67,7 @@ def require_admin_user_id(user_id: str = Depends(require_user_id)) -> str:
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Admin check failed.") from e
 
     row = getattr(resp, "data", None)
-    is_admin = False
-    if isinstance(row, dict):
-        is_admin = bool(row.get("is_admin"))
+    is_admin = bool(row.get("is_admin")) if isinstance(row, dict) else False
     if not is_admin:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Admin only.")
     return user_id
@@ -111,7 +133,7 @@ def list_users(_: str = Depends(require_admin_user_id)) -> list[AdminUserRow]:
 
     # Fallback: fetch email per user if list_users was unavailable.
     if not emails_by_id:
-        for uid in profile_by_id.keys():
+        for uid in profile_by_id:
             try:
                 u = client.auth.admin.get_user_by_id(uid)  # type: ignore[attr-defined]
                 user_obj = getattr(u, "user", None)
@@ -214,9 +236,8 @@ def update_user_profile_details(
         resp = client.table("user_profiles").upsert(payload).execute()
     except Exception as e:
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Failed to update profile.") from e
-    err = getattr(resp, "error", None)
-    if err:
-        msg = getattr(err, "message", None) if err is not None else None
+    if err := getattr(resp, "error", None):
+        msg = getattr(err, "message", None)
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=(msg if isinstance(msg, str) and msg else "Failed to update profile."),
@@ -231,6 +252,8 @@ _COMMENT_REQUIRED_MARKERS = [
     "<<<MAIN_TOPICS>>>",
     "<<<TARGET_LANGUAGE>>>",
 ]
+
+_JOB_SEARCH_REQUIRED_MARKER = "<<<JOB_TEXT>>>"
 
 
 def _missing_markers(value: str, markers: list[str]) -> list[str]:
@@ -248,14 +271,37 @@ def _validate_prompts(*, search_prompt: str | None, comment_prompt: str | None) 
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=f"Промпт поиска должен содержать маркер {_SEARCH_REQUIRED_MARKER}.",
         )
-    if c:
-        missing = _missing_markers(c, _COMMENT_REQUIRED_MARKERS)
-        if missing:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail=f"Промпт комментария должен содержать маркеры: {', '.join(missing)}.",
-            )
+    if c and (missing := _missing_markers(c, _COMMENT_REQUIRED_MARKERS)):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Промпт комментария должен содержать маркеры: {', '.join(missing)}.",
+        )
     return s, c
+
+
+def _require_non_empty_string(v: str | None, *, field: str) -> str | None:
+    if v is None:
+        return None
+    if not isinstance(v, str):
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=f"Invalid {field}.")
+    if not (s := v.strip()):
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=f"{field} must be non-empty.")
+    return s
+
+
+def _validate_job_search_filter_prompt(v: str | None) -> str | None:
+    if v is None:
+        return None
+    if not isinstance(v, str):
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid filter_prompt.")
+    if not (s := v.strip()):
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="filter_prompt must be non-empty.")
+    if _JOB_SEARCH_REQUIRED_MARKER not in s:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"filter_prompt must contain marker {_JOB_SEARCH_REQUIRED_MARKER}.",
+        )
+    return s
 
 
 @router.get("/users/{target_user_id}/prompts", response_model=AdminUserPromptsDetails)
@@ -273,9 +319,8 @@ def get_user_prompts_details(
         )
     except Exception as e:
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Failed to load prompts.") from e
-    row = getattr(resp, "data", None)
     # Row may not exist yet for legacy users; return empty record shape.
-    if not isinstance(row, dict) or not row.get("id"):
+    if not isinstance((row := getattr(resp, "data", None)), dict) or not row.get("id"):
         return AdminUserPromptsDetails(id=target_user_id)
     return AdminUserPromptsDetails(**row)
 
@@ -300,9 +345,8 @@ def update_user_prompts_details(
         resp = client.table("user_prompts").upsert(payload).execute()
     except Exception as e:
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Failed to update prompts.") from e
-    err = getattr(resp, "error", None)
-    if err:
-        msg = getattr(err, "message", None) if err is not None else None
+    if err := getattr(resp, "error", None):
+        msg = getattr(err, "message", None)
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=(msg if isinstance(msg, str) and msg else "Failed to update prompts."),
@@ -310,14 +354,137 @@ def update_user_prompts_details(
     return {"ok": True}
 
 
+@router.get("/users/{target_user_id}/job-searches", response_model=list[AdminJobSearchRow])
+def list_user_job_searches(
+    target_user_id: str, _: str = Depends(require_admin_user_id)
+) -> list[AdminJobSearchRow]:
+    client = _get_service_client()
+    try:
+        resp = (
+            client.table("job_searches")
+            .select(
+                "id,user_id,title,search_query,location,filter_prompt,status,last_run_at,created_at,updated_at"
+            )
+            .eq("user_id", target_user_id)
+            .order("created_at", desc=False)
+            .execute()
+        )
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Failed to load job searches."
+        ) from e
+    rows_raw = getattr(resp, "data", None)
+    rows: list[dict[str, Any]] = (
+        [r for r in rows_raw if isinstance(r, dict)] if isinstance(rows_raw, list) else []
+    )
+    return [AdminJobSearchRow(**r) for r in rows if r.get("id")]
+
+
+@router.patch("/users/{target_user_id}/job-searches/{job_search_id}", response_model=AdminJobSearchRow)
+def update_user_job_search(
+    target_user_id: str,
+    job_search_id: str,
+    body: AdminJobSearchUpdate,
+    _: str = Depends(require_admin_user_id),
+) -> AdminJobSearchRow:
+    client = _get_service_client()
+    payload: dict[str, Any] = {"updated_at": datetime.now(timezone.utc).isoformat()}
+
+    title = _require_non_empty_string(body.title, field="title")
+    search_query = _require_non_empty_string(body.search_query, field="search_query")
+    location = _to_nullable_trimmed_string(body.location)
+    filter_prompt = _validate_job_search_filter_prompt(body.filter_prompt)
+    status_value = _to_nullable_trimmed_string(body.status)
+
+    if title is not None:
+        payload["title"] = title
+    if search_query is not None:
+        payload["search_query"] = search_query
+    if body.location is not None:
+        payload["location"] = location
+    if filter_prompt is not None:
+        payload["filter_prompt"] = filter_prompt
+    if body.status is not None:
+        payload["status"] = status_value
+
+    # No-op update is allowed but should still validate ownership.
+    try:
+        resp = (
+            client.table("job_searches")
+            .update(payload)
+            .eq("id", job_search_id)
+            .eq("user_id", target_user_id)
+            .select(
+                "id,user_id,title,search_query,location,filter_prompt,status,last_run_at,created_at,updated_at"
+            )
+            .maybe_single()
+            .execute()
+        )
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Failed to update job search."
+        ) from e
+
+    row = getattr(resp, "data", None)
+    if not isinstance(row, dict) or not row.get("id"):
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Job search not found.")
+    return AdminJobSearchRow(**row)
+
+
 @router.post("/users/{target_user_id}/post-search/run", response_model=PostSearchRunResponse)
 def admin_start_post_search_run(
     target_user_id: str,
-    req: PostSearchStartRequest,
+    req: AdminPostSearchStartRequest,
     _: str = Depends(require_admin_user_id),
 ) -> PostSearchRunResponse:
+    client = _get_service_client()
+
+    post_search_id = (req.post_search_id or "").strip() or None
+    if post_search_id:
+        try:
+            resp = (
+                client.table("post_searches")
+                .select("id")
+                .eq("id", post_search_id)
+                .eq("user_id", target_user_id)
+                .maybe_single()
+                .execute()
+            )
+        except Exception as e:
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Failed to load post search."
+            ) from e
+        row = getattr(resp, "data", None)
+        if not isinstance(row, dict) or not row.get("id"):
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Post search not found.")
+    else:
+        # Backward-compatible default: pick the oldest post_search for this user.
+        try:
+            resp = (
+                client.table("post_searches")
+                .select("id")
+                .eq("user_id", target_user_id)
+                .order("created_at", desc=False)
+                .limit(1)
+                .maybe_single()
+                .execute()
+            )
+        except Exception as e:
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Failed to load post search."
+            ) from e
+        row = getattr(resp, "data", None)
+        if not isinstance(row, dict) or not row.get("id"):
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Post search not found.")
+        post_search_id = str(row.get("id"))
+
     _ensure_not_blocked_and_increment_counter(user_id=target_user_id)
-    sess = _admin_sessions.start(user_id=target_user_id, limit=req.limit, account_label=req.account_label)
+    sess = _admin_sessions.start(
+        user_id=target_user_id,
+        post_search_id=post_search_id,
+        limit=req.limit,
+        account_label=req.account_label,
+    )
     return PostSearchRunResponse(session_id=sess.session_id, status=sess.status, message=sess.message)
 
 
@@ -331,6 +498,52 @@ def admin_get_post_search_status(
     if sess is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Session not found.")
     return PostSearchRunResponse(session_id=sess.session_id, status=sess.status, message=sess.message)
+
+
+@router.post("/users/{target_user_id}/job-search/run", response_model=JobSearchRunResponse)
+def admin_start_job_search_run(
+    target_user_id: str,
+    req: JobSearchStartRequest,
+    _: str = Depends(require_admin_user_id),
+) -> JobSearchRunResponse:
+    client = _get_service_client()
+
+    _ensure_not_blocked(user_id=target_user_id)
+
+    try:
+        resp = (
+            client.table("job_searches")
+            .select("id")
+            .eq("id", req.job_search_id)
+            .eq("user_id", target_user_id)
+            .maybe_single()
+            .execute()
+        )
+    except Exception as e:
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Failed to load job search.") from e
+    row = getattr(resp, "data", None)
+    if not isinstance(row, dict) or not row.get("id"):
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Job search not found.")
+
+    sess = _admin_job_sessions.start(
+        user_id=target_user_id,
+        job_search_id=req.job_search_id,
+        limit=req.limit,
+        account_label=req.account_label,
+    )
+    return JobSearchRunResponse(session_id=sess.session_id, status=sess.status, message=sess.message)
+
+
+@router.get("/users/{target_user_id}/job-search/run/{session_id}", response_model=JobSearchRunResponse)
+def admin_get_job_search_status(
+    target_user_id: str,
+    session_id: str,
+    _: str = Depends(require_admin_user_id),
+) -> JobSearchRunResponse:
+    sess = _admin_job_sessions.get(user_id=target_user_id, session_id=session_id)
+    if sess is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Session not found.")
+    return JobSearchRunResponse(session_id=sess.session_id, status=sess.status, message=sess.message)
 
 
 def _set_blocked(*, user_id: str, blocked: bool) -> None:

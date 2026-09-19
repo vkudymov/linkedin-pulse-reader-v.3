@@ -4,6 +4,10 @@ import { notFound } from "next/navigation";
 
 import { routing } from "@/i18n/routing";
 
+function isLocale(value: string): value is (typeof routing.locales)[number] {
+  return (routing.locales as readonly string[]).includes(value);
+}
+
 export default async function LocaleLayout({
   children,
   params,
@@ -12,7 +16,7 @@ export default async function LocaleLayout({
   params: Promise<{ locale: string }>;
 }>) {
   const { locale } = await params;
-  if (!routing.locales.includes(locale as any)) notFound();
+  if (!isLocale(locale)) notFound();
 
   setRequestLocale(locale);
   const messages = await getMessages();

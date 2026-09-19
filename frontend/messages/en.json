@@ -1,5 +1,6 @@
 {
   "nav": {
+    "results": "Results",
     "posts": "Posts",
     "jobs": "Jobs",
     "prompts": "Prompts",
@@ -64,6 +65,59 @@
     }
   },
   "posts": {
+    "tabs": {
+      "posts": "Posts",
+      "jobs": "Jobs"
+    },
+    "prompts": {
+      "defaultSearchPrompt": "Return strict JSON only (match/score/reason/requirements).",
+      "create": {
+        "title": "Create post search",
+        "description": "Define how AI should evaluate LinkedIn posts for selection.",
+        "submit": "Create",
+        "pending": "Creating..."
+      },
+      "list": {
+        "title": "Post searches",
+        "empty": "No post searches yet."
+      },
+      "status": {
+        "active": "Active",
+        "paused": "Paused"
+      },
+      "fields": {
+        "title": "Title",
+        "accountLabel": "LinkedIn account (label, optional)",
+        "accountLabelPlaceholder": "For example: default",
+        "searchPrompt": "Search prompt (relevance)",
+        "commentPrompt": "Comment prompt (optional)",
+        "searchMarkerHint": "Search prompt must contain marker {marker}.",
+        "commentMarkerHint": "If provided, the comment template must include required markers."
+      },
+      "edit": {
+        "toggle": "Edit",
+        "collapse": "Collapse",
+        "save": "Save",
+        "saving": "Saving...",
+        "saved": "Saved",
+        "delete": "Delete"
+      },
+      "run": {
+        "idle": "Run post search",
+        "pending": "Searching...",
+        "statusLabel": "Status:"
+      },
+      "errors": {
+        "loadFailed": "Failed to load post searches.",
+        "saveFailed": "Failed to save post search.",
+        "deleteFailed": "Failed to delete post search.",
+        "runStartFailed": "Failed to start post search.",
+        "runStatusFailed": "Failed to fetch run status.",
+        "runFailed": "Post search failed.",
+        "runTimeout": "Post search is taking too long.",
+        "commentMissingMarkers": "Comment prompt must contain markers: {markers}."
+      }
+    },
     "filters": {
       "all": "All",
       "relevant": "Accepted",
@@ -94,6 +148,7 @@
       "pending": "Pending"
     },
     "empty": {
+      "noSearches": "Create a post search in Prompts first.",
       "noAccount": {
         "title": "No LinkedIn account yet",
         "beforeScript": "Run the post collection via",
@@ -103,7 +158,7 @@
       "noPosts": {
         "titleAll": "No posts yet",
         "titleFiltered": "No posts for this filter",
-        "runScript": "Run",
+        "runScript": "Run post search in",
         "thenRefresh": "and then refresh the page.",
         "tryAnotherFilter": "Try another filter or wait for new analysis results."
       }
@@ -152,6 +207,10 @@
   "jobs": {
     "page": {
       "title": "Jobs",
+      "tabs": {
+        "posts": "Posts",
+        "jobs": "Jobs"
+      },
       "filters": {
         "all": "All",
         "match": "Matching",
@@ -317,6 +376,10 @@
       "save": "Save",
       "saving": "Saving..."
     },
+    "sections": {
+      "posts": "Posts",
+      "jobs": "Jobs"
+    },
     "profile": {
       "title": "Profile",
       "description": "An admin can edit the user's details.",
@@ -332,15 +395,55 @@
       "profile": "Loading profile…",
       "prompts": "Loading prompts…"
     },
+    "jobs": {
+      "loading": "Loading job prompts…",
+      "empty": "This user has no job searches.",
+      "run": {
+        "idle": "Run job search",
+        "pending": "Running..."
+      },
+      "actions": {
+        "edit": "Edit"
+      },
+      "fields": {
+        "filterPrompt": "Job search filter prompt",
+        "markerHint": "Prompt must contain marker {marker}."
+      },
+      "errors": {
+        "load": "Failed to load job prompts.",
+        "save": "Failed to save job prompt.",
+        "emptyPrompt": "Prompt must be non-empty.",
+        "missingMarker": "Missing marker: {marker}."
+      }
+    },
     "errors": {
       "request": "Request error",
       "loadUsers": "Failed to load users. Start the worker API at http://127.0.0.1:8000.",
       "loadProfile": "Failed to load profile.",
       "loadPrompts": "Failed to load prompts.",
+      "savePrompts": "Failed to save prompts.",
       "saveProfile": "Failed to save profile."
     },
     "common": {
       "saved": "Saved."
+    },
+    "posts": {
+      "title": "Post prompts",
+      "description": "Search prompt is required; comment prompt is optional.",
+      "actions": {
+        "edit": "Edit"
+      },
+      "fields": {
+        "searchPrompt": "Search prompt (relevance)",
+        "commentPrompt": "Comment prompt (optional)",
+        "markerHint": "Search prompt must contain marker {marker}.",
+        "commentHint": "If provided, the template must include required markers."
+      },
+      "errors": {
+        "emptySearch": "Search prompt is required.",
+        "missingMarker": "Missing marker: {marker}.",
+        "missingCommentMarkers": "Comment prompt must contain markers: {markers}."
+      }
     }
   },
   "promptsForm": {

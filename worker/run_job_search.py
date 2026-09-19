@@ -13,6 +13,11 @@ from job_search.adapters.storage_repository import StorageJobRepository  # type:
 
 from storage.facade import PulseStorage  # type: ignore[import-not-found]
 from storage.domain.pulse import pick_linkedin_account_row  # type: ignore[import-not-found]
+from post_analyzer.config import (  # type: ignore[import-not-found]
+    LLMProviderSettings,
+    load_llm_manager_settings_from_env,
+)
+from post_analyzer.llm_manager import LLMProviderManager  # type: ignore[import-not-found]
 
 
 log = logging.getLogger(__name__)
@@ -21,13 +26,41 @@ logging.basicConfig(level=logging.INFO, format="%(levelname)s: %(message)s")
 LLM_CONNECT_FAILED_EXIT_CODE = 2
 
 
+def create_llm_manager() -> LLMProviderManager:
+    mgr = LLMProviderManager(settings=load_llm_manager_settings_from_env())
+    desc = mgr.describe()
+
+    # Auto-switch to a local OpenAI-compatible server (LM Studio) if LLM is left in fake mode.
+    # Mirrors behavior in run_post_search.py to avoid confusing score=0 everywhere.
+    if desc.get("provider") != "fake" or desc.get("mode") != "fake":
+        return mgr
+
+    lmstudio_base_url = (
+        os.getenv("POST_ANALYZER_OPENAI_BASE_URL")
+        or os.getenv("OPENAI_BASE_URL")
+        or "http://127.0.0.1:1234/v1"
+    )
+    lmstudio_model = (
+        os.getenv("POST_ANALYZER_LLM_MODEL")
+        or os.getenv("POST_ANALYZER_OPENAI_MODEL")
+        or os.getenv("OPENAI_MODEL")
+        or "deepseek-coder-v2-lite-instruct"
+    )
+    mgr.switch(
+        primary=LLMProviderSettings(
+            provider="openai",
+            mode="real",
+            model=lmstudio_model,
+            base_url=lmstudio_base_url,
+        ),
+        fallback=None,
+    )
+    return mgr
+
+
 def ensure_llm_connected() -> None:
     try:
-        from post_analyzer.llm_manager import LLMProviderManager  # type: ignore[import-not-found]
-        from post_analyzer.config import load_llm_manager_settings_from_env  # type: ignore[import-not-found]
-
-        settings = load_llm_manager_settings_from_env()
-        mgr = LLMProviderManager(settings=settings)
+        mgr = create_llm_manager()
         mgr.test_connection()
         desc = mgr.describe()
         log.info(
@@ -43,8 +76,7 @@ def ensure_llm_connected() -> None:
 
 
 def _required_env(name: str) -> str:
-    v = (os.getenv(name) or "").strip()
-    if not v:
+    if not (v := (os.getenv(name) or "").strip()):
         raise SystemExit(f"Missing required env var: {name}")
     return v
 
@@ -116,39 +148,9 @@ def main() -> None:
         linkedin_filters=linkedin_filters,
     )
 
-    from post_analyzer.llm_manager import LLMProviderManager  # type: ignore[import-not-found]
-    from post_analyzer.config import (  # type: ignore[import-not-found]
-        LLMProviderSettings,
-        load_llm_manager_settings_from_env,
-    )
-
-    mgr = LLMProviderManager(settings=load_llm_manager_settings_from_env())
-    desc = mgr.describe()
-    # Auto-switch to a local OpenAI-compatible server (LM Studio) if LLM is left in fake mode.
-    # Mirrors behavior in run_post_search.py to avoid confusing score=0 everywhere.
-    if desc.get("provider") == "fake" and desc.get("mode") == "fake":
-        lmstudio_base_url = (
-            os.getenv("POST_ANALYZER_OPENAI_BASE_URL")
-            or os.getenv("OPENAI_BASE_URL")
-            or "http://127.0.0.1:1234/v1"
-        )
-        lmstudio_model = (
-            os.getenv("POST_ANALYZER_LLM_MODEL")
-            or os.getenv("POST_ANALYZER_OPENAI_MODEL")
-            or os.getenv("OPENAI_MODEL")
-            or "deepseek-coder-v2-lite-instruct"
-        )
-        mgr.switch(
-            primary=LLMProviderSettings(
-                provider="openai",
-                mode="real",
-                model=lmstudio_model,
-                base_url=lmstudio_base_url,
-            ),
-            fallback=None,
-        )
-        # Fail fast if LM Studio isn't reachable.
-        mgr.test_connection()
+    mgr = create_llm_manager()
+    # Fail fast if LM Studio isn't reachable (or provider is misconfigured).
+    mgr.test_connection()
     analyzer = LlmJobAnalyzer(llm_client=mgr)
 
     with LinkedInClient(config=cfg, session_snapshot=snapshot) as client:

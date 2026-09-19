@@ -36,6 +36,7 @@ def _extract_error_line(output: str) -> str | None:
 class PostSearchSession:
     session_id: str
     user_id: str
+    post_search_id: str
     status: RunStatus
     message: str | None
     future: Future[None] | None = None
@@ -47,17 +48,18 @@ class PostSearchSessionManager:
         self._sessions: dict[str, PostSearchSession] = {}
         self._executor = ThreadPoolExecutor(max_workers=2, thread_name_prefix="post-search")
 
-    def start(self, *, user_id: str, limit: int, account_label: str | None) -> PostSearchSession:
+    def start(self, *, user_id: str, post_search_id: str, limit: int, account_label: str | None) -> PostSearchSession:
         with self._lock:
             session_id = str(uuid.uuid4())
             sess = PostSearchSession(
                 session_id=session_id,
                 user_id=user_id,
+                post_search_id=post_search_id,
                 status="running",
                 message="Post search started.",
             )
             self._sessions[session_id] = sess
-            fut = self._executor.submit(self._run, sess.session_id, limit, account_label)
+            fut = self._executor.submit(self._run, sess.session_id, post_search_id, limit, account_label)
             sess.future = fut
             return sess
 
@@ -94,7 +96,7 @@ class PostSearchSessionManager:
         found = next((p for p in candidates if (p / "run_post_search.py").exists()), None)
         return found if found is not None else here.parents[5]
 
-    def _run(self, session_id: str, limit: int, account_label: str | None) -> None:
+    def _run(self, session_id: str, post_search_id: str, limit: int, account_label: str | None) -> None:
         worker_root = self._worker_root()
         script = worker_root / "run_post_search.py"
         try:
@@ -109,7 +111,14 @@ class PostSearchSessionManager:
             if account_label:
                 env["STORAGE_ACCOUNT_LABEL"] = account_label
 
-            argv = [sys.executable, str(script), "--limit", str(limit)]
+            argv = [
+                sys.executable,
+                str(script),
+                "--post-search-id",
+                post_search_id,
+                "--limit",
+                str(limit),
+            ]
 
             import subprocess  # noqa: PLC0415
 

@@ -4,6 +4,7 @@ from pydantic import BaseModel, Field
 
 
 class PostSearchStartRequest(BaseModel):
+    post_search_id: str = Field(..., min_length=1)
     limit: int = Field(default=10, ge=1, le=200)
     account_label: str | None = None
 

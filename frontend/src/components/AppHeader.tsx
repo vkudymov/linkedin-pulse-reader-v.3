@@ -17,6 +17,8 @@ export function AppHeader({
   isAdmin?: boolean;
 }) {
   const t = useTranslations("nav");
+  const isResultsActive = active === "posts" || active === "jobs";
+  const isPromptsActive = active === "prompts";
   return (
     <header className="border-b border-border/80 bg-background">
       <div className="mx-auto flex max-w-3xl items-center justify-between gap-4 px-6 py-4">
@@ -30,25 +32,17 @@ export function AppHeader({
           <Link
             className={[
               "text-sm underline-offset-4 hover:text-foreground hover:underline",
-              active === "posts" ? "text-foreground" : "text-muted-foreground",
+              isResultsActive ? "text-foreground" : "text-muted-foreground",
             ].join(" ")}
             href="/posts"
           >
-            {t("posts")}
+            {t("results")}
           </Link>
+
           <Link
             className={[
               "text-sm underline-offset-4 hover:text-foreground hover:underline",
-              active === "jobs" ? "text-foreground" : "text-muted-foreground",
-            ].join(" ")}
-            href="/jobs"
-          >
-            {t("jobs")}
-          </Link>
-          <Link
-            className={[
-              "text-sm underline-offset-4 hover:text-foreground hover:underline",
-              active === "prompts" ? "text-foreground" : "text-muted-foreground",
+              isPromptsActive ? "text-foreground" : "text-muted-foreground",
             ].join(" ")}
             href="/prompts"
           >
@@ -76,12 +70,9 @@ export function AppHeader({
           ) : null}
 
           <LocaleSwitcher />
-          <a
-            className="text-sm text-muted-foreground underline-offset-4 hover:text-foreground hover:underline"
-            href="/logout"
-          >
+          <Link className="text-sm text-muted-foreground underline-offset-4 hover:text-foreground hover:underline" href="/logout">
             {t("logout")}
-          </a>
+          </Link>
         </nav>
       </div>
     </header>

@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import { ChevronDown, ChevronUp } from "lucide-react";
 import { useTranslations } from "next-intl";
 
@@ -195,7 +195,7 @@ export function JobSearchesPanel({
 
         {items.map((s) => (
           <JobSearchCard
-            key={s.id}
+            key={`${s.id}:${s.last_run_at ?? ""}:${s.status ?? ""}`}
             item={s}
             busy={pending}
             onSaved={refresh}
@@ -233,14 +233,6 @@ function JobSearchCard({
   const [linkedinFilters, setLinkedinFilters] = useState<LinkedInJobFilters>(
     normalizeLinkedInJobFilters(item.linkedin_filters),
   );
-
-  useEffect(() => {
-    setTitle(item.title);
-    setSearchQuery(item.search_query);
-    setLocation(item.location ?? "");
-    setFilterPrompt(item.filter_prompt);
-    setLinkedinFilters(normalizeLinkedInJobFilters(item.linkedin_filters));
-  }, [item]);
 
   const matchCount = typeof item.new_match_count === "number" ? item.new_match_count : 0;
   const canSave =

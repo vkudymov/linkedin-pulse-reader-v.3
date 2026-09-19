@@ -7,12 +7,16 @@ import { routing } from "./src/i18n/routing";
 
 const intlMiddleware = createMiddleware(routing);
 
+function isLocale(value: string): value is (typeof routing.locales)[number] {
+  return (routing.locales as readonly string[]).includes(value);
+}
+
 function stripLocalePrefix(pathname: string): { locale: string; path: string } {
   const parts = pathname.split("/").filter(Boolean);
   const maybeLocale = parts[0] || "";
-  const isLocale = routing.locales.includes(maybeLocale as any);
-  const locale = isLocale ? maybeLocale : routing.defaultLocale;
-  const rest = isLocale ? parts.slice(1) : parts;
+  const hasLocale = isLocale(maybeLocale);
+  const locale = hasLocale ? maybeLocale : routing.defaultLocale;
+  const rest = hasLocale ? parts.slice(1) : parts;
   const path = `/${rest.join("/")}`;
   return { locale, path: path === "/" ? "/" : path.replace(/\/+$/, "") };
 }

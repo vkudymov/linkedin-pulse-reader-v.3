@@ -9,7 +9,7 @@ import logging
 import os
 import re
 import sys
-from datetime import datetime
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
@@ -20,7 +20,6 @@ STORAGE_SRC = ROOT / "Storage" / "src"
 JOB_SEARCH_SRC = ROOT / "JobSearch" / "src"
 SESSION_SNAPSHOT_SRC = ROOT / "session_snapshot" / "src"
 POSTS_PATH = ROOT / "posts.json"
-SELECTED_POSTS_PATH = ROOT / "selected_posts.json"
 ENV_PATH = ROOT / ".env"
 
 
@@ -64,6 +63,11 @@ from session_snapshot import (  # noqa: E402
 )
 
 from post_analyzer import LLMPostSelector, PostAnalyzerConfig  # type: ignore[import-not-found]  # noqa: E402
+from post_analyzer.config import (  # type: ignore[import-not-found]  # noqa: E402
+    LLMProviderSettings,
+    load_llm_manager_settings_from_env,
+)
+from post_analyzer.llm_manager import LLMProviderManager  # type: ignore[import-not-found]  # noqa: E402
 
 
 class _ColorLevelFormatter(logging.Formatter):
@@ -81,6 +85,33 @@ log = logging.getLogger(__name__)
 LLM_CONNECT_FAILED_EXIT_CODE = 2
 
 
+def create_llm_manager() -> Any:
+    mgr = LLMProviderManager(settings=load_llm_manager_settings_from_env())
+    desc = mgr.describe()
+    if desc.get("provider") != "fake" or desc.get("mode") != "fake":
+        return mgr
+
+    mgr.switch(
+        primary=LLMProviderSettings(
+            provider="openai",
+            mode="real",
+            model=(
+                os.getenv("POST_ANALYZER_LLM_MODEL")
+                or os.getenv("POST_ANALYZER_OPENAI_MODEL")
+                or os.getenv("OPENAI_MODEL")
+                or "deepseek-coder-v2-lite-instruct"
+            ),
+            base_url=(
+                os.getenv("POST_ANALYZER_OPENAI_BASE_URL")
+                or os.getenv("OPENAI_BASE_URL")
+                or "http://127.0.0.1:1234/v1"
+            ),
+        ),
+        fallback=None,
+    )
+    return mgr
+
+
 def ensure_llm_connected() -> None:
     """Pre-flight: проверить, что LLM доступна и отвечает.
 
@@ -89,38 +120,8 @@ def ensure_llm_connected() -> None:
     """
 
     try:
-        from post_analyzer.config import load_llm_manager_settings_from_env  # type: ignore[import-not-found]
-        from post_analyzer.config import LLMProviderSettings  # type: ignore[import-not-found]
-        from post_analyzer.llm_manager import LLMProviderManager  # type: ignore[import-not-found]
-
-        settings = load_llm_manager_settings_from_env()
-        mgr = LLMProviderManager(settings=settings)
-        desc = mgr.describe()
-
-        if desc.get("provider") == "fake" and desc.get("mode") == "fake":
-            lmstudio_base_url = (
-                os.getenv("POST_ANALYZER_OPENAI_BASE_URL")
-                or os.getenv("OPENAI_BASE_URL")
-                or "http://127.0.0.1:1234/v1"
-            )
-            lmstudio_model = (
-                os.getenv("POST_ANALYZER_LLM_MODEL")
-                or os.getenv("POST_ANALYZER_OPENAI_MODEL")
-                or os.getenv("OPENAI_MODEL")
-                or "deepseek-coder-v2-lite-instruct"
-            )
-            mgr.switch(
-                primary=LLMProviderSettings(
-                    provider="openai",
-                    mode="real",
-                    model=lmstudio_model,
-                    base_url=lmstudio_base_url,
-                ),
-                fallback=None,
-            )
-
+        mgr = create_llm_manager()
         mgr.test_connection()
-
         desc = mgr.describe()
         log.info(
             "LLM connected: provider=%s model=%s — модель отвечает.",
@@ -157,29 +158,11 @@ def write_run_snapshot(path: Path, *, run_at: str, posts: list[dict[str, Any]]) 
     )
 
 
-def load_user_prompts(storage: Any, *, user_id: str) -> tuple[str | None, str | None]:
-    if not user_id:
-        return None, None
-    try:
-        resp = (
-            storage.client.table("user_prompts")
-            .select("search_prompt,comment_prompt")
-            .eq("id", user_id)
-            .limit(1)
-            .execute()
-        )
-    except Exception as e:  # noqa: BLE001 - best-effort load
-        log.warning("Failed to load user_prompts: %s", e)
-        return None, None
-    rows = getattr(resp, "data", None)
-    if not isinstance(rows, list) or not rows:
-        return None, None
-    row = rows[0] if isinstance(rows[0], dict) else {}
-    search = row.get("search_prompt") if isinstance(row.get("search_prompt"), str) else None
-    comment = row.get("comment_prompt") if isinstance(row.get("comment_prompt"), str) else None
-    search = search.strip() if search and search.strip() else None
-    comment = comment.strip() if comment and comment.strip() else None
-    return search, comment
+def _required_env(name: str) -> str:
+    v = (os.getenv(name) or "").strip()
+    if not v:
+        raise SystemExit(f"Missing required env var: {name}")
+    return v
 
 
 def default_search_prompt_template() -> str:
@@ -441,7 +424,7 @@ def fetch_and_store_posts(
     snapshot: dict[str, Any],
     cfg: LinkedInClientConfig,
     limit: int,
-) -> None:
+) -> tuple[str, list[dict[str, Any]]]:
     from storage import compute_source_key  # type: ignore[import-not-found]
 
     accounts = storage.linkedin_accounts
@@ -503,38 +486,28 @@ def fetch_and_store_posts(
         log.info("Wrote %s (%s posts)", POSTS_PATH, len(payload))
     except Exception as e:
         log.warning("Failed to write %s: %s", POSTS_PATH, e)
+    return run_at, payload
 
-    analyzer_input = [to_analyzer_row(p) for p in payload]
+
+def analyze_and_store_posts(
+    *,
+    storage: Any,
+    linkedin_account_id: str,
+    post_search_id: str,
+    posts: list[dict[str, Any]],
+    search_prompt: str,
+    comment_prompt: str | None,
+) -> None:
+    from storage import compute_source_key  # type: ignore[import-not-found]
+
+    posts_repo = storage.feed_posts
+    ids_by_key = posts_repo.list_ids_by_source_keys(
+        linkedin_account_id=linkedin_account_id,
+        source_keys=[compute_source_key(p) for p in posts if isinstance(p, dict)],
+    )
+
     try:
-        from post_analyzer.config import load_llm_manager_settings_from_env  # type: ignore[import-not-found]
-        from post_analyzer.config import LLMProviderSettings  # type: ignore[import-not-found]
-        from post_analyzer.llm_manager import LLMProviderManager  # type: ignore[import-not-found]
-
-        settings = load_llm_manager_settings_from_env()
-        mgr = LLMProviderManager(settings=settings)
-        desc = mgr.describe()
-
-        if desc.get("provider") == "fake" and desc.get("mode") == "fake":
-            lmstudio_base_url = (
-                os.getenv("POST_ANALYZER_OPENAI_BASE_URL")
-                or os.getenv("OPENAI_BASE_URL")
-                or "http://127.0.0.1:1234/v1"
-            )
-            lmstudio_model = (
-                os.getenv("POST_ANALYZER_LLM_MODEL")
-                or os.getenv("POST_ANALYZER_OPENAI_MODEL")
-                or os.getenv("OPENAI_MODEL")
-                or "deepseek-coder-v2-lite-instruct"
-            )
-            mgr.switch(
-                primary=LLMProviderSettings(
-                    provider="openai",
-                    mode="real",
-                    model=lmstudio_model,
-                    base_url=lmstudio_base_url,
-                ),
-                fallback=None,
-            )
+        mgr = create_llm_manager()
     except Exception:
         log.error(
             "LLM is not configured. Set POST_ANALYZER_LLM_PROVIDER=openai (or ollama) "
@@ -542,142 +515,72 @@ def fetch_and_store_posts(
         )
         mgr = None
 
-    user_id = os.environ.get("STORAGE_USER_ID", "")
-    search_prompt, comment_prompt = load_user_prompts(storage, user_id=user_id)
-    analyzer_config = default_post_analyzer_config(
-        search_prompt=search_prompt,
-        comment_prompt=comment_prompt,
-    )
+    analyzer_config = default_post_analyzer_config(search_prompt=search_prompt, comment_prompt=comment_prompt)
     selector = (
         LLMPostSelector(analyzer_config=analyzer_config, llm_manager=mgr)
         if mgr is not None
         else LLMPostSelector(analyzer_config=analyzer_config)
     )
-    selection_succeeded = True
-    analyzed_by_key: dict[str, dict[str, Any]] = {}
-    try:
-        analyzed_posts = selector.analyze(analyzer_input)
-        analyzed_by_key = {
-            compute_source_key(post): post
-            for post in analyzed_posts
-            if isinstance(post, dict)
-        }
-        for post in payload:
-            analyzed_post = analyzed_by_key.get(compute_source_key(post))
-            if analyzed_post is not None:
-                copy_analysis_fields(payload_post=post, analyzed_post=analyzed_post)
-        selected = [
-            post
-            for post in analyzed_posts
-            if isinstance(post, dict) and post.get("result") == "принято"
-        ]
-    except Exception as e:
-        selection_succeeded = False
-        selected = []
-        reason = f"Selector failed: {e}"
-        for post in payload:
-            post["result"] = "ошибка анализа"
-            post["reason"] = reason
-            post["analysis_error"] = reason
-        log.warning(
-            "Selector failed; continuing without selected posts snapshot: %s", e
-        )
-    log.info("Selected %s relevant posts via LLM", len(selected))
 
-    post_numbers_by_key = {
-        compute_source_key(post): idx for idx, post in enumerate(payload, start=1)
-    }
-    selected_by_key: dict[str, dict[str, Any]] = {}
-    for post in selected:
-        if not isinstance(post, dict):
+    analyzed_posts = selector.analyze([to_analyzer_row(p) for p in posts if isinstance(p, dict)])
+    now = datetime.now(UTC).isoformat()
+
+    upserts: list[dict[str, Any]] = []
+    for ap in analyzed_posts:
+        if not isinstance(ap, dict):
             continue
-        source_key = compute_source_key(post)
-        selected_by_key[source_key] = post
-        post_number = post_numbers_by_key.get(source_key, "?")
-        log.info(
-            "Post %s/%s: state=analyze result=принято source_key=%s",
-            post_number,
-            limit,
-            source_key,
+        source_key = compute_source_key(ap)
+        feed_post_id = ids_by_key.get(source_key)
+        if not feed_post_id:
+            continue
+
+        rel = ap.get("relevance_analysis") if isinstance(ap.get("relevance_analysis"), dict) else {}
+        match = bool(rel.get("match")) if isinstance(rel, dict) else False
+        score_raw = rel.get("score") if isinstance(rel, dict) else 0
+        score = int(score_raw) if isinstance(score_raw, int) else 0
+        score = 0 if score < 0 else 100 if score > 100 else score
+        reason = rel.get("reason") if isinstance(rel.get("reason"), str) else ""
+
+        matched = rel.get("matched_requirements")
+        missing = rel.get("missing_requirements")
+        red_flags = rel.get("red_flags")
+
+        upserts.append(
+            {
+                "post_search_id": post_search_id,
+                "feed_post_id": feed_post_id,
+                "match": match,
+                "score": score,
+                "reason": reason,
+                "matched_requirements": matched if isinstance(matched, list) else [],
+                "missing_requirements": missing if isinstance(missing, list) else [],
+                "red_flags": red_flags if isinstance(red_flags, list) else [],
+                "comment_text": ap.get("comment") if isinstance(ap.get("comment"), str) else None,
+                "comment_error": ap.get("comment_error") if isinstance(ap.get("comment_error"), str) else None,
+                "raw_payload": rel if isinstance(rel, dict) else None,
+                "error": ap.get("analysis_error") if isinstance(ap.get("analysis_error"), str) else None,
+                "analyzed_at": now,
+                "updated_at": now,
+            }
         )
-        posts_repo.update_analysis(
-            linkedin_account_id=account_id,
-            source_key=source_key,
-            is_relevant=True,
-            comment_text=(
-                post.get("comment") if isinstance(post.get("comment"), str) else None
-            ),
-            analysis_error=(
-                post.get("comment_error")
-                if isinstance(post.get("comment_error"), str)
-                else None
-            ),
-            analysis_payload=(
-                post.get("relevance_analysis")
-                if isinstance(post.get("relevance_analysis"), dict)
-                else None
-            ),
-        )
 
-    # Mark posts from this fetch that were not selected as irrelevant (same source_key as upsert).
-    if selection_succeeded:
-        for post in payload:
-            source_key = compute_source_key(post)
-            if source_key in selected_by_key:
-                continue
-            post_number = post_numbers_by_key.get(source_key, "?")
-            log.info(
-                "Post %s/%s: state=analyze result=отклонено source_key=%s",
-                post_number,
-                limit,
-                source_key,
-            )
-            posts_repo.update_analysis(
-                linkedin_account_id=account_id,
-                source_key=source_key,
-                is_relevant=False,
-                comment_text=None,
-                analysis_error=(
-                    analyzed_by_key[source_key].get("analysis_error")
-                    if isinstance(analyzed_by_key.get(source_key), dict)
-                    and isinstance(
-                        analyzed_by_key[source_key].get("analysis_error"), str
-                    )
-                    else None
-                ),
-                analysis_payload=(
-                    analyzed_by_key[source_key].get("relevance_analysis")
-                    if isinstance(analyzed_by_key.get(source_key), dict)
-                    and isinstance(
-                        analyzed_by_key[source_key].get("relevance_analysis"), dict
-                    )
-                    else None
-                ),
-            )
-
-    try:
-        write_run_snapshot(POSTS_PATH, run_at=run_at, posts=payload)
-        log.info("Updated %s with analysis results", POSTS_PATH)
-    except Exception as e:
-        log.warning("Failed to update %s with analysis results: %s", POSTS_PATH, e)
-
-    try:
-        write_run_snapshot(SELECTED_POSTS_PATH, run_at=run_at, posts=selected)
-        log.info("Wrote %s (%s posts)", SELECTED_POSTS_PATH, len(selected))
-    except Exception as e:
-        log.warning("Failed to write %s: %s", SELECTED_POSTS_PATH, e)
+    written = storage.post_analyses.upsert_analyses(analyses=upserts)
+    log.info("Wrote %s post_analyses row(s) (post_search=%s)", written, post_search_id)
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser(
-        description="Fetch LinkedIn posts via LinkedInClient."
-    )
+    parser = argparse.ArgumentParser(description="Fetch LinkedIn posts via LinkedInClient.")
+    parser.add_argument("--post-search-id", required=True)
     parser.add_argument("--limit", type=int, default=10)
+    parser.add_argument("--account-label", default=None)
     parser.add_argument("--headless", action="store_true")
     args = parser.parse_args()
 
     log.info(
-        "Starting LinkedInClient demo: limit=%s headless=%s", args.limit, args.headless
+        "Starting LinkedIn post search: post_search_id=%s limit=%s headless=%s",
+        args.post_search_id,
+        args.limit,
+        args.headless,
     )
     login_timeout_ms = int(os.getenv("LINKEDIN_AUTH_TIMEOUT_MS", "300000"))
     cfg = LinkedInClientConfig(
@@ -690,10 +593,33 @@ def main() -> None:
     from storage import PulseStorage, pick_linkedin_account_row  # type: ignore[import-not-found]
 
     # STORAGE_USER_ID = auth.users.id; service role links rows to that user.
-    user_id = os.environ["STORAGE_USER_ID"]
-    account_label = os.getenv("STORAGE_ACCOUNT_LABEL")
-
+    user_id = _required_env("STORAGE_USER_ID")
+    post_search_id = str(args.post_search_id)
     storage = PulseStorage()
+
+    ps_row = storage.post_searches.get_by_id(post_search_id=post_search_id)
+    if not ps_row or ps_row.get("user_id") != user_id:
+        raise SystemExit("ERROR: post_search not found")
+    if ps_row.get("status") == "paused":
+        log.info("Post search is paused; skipping.")
+        return
+
+    search_prompt = str(ps_row.get("search_prompt") or "").strip()
+    comment_prompt = ps_row.get("comment_prompt") if isinstance(ps_row.get("comment_prompt"), str) else None
+    comment_prompt = comment_prompt.strip() if comment_prompt and comment_prompt.strip() else None
+    if not search_prompt:
+        raise SystemExit("ERROR: search_prompt is empty")
+
+    account_label = (
+        str(args.account_label)
+        if args.account_label
+        else (
+            ps_row.get("account_label")
+            if isinstance(ps_row.get("account_label"), str) and ps_row.get("account_label")
+            else os.getenv("STORAGE_ACCOUNT_LABEL")
+        )
+    )
+
     accounts = storage.linkedin_accounts
     rows = accounts.list_by_user(user_id=user_id)
     chosen = pick_linkedin_account_row(
@@ -740,13 +666,22 @@ def main() -> None:
             log.info("Supabase session was missing; re-logged in and refreshed it.")
 
     try:
-        fetch_and_store_posts(
+        run_at, payload = fetch_and_store_posts(
             storage=storage,
             account_id=account_id,
             snapshot=snapshot,
             cfg=cfg,
             limit=args.limit,
         )
+        analyze_and_store_posts(
+            storage=storage,
+            linkedin_account_id=account_id,
+            post_search_id=post_search_id,
+            posts=payload,
+            search_prompt=search_prompt,
+            comment_prompt=comment_prompt,
+        )
+        storage.post_searches.update(post_search_id=post_search_id, last_run_at=run_at)
     except LoginRequiredError:
         log.info("Stored session is expired. Re-login and retry once.")
         snapshot = login_and_export_snapshot(cfg)
@@ -757,13 +692,22 @@ def main() -> None:
             snapshot=snapshot,
             label=account_label,
         )
-        fetch_and_store_posts(
+        run_at, payload = fetch_and_store_posts(
             storage=storage,
             account_id=account_id,
             snapshot=snapshot,
             cfg=cfg,
             limit=args.limit,
         )
+        analyze_and_store_posts(
+            storage=storage,
+            linkedin_account_id=account_id,
+            post_search_id=post_search_id,
+            posts=payload,
+            search_prompt=search_prompt,
+            comment_prompt=comment_prompt,
+        )
+        storage.post_searches.update(post_search_id=post_search_id, last_run_at=run_at)
     except FeedLoadError as e:
         log.error("%s", e)
         raise SystemExit(1) from None

@@ -2,7 +2,7 @@
 
 import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
-import { ChevronDown, MessageSquareText, Save, Shield, UserX } from "lucide-react";
+import { Briefcase, ChevronDown, MessageSquareText, Play, RefreshCw, Save, Shield, UserX } from "lucide-react";
 import { useTranslations } from "next-intl";
 
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
@@ -11,8 +11,6 @@ import { Button, buttonVariants } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { PostSearchRunner } from "@/components/PostSearchRunner";
-import { PromptForm } from "@/components/PromptForm";
 import { Textarea } from "@/components/ui/textarea";
 import { cn } from "@/lib/utils";
 
@@ -50,6 +48,19 @@ type UserPromptsDetails = {
   updated_at: string | null;
 };
 
+type AdminJobSearchDto = {
+  id: string;
+  user_id: string;
+  title: string;
+  search_query: string;
+  location: string | null;
+  filter_prompt: string;
+  status: string | null;
+  last_run_at: string | null;
+  created_at: string | null;
+  updated_at: string | null;
+};
+
 const fieldClassName =
   "h-11 rounded-full border-border/80 bg-secondary px-4 text-sm text-foreground shadow-none";
 
@@ -81,6 +92,16 @@ export function AdminUsersTable({
   const router = useRouter();
   const t = useTranslations("adminUsers");
   const tProfile = useTranslations("profileForm");
+  const tPostSearch = useTranslations("postSearch");
+  const tJobRunner = useTranslations("jobs.runner");
+  const JOB_MARKER = "<<<JOB_TEXT>>>";
+  const POST_MARKER = "<<<POST_TEXT>>>";
+  const POST_COMMENT_REQUIRED_MARKERS = [
+    "<<<POST_TEXT>>>",
+    "<<<CONTENT_TYPE>>>",
+    "<<<MAIN_TOPICS>>>",
+    "<<<TARGET_LANGUAGE>>>",
+  ];
   const [pendingId, setPendingId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [openDetailsById, setOpenDetailsById] = useState<Record<string, boolean>>({});
@@ -98,6 +119,32 @@ export function AdminUsersTable({
   const [savePromptsSuccessById, setSavePromptsSuccessById] = useState<
     Record<string, string | null>
   >({});
+  const [postSearchPromptDraftByUserId, setPostSearchPromptDraftByUserId] = useState<Record<string, string>>({});
+  const [postCommentPromptDraftByUserId, setPostCommentPromptDraftByUserId] = useState<Record<string, string>>({});
+  const [postPromptsOpenByUserId, setPostPromptsOpenByUserId] = useState<Record<string, boolean>>({});
+  const [savePostPromptsPendingByUserId, setSavePostPromptsPendingByUserId] = useState<Record<string, boolean>>({});
+  const [postRunPendingByUserId, setPostRunPendingByUserId] = useState<Record<string, boolean>>({});
+  const [postRunStatusByUserId, setPostRunStatusByUserId] = useState<Record<string, string | null>>({});
+  const [postRunMessageByUserId, setPostRunMessageByUserId] = useState<Record<string, string | null>>({});
+  const [postRunErrorByUserId, setPostRunErrorByUserId] = useState<Record<string, string | null>>({});
+
+  const [jobSearchesByUserId, setJobSearchesByUserId] = useState<
+    Record<string, AdminJobSearchDto[] | null>
+  >({});
+  const [jobSearchesErrorByUserId, setJobSearchesErrorByUserId] = useState<Record<string, string | null>>(
+    {},
+  );
+  const [jobSearchDraftByKey, setJobSearchDraftByKey] = useState<Record<string, string>>({});
+  const [jobSearchOpenByKey, setJobSearchOpenByKey] = useState<Record<string, boolean>>({});
+  const [saveJobSearchPendingByKey, setSaveJobSearchPendingByKey] = useState<Record<string, boolean>>({});
+  const [saveJobSearchErrorByKey, setSaveJobSearchErrorByKey] = useState<Record<string, string | null>>({});
+  const [saveJobSearchSuccessByKey, setSaveJobSearchSuccessByKey] = useState<Record<string, string | null>>(
+    {},
+  );
+  const [jobRunPendingByKey, setJobRunPendingByKey] = useState<Record<string, boolean>>({});
+  const [jobRunStatusByKey, setJobRunStatusByKey] = useState<Record<string, string | null>>({});
+  const [jobRunMessageByKey, setJobRunMessageByKey] = useState<Record<string, string | null>>({});
+  const [jobRunErrorByKey, setJobRunErrorByKey] = useState<Record<string, string | null>>({});
 
   const users = useMemo(() => initialUsers || [], [initialUsers]);
 
@@ -136,6 +183,12 @@ export function AdminUsersTable({
       }
       const json = (await resp.json()) as UserPromptsDetails;
       setPromptsById((m) => ({ ...m, [userId]: json }));
+      setPostSearchPromptDraftByUserId((m) =>
+        m[userId] === undefined ? { ...m, [userId]: json.search_prompt || "" } : m,
+      );
+      setPostCommentPromptDraftByUserId((m) =>
+        m[userId] === undefined ? { ...m, [userId]: json.comment_prompt || "" } : m,
+      );
     } catch (e: unknown) {
       setPromptsById((m) => ({ ...m, [userId]: null }));
       setPromptsErrorById((m) => ({
@@ -158,12 +211,253 @@ export function AdminUsersTable({
       }
       const json = (await resp.json()) as UserPromptsDetails;
       setPromptsById((m) => ({ ...m, [userId]: json }));
+      setPostSearchPromptDraftByUserId((m) => ({ ...m, [userId]: json.search_prompt || "" }));
+      setPostCommentPromptDraftByUserId((m) => ({ ...m, [userId]: json.comment_prompt || "" }));
     } catch (e: unknown) {
       setPromptsById((m) => ({ ...m, [userId]: null }));
       setPromptsErrorById((m) => ({
         ...m,
         [userId]: e instanceof Error ? e.message : t("errors.loadPrompts"),
       }));
+    }
+  }
+
+  function missingMarkers(value: string, markers: string[]) {
+    return markers.filter((m) => !value.includes(m));
+  }
+
+  async function onSavePostPrompts(userId: string) {
+    const search_prompt = (postSearchPromptDraftByUserId[userId] ?? "").trim();
+    const rawComment = postCommentPromptDraftByUserId[userId] ?? "";
+    const comment_prompt = rawComment.trim() || null;
+
+    setSavePromptsErrorById((m) => ({ ...m, [userId]: null }));
+    setSavePromptsSuccessById((m) => ({ ...m, [userId]: null }));
+    setSavePostPromptsPendingByUserId((m) => ({ ...m, [userId]: true }));
+    try {
+      if (!search_prompt) throw new Error(t("posts.errors.emptySearch"));
+      if (!search_prompt.includes(POST_MARKER)) {
+        throw new Error(t("posts.errors.missingMarker", { marker: POST_MARKER }));
+      }
+      if (comment_prompt) {
+        const missing = missingMarkers(comment_prompt, POST_COMMENT_REQUIRED_MARKERS);
+        if (missing.length > 0) {
+          throw new Error(t("posts.errors.missingCommentMarkers", { markers: missing.join(", ") }));
+        }
+      }
+
+      const resp = await fetch(`/api/admin/users/${encodeURIComponent(userId)}/prompts`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ search_prompt, comment_prompt }),
+      });
+      const text = await resp.text().catch(() => "");
+      if (!resp.ok) throw new Error(text || t("errors.savePrompts"));
+      setSavePromptsSuccessById((m) => ({ ...m, [userId]: t("common.saved") }));
+      void refreshPrompts(userId);
+    } catch (e: unknown) {
+      setSavePromptsErrorById((m) => ({
+        ...m,
+        [userId]: e instanceof Error ? e.message : t("errors.savePrompts"),
+      }));
+    } finally {
+      setSavePostPromptsPendingByUserId((m) => ({ ...m, [userId]: false }));
+    }
+  }
+
+  function jobKey(userId: string, jobSearchId: string) {
+    return `${userId}:${jobSearchId}`;
+  }
+
+  async function sleep(ms: number) {
+    await new Promise((r) => setTimeout(r, ms));
+  }
+
+  async function startPostSearch(userId: string) {
+    setPostRunPendingByUserId((m) => ({ ...m, [userId]: true }));
+    setPostRunErrorByUserId((m) => ({ ...m, [userId]: null }));
+    setPostRunStatusByUserId((m) => ({ ...m, [userId]: null }));
+    setPostRunMessageByUserId((m) => ({ ...m, [userId]: null }));
+    try {
+      const runResp = await fetch(`/api/admin/users/${encodeURIComponent(userId)}/post-search/run`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({}),
+      });
+      const runJson = (await runResp.json().catch(() => null)) as
+        | { session_id?: string; status?: string; message?: string | null }
+        | null;
+      if (!runResp.ok || !runJson?.session_id) {
+        throw new Error(runJson?.message || tPostSearch("errors.startFailed"));
+      }
+
+      setPostRunStatusByUserId((m) => ({ ...m, [userId]: runJson.status ?? "running" }));
+      setPostRunMessageByUserId((m) => ({ ...m, [userId]: runJson.message ?? null }));
+
+      for (let attempt = 0; attempt < 600; attempt += 1) {
+        await sleep(1000);
+        const stResp = await fetch(
+          `/api/admin/users/${encodeURIComponent(userId)}/post-search/run/${encodeURIComponent(runJson.session_id)}`,
+          { method: "GET", cache: "no-store" },
+        );
+        const stJson = (await stResp.json().catch(() => null)) as
+          | { status?: string; message?: string | null }
+          | null;
+        if (!stResp.ok || !stJson) throw new Error(tPostSearch("errors.statusFailed"));
+        setPostRunStatusByUserId((m) => ({ ...m, [userId]: stJson.status ?? null }));
+        setPostRunMessageByUserId((m) => ({ ...m, [userId]: stJson.message ?? null }));
+        if (stJson.status === "done") {
+          void refreshPrompts(userId);
+          router.refresh();
+          return;
+        }
+        if (stJson.status === "error") {
+          throw new Error(stJson.message || tPostSearch("errors.runFailed"));
+        }
+      }
+      throw new Error(tPostSearch("errors.timeout"));
+    } catch (e: unknown) {
+      setPostRunErrorByUserId((m) => ({
+        ...m,
+        [userId]: e instanceof Error ? e.message : tPostSearch("errors.startFailed"),
+      }));
+    } finally {
+      setPostRunPendingByUserId((m) => ({ ...m, [userId]: false }));
+    }
+  }
+
+  async function startJobSearch(userId: string, jobSearchId: string) {
+    const k = jobKey(userId, jobSearchId);
+    setJobRunPendingByKey((m) => ({ ...m, [k]: true }));
+    setJobRunErrorByKey((m) => ({ ...m, [k]: null }));
+    setJobRunStatusByKey((m) => ({ ...m, [k]: null }));
+    setJobRunMessageByKey((m) => ({ ...m, [k]: null }));
+    try {
+      const runResp = await fetch(`/api/admin/users/${encodeURIComponent(userId)}/job-search/run`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ job_search_id: jobSearchId, limit: 25 }),
+      });
+      const runJson = (await runResp.json().catch(() => null)) as
+        | { session_id?: string; status?: string; message?: string | null }
+        | null;
+      if (!runResp.ok || !runJson?.session_id) {
+        throw new Error(runJson?.message || tJobRunner("errors.startFailed"));
+      }
+
+      setJobRunStatusByKey((m) => ({ ...m, [k]: runJson.status ?? "running" }));
+      setJobRunMessageByKey((m) => ({ ...m, [k]: runJson.message ?? null }));
+
+      for (let attempt = 0; attempt < 600; attempt += 1) {
+        await sleep(1000);
+        const stResp = await fetch(
+          `/api/admin/users/${encodeURIComponent(userId)}/job-search/run/${encodeURIComponent(runJson.session_id)}`,
+          { method: "GET", cache: "no-store" },
+        );
+        const stJson = (await stResp.json().catch(() => null)) as
+          | { status?: string; message?: string | null }
+          | null;
+        if (!stResp.ok || !stJson) throw new Error(tJobRunner("errors.statusFailed"));
+        setJobRunStatusByKey((m) => ({ ...m, [k]: stJson.status ?? null }));
+        setJobRunMessageByKey((m) => ({ ...m, [k]: stJson.message ?? null }));
+        if (stJson.status === "done") {
+          await refreshJobSearches(userId);
+          return;
+        }
+        if (stJson.status === "error") {
+          throw new Error(stJson.message || tJobRunner("errors.runFailed"));
+        }
+      }
+      throw new Error(tJobRunner("errors.timeout"));
+    } catch (e: unknown) {
+      setJobRunErrorByKey((m) => ({
+        ...m,
+        [k]: e instanceof Error ? e.message : tJobRunner("errors.startFailed"),
+      }));
+    } finally {
+      setJobRunPendingByKey((m) => ({ ...m, [k]: false }));
+    }
+  }
+
+  async function ensureJobSearches(userId: string) {
+    if (jobSearchesByUserId[userId] !== undefined) return;
+    setJobSearchesErrorByUserId((m) => ({ ...m, [userId]: null }));
+    try {
+      const resp = await fetch(`/api/admin/users/${encodeURIComponent(userId)}/job-searches`, {
+        method: "GET",
+        cache: "no-store",
+      });
+      if (!resp.ok) {
+        const text = await resp.text().catch(() => "");
+        throw new Error(text || t("jobs.errors.load"));
+      }
+      const json = (await resp.json()) as AdminJobSearchDto[];
+      setJobSearchesByUserId((m) => ({ ...m, [userId]: json }));
+      setJobSearchDraftByKey((m) => {
+        const next = { ...m };
+        for (const row of json) {
+          if (!row?.id) continue;
+          const k = jobKey(userId, row.id);
+          if (next[k] === undefined) next[k] = row.filter_prompt || "";
+        }
+        return next;
+      });
+    } catch (e: unknown) {
+      setJobSearchesByUserId((m) => ({ ...m, [userId]: null }));
+      setJobSearchesErrorByUserId((m) => ({
+        ...m,
+        [userId]: e instanceof Error ? e.message : t("jobs.errors.load"),
+      }));
+    }
+  }
+
+  async function refreshJobSearches(userId: string) {
+    setJobSearchesErrorByUserId((m) => ({ ...m, [userId]: null }));
+    try {
+      const resp = await fetch(`/api/admin/users/${encodeURIComponent(userId)}/job-searches`, {
+        method: "GET",
+        cache: "no-store",
+      });
+      if (!resp.ok) {
+        const text = await resp.text().catch(() => "");
+        throw new Error(text || t("jobs.errors.load"));
+      }
+      const json = (await resp.json()) as AdminJobSearchDto[];
+      setJobSearchesByUserId((m) => ({ ...m, [userId]: json }));
+    } catch (e: unknown) {
+      setJobSearchesByUserId((m) => ({ ...m, [userId]: null }));
+      setJobSearchesErrorByUserId((m) => ({
+        ...m,
+        [userId]: e instanceof Error ? e.message : t("jobs.errors.load"),
+      }));
+    }
+  }
+
+  async function onSaveJobSearchPrompt(userId: string, jobSearchId: string) {
+    const k = jobKey(userId, jobSearchId);
+    const prompt = (jobSearchDraftByKey[k] ?? "").trim();
+    setSaveJobSearchPendingByKey((m) => ({ ...m, [k]: true }));
+    setSaveJobSearchErrorByKey((m) => ({ ...m, [k]: null }));
+    setSaveJobSearchSuccessByKey((m) => ({ ...m, [k]: null }));
+    try {
+      if (!prompt) throw new Error(t("jobs.errors.emptyPrompt"));
+      if (!prompt.includes(JOB_MARKER)) throw new Error(t("jobs.errors.missingMarker", { marker: JOB_MARKER }));
+      const resp = await fetch(
+        `/api/admin/users/${encodeURIComponent(userId)}/job-searches/${encodeURIComponent(jobSearchId)}`,
+        {
+          method: "PATCH",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ filter_prompt: prompt }),
+        },
+      );
+      const text = await resp.text().catch(() => "");
+      if (!resp.ok) throw new Error(text || t("jobs.errors.save"));
+      setSaveJobSearchSuccessByKey((m) => ({ ...m, [k]: t("common.saved") }));
+      await refreshJobSearches(userId);
+    } catch (e: unknown) {
+      setSaveJobSearchErrorByKey((m) => ({ ...m, [k]: e instanceof Error ? e.message : t("jobs.errors.save") }));
+    } finally {
+      setSaveJobSearchPendingByKey((m) => ({ ...m, [k]: false }));
     }
   }
 
@@ -270,6 +564,7 @@ export function AdminUsersTable({
             const displayName = u.full_name || "—";
             const details = detailsById[u.id];
             const prompts = promptsById[u.id] ?? null;
+            const jobSearches = jobSearchesByUserId[u.id] ?? null;
             const avatarAlt = (displayName || email || tProfile("avatarAltFallback")).trim();
             const avatarFallback = initialsFromName(displayName || email);
 
@@ -335,7 +630,10 @@ export function AdminUsersTable({
                           onClick={() => {
                             const next = !openPrompts;
                             setOpenPromptsById((m) => ({ ...m, [u.id]: next }));
-                            if (next) void ensurePrompts(u.id);
+                            if (next) {
+                              void ensurePrompts(u.id);
+                              void ensureJobSearches(u.id);
+                            }
                           }}
                         >
                           <MessageSquareText className="size-4" aria-hidden />
@@ -602,40 +900,259 @@ export function AdminUsersTable({
                         </div>
                       ) : null}
 
-                      {prompts ? (
-                        <div className="space-y-6 rounded-xl border border-border bg-background/60 p-4">
-                          <PromptForm
-                            initialProfile={null}
-                            initialSearchPrompt={prompts.search_prompt}
-                            initialCommentPrompt={prompts.comment_prompt}
-                            saveUrl={`/api/admin/users/${encodeURIComponent(u.id)}/prompts`}
-                            fieldIdPrefix={`prompts_${u.id}`}
-                            footerHint={t("prompts.footerHint")}
-                            onSaved={() => {
-                              setSavePromptsErrorById((m) => ({ ...m, [u.id]: null }));
-                              setSavePromptsSuccessById((m) => ({ ...m, [u.id]: t("common.saved") }));
-                              void refreshPrompts(u.id);
-                            }}
-                          />
+                      <div className="space-y-6 rounded-xl border border-border bg-background/60 p-4">
+                        <div className="text-sm font-semibold">{t("sections.posts")}</div>
+                        {prompts ? (
+                          <div className="space-y-6">
+                            <div className="rounded-2xl border border-border/80 bg-background/40 p-4">
+                              <div className="flex flex-wrap items-start justify-between gap-3">
+                                <div className="min-w-0">
+                                  <div className="text-sm font-semibold">{t("posts.title")}</div>
+                                  <div className="mt-1 text-xs text-muted-foreground">{t("posts.description")}</div>
+                                </div>
 
-                          <div className="border-t border-border/80 pt-6">
-                            <PostSearchRunner
-                              runUrl={`/api/admin/users/${encodeURIComponent(u.id)}/post-search/run`}
-                              statusUrl={(sid) =>
-                                `/api/admin/users/${encodeURIComponent(u.id)}/post-search/run/${encodeURIComponent(sid)}`
-                              }
-                              redirectOnSuccess={false}
-                              successMessage={t("postSearch.success")}
-                              onSuccess={() => {
-                                void refreshPrompts(u.id);
-                                router.refresh();
-                              }}
-                            />
+                                <button
+                                  type="button"
+                                  className={cn(
+                                    buttonVariants({ variant: "outline", size: "sm" }),
+                                    "h-9 rounded-full px-4 text-muted-foreground hover:text-foreground",
+                                  )}
+                                  onClick={() =>
+                                    setPostPromptsOpenByUserId((m) => ({ ...m, [u.id]: !Boolean(m[u.id]) }))
+                                  }
+                                >
+                                  <ChevronDown
+                                    className={cn(
+                                      "size-4 transition-transform",
+                                      Boolean(postPromptsOpenByUserId[u.id]) && "rotate-180",
+                                    )}
+                                  />
+                                  {Boolean(postPromptsOpenByUserId[u.id])
+                                    ? t("actions.collapse")
+                                    : t("posts.actions.edit")}
+                                </button>
+                              </div>
+
+                              {Boolean(postPromptsOpenByUserId[u.id]) ? (
+                                <div className="mt-4 grid gap-4">
+                                  <div className="grid gap-2">
+                                    <Label htmlFor={`post_search_prompt_${u.id}`}>{t("posts.fields.searchPrompt")}</Label>
+                                    <Textarea
+                                      id={`post_search_prompt_${u.id}`}
+                                      rows={8}
+                                      value={postSearchPromptDraftByUserId[u.id] ?? prompts.search_prompt ?? ""}
+                                      onChange={(e) =>
+                                        setPostSearchPromptDraftByUserId((m) => ({ ...m, [u.id]: e.target.value }))
+                                      }
+                                    />
+                                    <p className="text-xs text-muted-foreground">
+                                      {t("posts.fields.markerHint", { marker: POST_MARKER })}
+                                    </p>
+                                  </div>
+
+                                  <div className="grid gap-2">
+                                    <Label htmlFor={`post_comment_prompt_${u.id}`}>{t("posts.fields.commentPrompt")}</Label>
+                                    <Textarea
+                                      id={`post_comment_prompt_${u.id}`}
+                                      rows={8}
+                                      value={postCommentPromptDraftByUserId[u.id] ?? prompts.comment_prompt ?? ""}
+                                      onChange={(e) =>
+                                        setPostCommentPromptDraftByUserId((m) => ({ ...m, [u.id]: e.target.value }))
+                                      }
+                                    />
+                                    <p className="text-xs text-muted-foreground">{t("posts.fields.commentHint")}</p>
+                                  </div>
+
+                                  <div className="flex flex-wrap gap-2">
+                                    <Button
+                                      type="button"
+                                      className="h-9 rounded-full"
+                                      onClick={() => void onSavePostPrompts(u.id)}
+                                      disabled={Boolean(savePostPromptsPendingByUserId[u.id])}
+                                    >
+                                      {savePostPromptsPendingByUserId[u.id] ? t("actions.saving") : t("actions.save")}
+                                    </Button>
+
+                                    <Button
+                                      type="button"
+                                      className="h-9 rounded-full"
+                                      variant="outline"
+                                      onClick={() => void startPostSearch(u.id)}
+                                      disabled={Boolean(postRunPendingByUserId[u.id])}
+                                    >
+                                      {postRunPendingByUserId[u.id] ? (
+                                        <RefreshCw className="mr-2 h-4 w-4 animate-spin" />
+                                      ) : (
+                                        <Play className="mr-2 h-4 w-4" />
+                                      )}
+                                      {postRunPendingByUserId[u.id]
+                                        ? tPostSearch("button.pending")
+                                        : tPostSearch("button.idle")}
+                                    </Button>
+                                  </div>
+
+                                  {postRunStatusByUserId[u.id] || postRunMessageByUserId[u.id] ? (
+                                    <div className="rounded-xl border border-border/80 bg-muted/40 px-4 py-3 text-sm text-muted-foreground">
+                                      <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
+                                        <span className="font-medium text-foreground">{tPostSearch("statusLabel")}</span>
+                                        <span
+                                          className={cn(postRunStatusByUserId[u.id] === "error" ? "text-destructive" : "")}
+                                        >
+                                          {postRunStatusByUserId[u.id] || "—"}
+                                        </span>
+                                      </div>
+                                      {postRunMessageByUserId[u.id] ? (
+                                        <div className="mt-1 whitespace-pre-wrap">{postRunMessageByUserId[u.id]}</div>
+                                      ) : null}
+                                    </div>
+                                  ) : null}
+
+                                  {postRunErrorByUserId[u.id] ? (
+                                    <div className="rounded-xl border border-destructive/40 bg-destructive/10 px-4 py-3 text-sm text-destructive">
+                                      {postRunErrorByUserId[u.id]}
+                                    </div>
+                                  ) : null}
+                                </div>
+                              ) : null}
+                            </div>
+
                           </div>
+                        ) : (
+                          <div className="text-sm text-muted-foreground">{t("loading.prompts")}</div>
+                        )}
+
+                        <div className="border-t border-border/80 pt-6">
+                          <div className="mb-3 flex items-center gap-2 text-sm font-semibold">
+                            <Briefcase className="size-4 text-foreground/70" aria-hidden />
+                            {t("sections.jobs")}
+                          </div>
+
+                          {jobSearchesErrorByUserId[u.id] ? (
+                            <div className="rounded-xl border border-destructive/30 bg-destructive/10 px-3 py-2 text-sm text-destructive">
+                              {jobSearchesErrorByUserId[u.id]}
+                            </div>
+                          ) : null}
+
+                          {jobSearches ? (
+                            jobSearches.length === 0 ? (
+                              <div className="rounded-xl border border-border/70 bg-muted/30 px-3 py-2 text-sm text-muted-foreground">
+                                {t("jobs.empty")}
+                              </div>
+                            ) : (
+                              <div className="space-y-3">
+                                {jobSearches.map((s) => {
+                                  const k = jobKey(u.id, s.id);
+                                  const open = Boolean(jobSearchOpenByKey[k]);
+                                  const draft = jobSearchDraftByKey[k] ?? s.filter_prompt ?? "";
+                                  const saving = Boolean(saveJobSearchPendingByKey[k]);
+                                  const canSave = draft.trim().length > 0 && draft.includes(JOB_MARKER);
+                                  return (
+                                    <div key={s.id} className="rounded-2xl border border-border/80 bg-background/40 p-4">
+                                      <div className="flex flex-wrap items-start justify-between gap-3">
+                                        <div className="min-w-0">
+                                          <div className="text-sm font-semibold">{s.title}</div>
+                                          <div className="mt-1 text-xs text-muted-foreground">
+                                            <span className="font-medium text-foreground/90">{s.search_query}</span>
+                                            {s.location ? ` · ${s.location}` : ""}
+                                            {s.status ? ` · ${s.status}` : ""}
+                                          </div>
+                                        </div>
+
+                                        <button
+                                          type="button"
+                                          className={cn(
+                                            buttonVariants({ variant: "outline", size: "sm" }),
+                                            "h-9 rounded-full px-4 text-muted-foreground hover:text-foreground",
+                                          )}
+                                          onClick={() => setJobSearchOpenByKey((m) => ({ ...m, [k]: !open }))}
+                                        >
+                                          <ChevronDown className={cn("size-4 transition-transform", open && "rotate-180")} />
+                                          {open ? t("actions.collapse") : t("jobs.actions.edit")}
+                                        </button>
+                                      </div>
+
+                                      {open ? (
+                                        <div className="mt-4 grid gap-3">
+                                          <div className="grid gap-2">
+                                            <Label htmlFor={`job_prompt_${k}`}>{t("jobs.fields.filterPrompt")}</Label>
+                                            <Textarea
+                                              id={`job_prompt_${k}`}
+                                              rows={8}
+                                              value={draft}
+                                              onChange={(e) =>
+                                                setJobSearchDraftByKey((m) => ({ ...m, [k]: e.target.value }))
+                                              }
+                                              disabled={saving}
+                                            />
+                                            <p className="text-xs text-muted-foreground">
+                                              {t("jobs.fields.markerHint", { marker: JOB_MARKER })}
+                                            </p>
+                                          </div>
+
+                                          {saveJobSearchErrorByKey[k] ? (
+                                            <div className="text-sm text-destructive">{saveJobSearchErrorByKey[k]}</div>
+                                          ) : null}
+                                          {saveJobSearchSuccessByKey[k] ? (
+                                            <div className="text-sm text-emerald-600 dark:text-emerald-300">
+                                              {saveJobSearchSuccessByKey[k]}
+                                            </div>
+                                          ) : null}
+
+                                          <div className="flex flex-wrap items-center gap-2">
+                                            <Button
+                                              type="button"
+                                              className="h-9 rounded-full"
+                                              onClick={() => void onSaveJobSearchPrompt(u.id, s.id)}
+                                              disabled={saving || !canSave}
+                                            >
+                                              {saving ? t("actions.saving") : t("actions.save")}
+                                            </Button>
+
+                                            <Button
+                                              type="button"
+                                              className="h-9 rounded-full"
+                                              variant="outline"
+                                              onClick={() => void startJobSearch(u.id, s.id)}
+                                              disabled={Boolean(jobRunPendingByKey[k])}
+                                            >
+                                              {jobRunPendingByKey[k] ? (
+                                                <RefreshCw className="mr-2 h-4 w-4 animate-spin" />
+                                              ) : (
+                                                <Play className="mr-2 h-4 w-4" />
+                                              )}
+                                              {jobRunPendingByKey[k] ? t("jobs.run.pending") : t("jobs.run.idle")}
+                                            </Button>
+                                          </div>
+
+                                          {jobRunStatusByKey[k] || jobRunMessageByKey[k] ? (
+                                            <div className="rounded-xl border border-border/80 bg-muted/40 px-4 py-3 text-sm text-muted-foreground">
+                                              <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
+                                                <span className="font-medium text-foreground">{tJobRunner("statusLabel")}</span>
+                                                <span className={cn(jobRunStatusByKey[k] === "error" ? "text-destructive" : "")}>
+                                                  {jobRunStatusByKey[k] || "—"}
+                                                </span>
+                                              </div>
+                                              {jobRunMessageByKey[k] ? (
+                                                <div className="mt-1 whitespace-pre-wrap">{jobRunMessageByKey[k]}</div>
+                                              ) : null}
+                                            </div>
+                                          ) : null}
+
+                                          {jobRunErrorByKey[k] ? (
+                                            <div className="text-sm text-destructive">{jobRunErrorByKey[k]}</div>
+                                          ) : null}
+                                        </div>
+                                      ) : null}
+                                    </div>
+                                  );
+                                })}
+                              </div>
+                            )
+                          ) : (
+                            <div className="text-sm text-muted-foreground">{t("jobs.loading")}</div>
+                          )}
                         </div>
-                      ) : (
-                        <div className="text-sm text-muted-foreground">{t("loading.prompts")}</div>
-                      )}
+                      </div>
                     </CardContent>
                   ) : null}
               </Card>

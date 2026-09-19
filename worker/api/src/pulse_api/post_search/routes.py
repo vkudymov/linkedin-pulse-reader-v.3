@@ -44,7 +44,28 @@ def start_run(
     user_id: str = Depends(require_user_id),
 ) -> PostSearchRunResponse:
     _ensure_not_blocked_and_increment_counter(user_id=user_id)
-    sess = _sessions.start(user_id=user_id, limit=req.limit, account_label=req.account_label)
+    client = _get_supabase_admin_client()
+    try:
+        resp = (
+            client.table("post_searches")
+            .select("id")
+            .eq("id", req.post_search_id)
+            .eq("user_id", user_id)
+            .maybe_single()
+            .execute()
+        )
+    except Exception as e:
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Failed to load post search.") from e
+    row = getattr(resp, "data", None)
+    if not isinstance(row, dict) or not row.get("id"):
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Post search not found.")
+
+    sess = _sessions.start(
+        user_id=user_id,
+        post_search_id=req.post_search_id,
+        limit=req.limit,
+        account_label=req.account_label,
+    )
     return PostSearchRunResponse(session_id=sess.session_id, status=sess.status, message=sess.message)
 
 

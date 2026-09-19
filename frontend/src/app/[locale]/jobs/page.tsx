@@ -114,6 +114,27 @@ export default async function JobsPage({
       />
 
       <main className="mx-auto max-w-3xl px-6 py-6">
+        <div className="mb-6 flex gap-2">
+          <Link
+            href="/posts"
+            className={[
+              "rounded-full border px-4 py-2 text-sm",
+              "border-border/60 text-muted-foreground hover:text-foreground",
+            ].join(" ")}
+          >
+            {t("tabs.posts")}
+          </Link>
+          <Link
+            href="/jobs"
+            className={[
+              "rounded-full border px-4 py-2 text-sm",
+              "border-border bg-card text-foreground",
+            ].join(" ")}
+          >
+            {t("tabs.jobs")}
+          </Link>
+        </div>
+
         {searches.length === 0 ? (
           <div className="rounded-2xl border border-border/80 bg-muted/40 px-6 py-5 text-sm text-muted-foreground">
             {t("emptySearches")}{" "}

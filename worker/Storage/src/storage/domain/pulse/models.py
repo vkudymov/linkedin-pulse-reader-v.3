@@ -59,3 +59,44 @@ class FeedPostUpsert(TypedDict):
     media_urls: NotRequired[list[str]]
     raw_extra: NotRequired[dict[str, Any] | None]
 
+
+class PostSearchRow(TypedDict):
+    id: str
+    user_id: str
+    title: str
+    search_prompt: str
+    comment_prompt: str | None
+    account_label: str | None
+    status: str
+    last_run_at: str | None
+    created_at: str
+    updated_at: str
+
+
+class PostSearchCreate(TypedDict):
+    user_id: str
+    title: str
+    search_prompt: str
+    comment_prompt: NotRequired[str | None]
+    account_label: NotRequired[str | None]
+    status: NotRequired[str]
+    last_run_at: NotRequired[str | None]
+
+
+class PostAnalysisUpsert(TypedDict):
+    post_search_id: str
+    feed_post_id: str
+    match: bool
+    score: int
+    reason: str
+    matched_requirements: NotRequired[list[Any]]
+    missing_requirements: NotRequired[list[Any]]
+    red_flags: NotRequired[list[Any]]
+    comment_text: NotRequired[str | None]
+    comment_error: NotRequired[str | None]
+    raw_payload: NotRequired[dict[str, Any] | None]
+    error: NotRequired[str | None]
+    analyzed_at: NotRequired[str | None]
+    created_at: NotRequired[str | None]
+    updated_at: NotRequired[str | None]
+

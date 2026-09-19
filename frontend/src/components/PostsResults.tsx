@@ -10,6 +10,7 @@ import {
 } from "@/components/ListSearchSortBar";
 import { PostCard } from "@/components/PostCard";
 import { PostFilters, type PostFilter, type PostFilterCounts } from "@/components/PostFilters";
+import { Link } from "@/i18n/navigation";
 import { parseJobPostedAtMs } from "@/lib/parseJobPostedAt";
 import type { FeedPostMediaRow, FeedPostRow } from "@/types/database";
 
@@ -136,9 +137,9 @@ export function PostsResults({
               {filter === "all" ? (
                 <>
                   {t("empty.noPosts.runScript")}{" "}
-                  <code className="rounded-md bg-background px-1.5 py-0.5 text-xs">
-                    worker/run_post_search.py
-                  </code>{" "}
+                  <Link className="underline underline-offset-4 hover:text-foreground" href="/prompts">
+                    /prompts
+                  </Link>{" "}
                   {t("empty.noPosts.thenRefresh")}
                 </>
               ) : (

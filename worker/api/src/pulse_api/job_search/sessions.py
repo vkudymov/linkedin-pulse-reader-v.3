@@ -107,7 +107,7 @@ class JobSearchSessionManager:
                 sys.executable,
                 str(script),
                 "--job-search-id",
-                str(job_search_id),
+                job_search_id,
                 "--limit",
                 str(limit),
             ]
@@ -125,7 +125,7 @@ class JobSearchSessionManager:
             output = (proc.stdout or "").rstrip()
             if output:
                 print(output)
-            code = int(proc.returncode)
+            code = proc.returncode
             if code == 0:
                 self._update(session_id, status="done", message="Job search completed.")
             else:

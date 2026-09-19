@@ -2,14 +2,14 @@ import { redirect } from "next/navigation";
 import { getTranslations } from "next-intl/server";
 
 import { AppHeader } from "@/components/AppHeader";
-import { PostSearchRunner } from "@/components/PostSearchRunner";
-import { PromptForm } from "@/components/PromptForm";
 import { JobSearchesPanel } from "@/components/jobs/JobSearchesPanel";
+import { PostSearchesPanel } from "@/components/posts/PostSearchesPanel";
+import type { JobSearchDto } from "@/components/jobs/JobSearchesPanel";
+import type { PostSearchDto } from "@/components/posts/PostSearchesPanel";
 import { Link } from "@/i18n/navigation";
 import { requireNotBlocked } from "@/lib/auth/blocked";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { loadJobSearchRows } from "@/lib/jobSearches";
-import type { UserProfileRow } from "@/types/database";
 
 export default async function PromptsPage({
   params,
@@ -26,22 +26,14 @@ export default async function PromptsPage({
   const { data } = await supabase.auth.getUser();
   if (!data.user) redirect(`/${locale}/login`);
   const isAdmin = await requireNotBlocked(supabase, data.user.id);
-
-  const profileResp = await supabase
-    .from("user_profiles_view")
-    .select("*")
-    .eq("id", data.user.id)
-    .maybeSingle();
-
-  const profile = (profileResp.data || null) as UserProfileRow | null;
   const activeTab = tab === "jobs" ? "jobs" : "posts";
 
-  let jobSearchesInitial: any[] = [];
+  let jobSearchesInitial: JobSearchDto[] = [];
+  let postSearchesInitial: PostSearchDto[] = [];
   let supportsLinkedinFilters = false;
   if (activeTab === "jobs") {
-    const loaded = await loadJobSearchRows(supabase, data.user.id);
-    supportsLinkedinFilters = loaded.usedFiltersColumn;
-    const rows = loaded.rows;
+    const { rows, usedFiltersColumn } = await loadJobSearchRows(supabase, data.user.id);
+    supportsLinkedinFilters = usedFiltersColumn;
     const withCounts = await Promise.all(
       rows.map(async (s) => {
         const lastRunAt = typeof s.last_run_at === "string" ? s.last_run_at : null;
@@ -55,7 +47,15 @@ export default async function PromptsPage({
         return { ...s, new_match_count: count ?? 0 };
       }),
     );
-    jobSearchesInitial = withCounts as any[];
+    jobSearchesInitial = withCounts as JobSearchDto[];
+  }
+  if (activeTab === "posts") {
+    const postSearchesResp = await supabase
+      .from("post_searches")
+      .select("id,user_id,title,search_prompt,comment_prompt,account_label,status,last_run_at,created_at,updated_at")
+      .eq("user_id", data.user.id)
+      .order("created_at", { ascending: true });
+    postSearchesInitial = (postSearchesResp.data || []) as PostSearchDto[];
   }
 
   return (
@@ -94,39 +94,9 @@ export default async function PromptsPage({
         </div>
 
         {activeTab === "jobs" ? (
-          <JobSearchesPanel initial={jobSearchesInitial as any} supportsLinkedinFilters={supportsLinkedinFilters} />
+          <JobSearchesPanel initial={jobSearchesInitial} supportsLinkedinFilters={supportsLinkedinFilters} />
         ) : (
-          <>
-            <div className="overflow-hidden rounded-2xl border border-border bg-card">
-              <div className="border-b border-border px-6 py-5">
-                <div className="space-y-1">
-                  <h2 className="text-lg font-semibold tracking-tight">{t("settings.title")}</h2>
-                  <p className="max-w-xl text-sm leading-6 text-muted-foreground">
-                    {t("settings.description")}
-                  </p>
-                </div>
-              </div>
-
-              <div className="p-6">
-                <PromptForm initialProfile={profile} />
-              </div>
-            </div>
-
-            <div className="mt-6 overflow-hidden rounded-2xl border border-border bg-card">
-              <div className="border-b border-border px-6 py-5">
-                <div className="space-y-1">
-                  <h2 className="text-lg font-semibold tracking-tight">{t("run.title")}</h2>
-                  <p className="max-w-xl text-sm leading-6 text-muted-foreground">
-                    {t("run.description")}
-                  </p>
-                </div>
-              </div>
-
-              <div className="p-6">
-                <PostSearchRunner />
-              </div>
-            </div>
-          </>
+          <PostSearchesPanel initial={postSearchesInitial} />
         )}
       </main>
     </div>
