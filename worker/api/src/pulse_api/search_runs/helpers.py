@@ -9,6 +9,7 @@ from .service import (
     attach_session_id,
     create_job_search_run,
     create_post_search_run,
+    resolve_run_limits,
 )
 
 
@@ -17,13 +18,13 @@ def start_post_search_session(
     sessions: PostSearchSessionManager,
     user_id: str,
     post_search_id: str,
-    limit: int,
+    limit: int | None,
     account_label: str | None,
     initiated_by: InitiatedBy = "user",
     admin_actor_id: str | None = None,
 ) -> PostSearchSession:
     try:
-        run_id = create_post_search_run(
+        run_id, tariff = create_post_search_run(
             user_id=user_id,
             post_search_id=post_search_id,
             limit=limit,
@@ -38,10 +39,15 @@ def start_post_search_session(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Failed to create search run."
         ) from e
 
+    scan, target_found, min_score = resolve_run_limits(
+        tariff=tariff, kind="post", request_limit=limit
+    )
     sess = sessions.start(
         user_id=user_id,
         post_search_id=post_search_id,
-        limit=limit,
+        limit=scan,
+        min_score=min_score,
+        target_found=target_found,
         account_label=account_label,
         search_run_id=run_id,
     )
@@ -54,13 +60,13 @@ def start_job_search_session(
     sessions: JobSearchSessionManager,
     user_id: str,
     job_search_id: str,
-    limit: int,
+    limit: int | None,
     account_label: str | None,
     initiated_by: InitiatedBy = "user",
     admin_actor_id: str | None = None,
 ) -> JobSearchSession:
     try:
-        run_id = create_job_search_run(
+        run_id, tariff = create_job_search_run(
             user_id=user_id,
             job_search_id=job_search_id,
             limit=limit,
@@ -75,10 +81,15 @@ def start_job_search_session(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Failed to create search run."
         ) from e
 
+    scan, target_found, min_score = resolve_run_limits(
+        tariff=tariff, kind="job", request_limit=limit
+    )
     sess = sessions.start(
         user_id=user_id,
         job_search_id=job_search_id,
-        limit=limit,
+        limit=scan,
+        min_score=min_score,
+        target_found=target_found,
         account_label=account_label,
         search_run_id=run_id,
     )

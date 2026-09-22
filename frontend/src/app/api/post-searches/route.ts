@@ -1,7 +1,20 @@
 import { createSupabaseServerClient } from "@/lib/supabase/server";
+import { attachSearchTariff, loadSearchTariffs } from "@/lib/searchTariffs";
 
 const SEARCH_MARKER = "<<<POST_TEXT>>>";
 const REQUIRED_COMMENT_MARKERS = ["<<<POST_TEXT>>>", "<<<CONTENT_TYPE>>>", "<<<MAIN_TOPICS>>>", "<<<TARGET_LANGUAGE>>>"];
+const SELECT_WITH_TARIFF =
+  "id,user_id,title,search_prompt,comment_prompt,account_label,status,last_run_at,created_at,updated_at,search_tariff_id";
+const SELECT_WITHOUT_TARIFF =
+  "id,user_id,title,search_prompt,comment_prompt,account_label,status,last_run_at,created_at,updated_at";
+
+function isMissingTariffColumn(error: unknown): boolean {
+  if (!error || typeof error !== "object") return false;
+  const e = error as { code?: unknown; message?: unknown };
+  const code = typeof e.code === "string" ? e.code : "";
+  const msg = typeof e.message === "string" ? e.message : "";
+  return code === "42703" || msg.includes("search_tariff_id");
+}
 
 function isNonEmptyString(v: unknown): v is string {
   return typeof v === "string" && v.trim().length > 0;
@@ -16,14 +29,33 @@ export async function GET() {
   const { data } = await supabase.auth.getUser();
   if (!data.user) return new Response("unauthorized", { status: 401 });
 
-  const resp = await supabase
+  const first = await supabase
     .from("post_searches")
-    .select("id,user_id,title,search_prompt,comment_prompt,account_label,status,last_run_at,created_at,updated_at")
+    .select(SELECT_WITH_TARIFF)
     .eq("user_id", data.user.id)
     .order("created_at", { ascending: true });
 
-  if (resp.error) return Response.json({ ok: false, error: resp.error.message }, { status: 400 });
-  return Response.json({ ok: true, post_searches: resp.data || [] });
+  const tariffs = await loadSearchTariffs(supabase);
+
+  if (!first.error) {
+    const rows = (Array.isArray(first.data) ? first.data : []).map((s) =>
+      attachSearchTariff((s || {}) as Record<string, unknown>, tariffs),
+    );
+    return Response.json({ ok: true, post_searches: rows });
+  }
+  if (!isMissingTariffColumn(first.error)) {
+    return Response.json({ ok: false, error: first.error.message }, { status: 400 });
+  }
+  const second = await supabase
+    .from("post_searches")
+    .select(SELECT_WITHOUT_TARIFF)
+    .eq("user_id", data.user.id)
+    .order("created_at", { ascending: true });
+  if (second.error) return Response.json({ ok: false, error: second.error.message }, { status: 400 });
+  const rows = (Array.isArray(second.data) ? second.data : []).map((s) =>
+    attachSearchTariff((s || {}) as Record<string, unknown>, tariffs),
+  );
+  return Response.json({ ok: true, post_searches: rows });
 }
 
 export async function POST(request: Request) {
@@ -57,7 +89,34 @@ export async function POST(request: Request) {
     }
   }
 
-  const resp = await supabase
+  const st = await supabase
+    .from("user_admin_state")
+    .select("search_tariff_id")
+    .eq("id", data.user.id)
+    .maybeSingle();
+  const userTariffId =
+    !st.error && st.data && typeof st.data.search_tariff_id === "string" ? st.data.search_tariff_id : null;
+
+  const first = await supabase
+    .from("post_searches")
+    .insert({
+      user_id: data.user.id,
+      title,
+      search_prompt,
+      comment_prompt,
+      account_label,
+      status,
+      search_tariff_id: userTariffId,
+    })
+    .select(SELECT_WITH_TARIFF)
+    .maybeSingle();
+
+  if (!first.error) return Response.json({ ok: true, post_search: first.data }, { status: 200 });
+  if (!isMissingTariffColumn(first.error)) {
+    return Response.json({ ok: false, error: first.error.message }, { status: 400 });
+  }
+
+  const second = await supabase
     .from("post_searches")
     .insert({
       user_id: data.user.id,
@@ -67,10 +126,10 @@ export async function POST(request: Request) {
       account_label,
       status,
     })
-    .select("id,user_id,title,search_prompt,comment_prompt,account_label,status,last_run_at,created_at,updated_at")
+    .select(SELECT_WITHOUT_TARIFF)
     .maybeSingle();
 
-  if (resp.error) return Response.json({ ok: false, error: resp.error.message }, { status: 400 });
-  return Response.json({ ok: true, post_search: resp.data }, { status: 200 });
+  if (second.error) return Response.json({ ok: false, error: second.error.message }, { status: 400 });
+  return Response.json({ ok: true, post_search: second.data }, { status: 200 });
 }
 

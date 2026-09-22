@@ -18,12 +18,17 @@ from .schemas import (
     AdminJobSearchUpdate,
     AdminPostSearchRow,
     AdminPostSearchStartRequest,
+    AdminPostSearchUpdate,
+    AdminSearchTariffCreate,
+    AdminSearchTariffRow,
+    AdminSearchTariffUpdate,
     AdminSearchRunRow,
     AdminSearchRunsListResponse,
     AdminUserProfileDetails,
     AdminUserProfileUpdate,
     AdminUserPromptsDetails,
     AdminUserPromptsUpdate,
+    AdminUserSearchTariffUpdate,
     AdminUserRow,
 )
 
@@ -192,6 +197,20 @@ def get_user_profile_details(
     row = getattr(resp, "data", None)
     if not isinstance(row, dict) or not row.get("id"):
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found.")
+    try:
+        st_resp = (
+            client.table("user_admin_state")
+            .select("search_tariff_id")
+            .eq("id", target_user_id)
+            .maybe_single()
+            .execute()
+        )
+        st_row = getattr(st_resp, "data", None)
+        if isinstance(st_row, dict):
+            row["search_tariff_id"] = st_row.get("search_tariff_id")
+    except Exception:
+        # Non-critical for profile details.
+        row["search_tariff_id"] = None
     return AdminUserProfileDetails(**row)
 
 
@@ -200,6 +219,15 @@ def _to_nullable_trimmed_string(v: str | None) -> str | None:
         return None
     s = v.strip()
     return s or None
+
+
+def _first_updated_row(resp: Any) -> dict[str, Any] | None:
+    data = getattr(resp, "data", None)
+    if isinstance(data, list) and data and isinstance(data[0], dict):
+        return data[0]
+    if isinstance(data, dict):
+        return data
+    return None
 
 
 def _to_nullable_date(v: str | None) -> str | None:
@@ -246,6 +274,100 @@ def update_user_profile_details(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=(msg if isinstance(msg, str) and msg else "Failed to update profile."),
         )
+    return {"ok": True}
+
+
+@router.get("/search-tariffs", response_model=list[AdminSearchTariffRow])
+def list_search_tariffs(_: str = Depends(require_admin_user_id)) -> list[AdminSearchTariffRow]:
+    client = _get_service_client()
+    try:
+        resp = (
+            client.table("search_tariffs")
+            .select("*")
+            .order("sort_order", desc=False)
+            .order("created_at", desc=False)
+            .execute()
+        )
+    except Exception as e:
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Failed to load search tariffs.") from e
+    data = getattr(resp, "data", None)
+    rows = [r for r in data if isinstance(r, dict)] if isinstance(data, list) else []
+    return [AdminSearchTariffRow(**r) for r in rows]
+
+
+@router.post("/search-tariffs", response_model=AdminSearchTariffRow)
+def create_search_tariff(
+    body: AdminSearchTariffCreate, _: str = Depends(require_admin_user_id)
+) -> AdminSearchTariffRow:
+    client = _get_service_client()
+    payload = body.model_dump()
+    payload["updated_at"] = datetime.now(timezone.utc).isoformat()
+    try:
+        resp = client.table("search_tariffs").insert(payload).execute()
+    except Exception as e:
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Failed to create search tariff.") from e
+    row = getattr(resp, "data", None)
+    if isinstance(row, list) and row and isinstance(row[0], dict):
+        return AdminSearchTariffRow(**row[0])
+    if isinstance(row, dict):
+        return AdminSearchTariffRow(**row)
+    raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid create response.")
+
+
+@router.patch("/search-tariffs/{tariff_id}", response_model=AdminSearchTariffRow)
+def update_search_tariff(
+    tariff_id: str, body: AdminSearchTariffUpdate, _: str = Depends(require_admin_user_id)
+) -> AdminSearchTariffRow:
+    client = _get_service_client()
+    patch = {k: v for k, v in body.model_dump().items() if v is not None}
+    patch["updated_at"] = datetime.now(timezone.utc).isoformat()
+    try:
+        resp = client.table("search_tariffs").update(patch).eq("id", tariff_id).execute()
+    except Exception as e:
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Failed to update search tariff.") from e
+    data = getattr(resp, "data", None)
+    if isinstance(data, list) and data and isinstance(data[0], dict):
+        return AdminSearchTariffRow(**data[0])
+    if isinstance(data, dict):
+        return AdminSearchTariffRow(**data)
+    raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Tariff not found.")
+
+
+@router.delete("/search-tariffs/{tariff_id}")
+def delete_search_tariff(tariff_id: str, _: str = Depends(require_admin_user_id)) -> dict[str, Any]:
+    client = _get_service_client()
+    try:
+        count_resp = client.table("search_tariffs").select("id", count="exact").execute()
+        total = getattr(count_resp, "count", None)
+        if isinstance(total, int) and total <= 1:
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Нельзя удалить последний тариф.")
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Failed to check tariffs.") from e
+    try:
+        client.table("search_tariffs").delete().eq("id", tariff_id).execute()
+    except Exception as e:
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Failed to delete search tariff.") from e
+    return {"ok": True}
+
+
+@router.post("/users/{target_user_id}/search-tariff")
+def update_user_search_tariff(
+    target_user_id: str,
+    body: AdminUserSearchTariffUpdate,
+    _: str = Depends(require_admin_user_id),
+) -> dict[str, Any]:
+    client = _get_service_client()
+    payload = {
+        "id": target_user_id,
+        "search_tariff_id": body.search_tariff_id,
+        "updated_at": datetime.now(timezone.utc).isoformat(),
+    }
+    try:
+        client.table("user_admin_state").upsert(payload).execute()
+    except Exception as e:
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Failed to update user tariff.") from e
     return {"ok": True}
 
 
@@ -367,7 +489,7 @@ def list_user_job_searches(
         resp = (
             client.table("job_searches")
             .select(
-                "id,user_id,title,search_query,location,filter_prompt,status,last_run_at,created_at,updated_at"
+                "id,user_id,title,search_query,location,filter_prompt,search_tariff_id,status,last_run_at,created_at,updated_at"
             )
             .eq("user_id", target_user_id)
             .order("created_at", desc=False)
@@ -399,6 +521,7 @@ def update_user_job_search(
     location = _to_nullable_trimmed_string(body.location)
     filter_prompt = _validate_job_search_filter_prompt(body.filter_prompt)
     status_value = _to_nullable_trimmed_string(body.status)
+    tariff_id = _to_nullable_trimmed_string(body.search_tariff_id)
 
     if title is not None:
         payload["title"] = title
@@ -410,6 +533,8 @@ def update_user_job_search(
         payload["filter_prompt"] = filter_prompt
     if body.status is not None:
         payload["status"] = status_value
+    if "search_tariff_id" in body.model_fields_set:
+        payload["search_tariff_id"] = tariff_id
 
     # No-op update is allowed but should still validate ownership.
     try:
@@ -419,9 +544,8 @@ def update_user_job_search(
             .eq("id", job_search_id)
             .eq("user_id", target_user_id)
             .select(
-                "id,user_id,title,search_query,location,filter_prompt,status,last_run_at,created_at,updated_at"
+                "id,user_id,title,search_query,location,filter_prompt,search_tariff_id,status,last_run_at,created_at,updated_at"
             )
-            .maybe_single()
             .execute()
         )
     except Exception as e:
@@ -429,10 +553,36 @@ def update_user_job_search(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Failed to update job search."
         ) from e
 
-    row = getattr(resp, "data", None)
-    if not isinstance(row, dict) or not row.get("id"):
+    row = _first_updated_row(resp)
+    if not row or not row.get("id"):
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Job search not found.")
     return AdminJobSearchRow(**row)
+
+
+@router.delete("/users/{target_user_id}/job-searches/{job_search_id}")
+def delete_user_job_search(
+    target_user_id: str,
+    job_search_id: str,
+    _: str = Depends(require_admin_user_id),
+) -> dict[str, Any]:
+    client = _get_service_client()
+    try:
+        resp = (
+            client.table("job_searches")
+            .delete()
+            .eq("id", job_search_id)
+            .eq("user_id", target_user_id)
+            .select("id")
+            .execute()
+        )
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Failed to delete job search."
+        ) from e
+    row = _first_updated_row(resp)
+    if not row or not row.get("id"):
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Job search not found.")
+    return {"ok": True}
 
 
 @router.post("/users/{target_user_id}/post-search/run", response_model=PostSearchRunResponse)
@@ -552,7 +702,7 @@ def list_user_post_searches(
     try:
         resp = (
             client.table("post_searches")
-            .select("id,user_id,title,status,last_run_at,created_at")
+            .select("id,user_id,title,search_tariff_id,status,last_run_at,created_at")
             .eq("user_id", target_user_id)
             .order("created_at", desc=False)
             .execute()
@@ -566,6 +716,63 @@ def list_user_post_searches(
         [r for r in rows_raw if isinstance(r, dict)] if isinstance(rows_raw, list) else []
     )
     return [AdminPostSearchRow(**r) for r in rows if r.get("id")]
+
+
+@router.patch("/users/{target_user_id}/post-searches/{post_search_id}", response_model=AdminPostSearchRow)
+def update_user_post_search(
+    target_user_id: str,
+    post_search_id: str,
+    body: AdminPostSearchUpdate,
+    _: str = Depends(require_admin_user_id),
+) -> AdminPostSearchRow:
+    client = _get_service_client()
+    payload: dict[str, Any] = {"updated_at": datetime.now(timezone.utc).isoformat()}
+    if "search_tariff_id" in body.model_fields_set:
+        payload["search_tariff_id"] = _to_nullable_trimmed_string(body.search_tariff_id)
+
+    try:
+        resp = (
+            client.table("post_searches")
+            .update(payload)
+            .eq("id", post_search_id)
+            .eq("user_id", target_user_id)
+            .select("id,user_id,title,search_tariff_id,status,last_run_at,created_at")
+            .execute()
+        )
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Failed to update post search."
+        ) from e
+    row = _first_updated_row(resp)
+    if not row or not row.get("id"):
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Post search not found.")
+    return AdminPostSearchRow(**row)
+
+
+@router.delete("/users/{target_user_id}/post-searches/{post_search_id}")
+def delete_user_post_search(
+    target_user_id: str,
+    post_search_id: str,
+    _: str = Depends(require_admin_user_id),
+) -> dict[str, Any]:
+    client = _get_service_client()
+    try:
+        resp = (
+            client.table("post_searches")
+            .delete()
+            .eq("id", post_search_id)
+            .eq("user_id", target_user_id)
+            .select("id")
+            .execute()
+        )
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Failed to delete post search."
+        ) from e
+    row = _first_updated_row(resp)
+    if not row or not row.get("id"):
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Post search not found.")
+    return {"ok": True}
 
 
 @router.get("/search-runs", response_model=AdminSearchRunsListResponse)

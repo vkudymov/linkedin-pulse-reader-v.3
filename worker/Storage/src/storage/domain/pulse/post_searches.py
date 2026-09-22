@@ -41,6 +41,7 @@ class PostSearchRepository:
         search_prompt: str,
         comment_prompt: str | None,
         account_label: str | None = None,
+        search_tariff_id: str | None = None,
         status: str = "active",
     ) -> PostSearchRow:
         payload: PostSearchCreate = {
@@ -49,6 +50,7 @@ class PostSearchRepository:
             "search_prompt": search_prompt,
             "comment_prompt": comment_prompt,
             "account_label": account_label,
+            "search_tariff_id": search_tariff_id,
             "status": status,
             "last_run_at": None,
         }

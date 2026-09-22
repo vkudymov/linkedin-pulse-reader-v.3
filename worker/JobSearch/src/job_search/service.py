@@ -58,14 +58,15 @@ class JobSearchService:
             try:
                 r = self._analyzer.analyze(spec=spec, job=job)
                 analyzed += 1
-                if r.match:
+                effective_match = bool(r.match and int(r.score) >= int(spec.min_score or 0))
+                if effective_match:
                     matched += 1
                 analyses.append(
                     StoredJobAnalysis(
                         job_search_id=spec.job_search_id,
                         job_id=stored_job.job_id,
                         analyzed_at=now,
-                        match=bool(r.match),
+                        match=effective_match,
                         score=int(r.score),
                         reason=r.reason,
                         matched_requirements=r.matched_requirements,
@@ -75,6 +76,8 @@ class JobSearchService:
                         error=None,
                     ),
                 )
+                if matched >= int(spec.target_found or 0):
+                    break
             except Exception as e:  # noqa: BLE001 - boundary normalize to string
                 errors += 1
                 analyses.append(

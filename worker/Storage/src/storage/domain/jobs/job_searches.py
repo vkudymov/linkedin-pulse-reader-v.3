@@ -43,6 +43,7 @@ class JobSearchRepository:
         filter_prompt: str,
         status: str = "active",
         linkedin_filters: dict[str, Any] | None = None,
+        search_tariff_id: str | None = None,
     ) -> JobSearchRow:
         payload: JobSearchCreate = {
             "user_id": user_id,
@@ -50,6 +51,7 @@ class JobSearchRepository:
             "search_query": search_query,
             "location": location,
             "filter_prompt": filter_prompt,
+            "search_tariff_id": search_tariff_id,
             "status": status,
             "last_run_at": None,
         }

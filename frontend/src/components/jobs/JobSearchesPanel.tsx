@@ -10,11 +10,13 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { JobSearchRunButton } from "@/components/jobs/JobSearchRunButton";
 import { LinkedInJobFiltersBar } from "@/components/jobs/LinkedInJobFiltersBar";
+import { SearchTariffSummary } from "@/components/SearchTariffSummary";
 import {
   DEFAULT_LINKEDIN_JOB_FILTERS,
   normalizeLinkedInJobFilters,
   type LinkedInJobFilters,
 } from "@/lib/linkedinJobFilters";
+import type { SearchTariffInfo } from "@/lib/searchTariffs";
 import { cn } from "@/lib/utils";
 
 export type JobSearchDto = {
@@ -27,6 +29,9 @@ export type JobSearchDto = {
   last_run_at: string | null;
   linkedin_filters?: LinkedInJobFilters | Record<string, unknown> | null;
   new_match_count?: number;
+  target_found_count?: number;
+  search_tariff_id?: string | null;
+  search_tariff?: SearchTariffInfo | null;
 };
 
 const MARKER = "<<<JOB_TEXT>>>";
@@ -277,7 +282,11 @@ function JobSearchCard({
           <div className="text-sm text-muted-foreground">
             {item.status === "paused" ? t("status.paused") : t("status.active")}
             {matchCount ? ` · ${t("list.newMatches", { count: matchCount })}` : ""}
+            {typeof item.target_found_count === "number"
+              ? ` · ${t("list.targetFound", { count: item.target_found_count })}`
+              : ""}
           </div>
+          <SearchTariffSummary tariff={item.search_tariff ?? null} kind="job" className="text-sm" />
         </div>
 
         <JobSearchRunButton jobSearchId={item.id} disabled={busy || saving} onDone={onSaved} />
@@ -359,7 +368,10 @@ function JobSearchCard({
               type="button"
               variant="destructive"
               className="h-9 rounded-full"
-              onClick={() => onRemove(item.id)}
+              onClick={() => {
+                if (!window.confirm(t("edit.deleteConfirm"))) return;
+                void onRemove(item.id);
+              }}
               disabled={busy || saving}
             >
               {t("edit.delete")}

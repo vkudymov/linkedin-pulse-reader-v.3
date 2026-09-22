@@ -14,6 +14,16 @@
     "en": "English",
     "saved": "Saved."
   },
+  "searchTariff": {
+    "label": "Tariff for this search",
+    "default": "Default (first tariff)",
+    "option": "scan up to {scan} · find {found} · threshold {min}%",
+    "fields": {
+      "scan": "Max to scan",
+      "found": "Need to find",
+      "min": "Min relevance (%)"
+    }
+  },
   "auth": {
     "password": "Password",
     "forgot": {
@@ -79,7 +89,8 @@
       },
       "list": {
         "title": "Post searches",
-        "empty": "No post searches yet."
+        "empty": "No post searches yet.",
+        "targetFound": "Need to find: {count}"
       },
       "status": {
         "active": "Active",
@@ -100,7 +111,8 @@
         "save": "Save",
         "saving": "Saving...",
         "saved": "Saved",
-        "delete": "Delete"
+        "delete": "Delete",
+        "deleteConfirm": "Delete this post search? This cannot be undone."
       },
       "run": {
         "idle": "Run post search",
@@ -282,7 +294,8 @@
       "list": {
         "title": "Job searches",
         "empty": "No job searches yet.",
-        "newMatches": "{count} new matching jobs"
+        "newMatches": "{count} new matching jobs",
+        "targetFound": "Need to find: {count}"
       },
       "status": {
         "active": "Active",
@@ -294,7 +307,8 @@
         "save": "Save",
         "saving": "Saving...",
         "saved": "Saved",
-        "delete": "Delete"
+        "delete": "Delete",
+        "deleteConfirm": "Delete this job search? This cannot be undone."
       },
       "fields": {
         "title": "Title",
@@ -358,7 +372,8 @@
     "title": "Admin",
     "tabs": {
       "users": "Users",
-      "searchRuns": "Search runs"
+      "searchRuns": "Search runs",
+      "settings": "Settings"
     }
   },
   "adminSearchRuns": {
@@ -412,8 +427,65 @@
       "load": "Failed to load report."
     }
   },
+  "adminSettings": {
+    "tabs": {
+      "search": "Search settings"
+    },
+    "tariffs": {
+      "hint": "Tariffs define: how many to scan, how many to find, and the minimum relevance threshold.",
+      "fields": {
+        "title": "Tariff name",
+        "scan": "Max scan",
+        "found": "Need to find",
+        "min": "Min relevance (%)",
+        "order": "Order"
+      },
+      "preview": "Scan up to {scan} · Find {found} · Threshold {min}%"
+    },
+    "actions": {
+      "refresh": "Refresh",
+      "newTariff": "New tariff",
+      "create": "Create",
+      "cancel": "Cancel",
+      "save": "Save",
+      "saving": "Saving...",
+      "delete": "Delete"
+    },
+    "errors": {
+      "load": "Failed to load tariffs.",
+      "create": "Failed to create tariff.",
+      "save": "Failed to save tariff.",
+      "delete": "Failed to delete tariff."
+    }
+  },
   "adminUsers": {
     "title": "Users",
+    "tariff": {
+      "label": "Search tariff",
+      "default": "Default (first tariff)",
+      "option": "scan up to {scan} · find {found} · threshold {min}%"
+    },
+    "tariffSearch": {
+      "label": "Tariff for this search",
+      "default": "Default (first tariff)"
+    },
+    "postsSearches": {
+      "title": "Post searches tariffs",
+      "loading": "Loading post searches…",
+      "empty": "User has no post searches.",
+      "run": {
+        "idle": "Run post search",
+        "pending": "Running..."
+      },
+      "delete": {
+        "confirm": "Delete this post search? This cannot be undone."
+      },
+      "errors": {
+        "load": "Failed to load post searches.",
+        "save": "Failed to save post search tariff.",
+        "delete": "Failed to delete post search."
+      }
+    },
     "status": {
       "active": "Active",
       "blocked": "Blocked"
@@ -425,11 +497,14 @@
       "details": "Details",
       "collapse": "Collapse",
       "prompts": "Prompts",
+      "openReport": "Open report",
       "block": "Block",
       "unblock": "Unblock",
       "resetCount": "Reset counter",
       "save": "Save",
-      "saving": "Saving..."
+      "saving": "Saving...",
+      "delete": "Delete",
+      "deleting": "Deleting..."
     },
     "sections": {
       "posts": "Posts",
@@ -460,6 +535,9 @@
       "actions": {
         "edit": "Edit"
       },
+      "delete": {
+        "confirm": "Delete this job search? This cannot be undone."
+      },
       "fields": {
         "filterPrompt": "Job search filter prompt",
         "markerHint": "Prompt must contain marker {marker}."
@@ -467,6 +545,7 @@
       "errors": {
         "load": "Failed to load job prompts.",
         "save": "Failed to save job prompt.",
+        "delete": "Failed to delete job search.",
         "emptyPrompt": "Prompt must be non-empty.",
         "missingMarker": "Missing marker: {marker}."
       }

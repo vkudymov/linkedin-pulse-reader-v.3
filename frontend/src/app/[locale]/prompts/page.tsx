@@ -10,6 +10,7 @@ import { Link } from "@/i18n/navigation";
 import { requireNotBlocked } from "@/lib/auth/blocked";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { loadJobSearchRows } from "@/lib/jobSearches";
+import { attachSearchTariff, loadSearchTariffs } from "@/lib/searchTariffs";
 
 export default async function PromptsPage({
   params,
@@ -31,31 +32,43 @@ export default async function PromptsPage({
   let jobSearchesInitial: JobSearchDto[] = [];
   let postSearchesInitial: PostSearchDto[] = [];
   let supportsLinkedinFilters = false;
+  const tariffs = await loadSearchTariffs(supabase);
   if (activeTab === "jobs") {
     const { rows, usedFiltersColumn } = await loadJobSearchRows(supabase, data.user.id);
     supportsLinkedinFilters = usedFiltersColumn;
     const withCounts = await Promise.all(
       rows.map(async (s) => {
         const lastRunAt = typeof s.last_run_at === "string" ? s.last_run_at : null;
-        if (!lastRunAt) return { ...s, new_match_count: 0 };
+        const withTariff = attachSearchTariff(s, tariffs);
+        if (!lastRunAt) return { ...withTariff, new_match_count: 0 };
         const { count } = await supabase
           .from("job_analyses")
           .select("id", { count: "exact", head: true })
           .eq("job_search_id", s.id)
           .eq("match", true)
           .gte("analyzed_at", lastRunAt);
-        return { ...s, new_match_count: count ?? 0 };
+        return { ...withTariff, new_match_count: count ?? 0 };
       }),
     );
     jobSearchesInitial = withCounts as JobSearchDto[];
   }
   if (activeTab === "posts") {
-    const postSearchesResp = await supabase
+    let postSearchesResp = await supabase
       .from("post_searches")
-      .select("id,user_id,title,search_prompt,comment_prompt,account_label,status,last_run_at,created_at,updated_at")
+      .select(
+        "id,user_id,title,search_prompt,comment_prompt,account_label,status,last_run_at,created_at,updated_at,search_tariff_id",
+      )
       .eq("user_id", data.user.id)
       .order("created_at", { ascending: true });
-    postSearchesInitial = (postSearchesResp.data || []) as PostSearchDto[];
+    if (postSearchesResp.error) {
+      postSearchesResp = await supabase
+        .from("post_searches")
+        .select("id,user_id,title,search_prompt,comment_prompt,account_label,status,last_run_at,created_at,updated_at")
+        .eq("user_id", data.user.id)
+        .order("created_at", { ascending: true });
+    }
+    const rows = (postSearchesResp.data || []) as Record<string, unknown>[];
+    postSearchesInitial = rows.map((s) => attachSearchTariff(s, tariffs)) as PostSearchDto[];
   }
 
   return (

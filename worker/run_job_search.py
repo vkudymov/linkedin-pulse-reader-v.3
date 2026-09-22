@@ -85,6 +85,8 @@ def _parse_args() -> argparse.Namespace:
     p = argparse.ArgumentParser(description="Run LinkedIn Job Search pipeline.")
     p.add_argument("--job-search-id", required=True)
     p.add_argument("--limit", type=int, default=25)
+    p.add_argument("--min-score", type=int, default=0)
+    p.add_argument("--target-found", type=int, default=10)
     p.add_argument("--account-label", default=None)
     p.add_argument("--headless", action="store_true")
     return p.parse_args()
@@ -98,6 +100,8 @@ def main() -> None:
     job_search_id = str(args.job_search_id)
     search_run_id = (os.getenv("SEARCH_RUN_ID") or "").strip() or None
     limit = int(args.limit or 25)
+    min_score = int(args.min_score or 0)
+    target_found = int(args.target_found or 10)
     account_label = str(args.account_label) if args.account_label else os.getenv("STORAGE_ACCOUNT_LABEL")
 
     storage = PulseStorage()
@@ -146,6 +150,8 @@ def main() -> None:
         location=location,
         filter_prompt=filter_prompt,
         limit=limit,
+        min_score=min_score,
+        target_found=target_found,
         linkedin_filters=linkedin_filters,
     )
 

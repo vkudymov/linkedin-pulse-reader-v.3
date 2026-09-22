@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { Briefcase, ChevronDown, MessageSquareText, Play, RefreshCw, Save, Shield, UserX } from "lucide-react";
 import { useTranslations } from "next-intl";
 
+import { Link } from "@/i18n/navigation";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import { Button, buttonVariants } from "@/components/ui/button";
@@ -12,6 +13,8 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
+import { SearchTariffSummary } from "@/components/SearchTariffSummary";
+import { pickSearchTariff } from "@/lib/searchTariffs";
 import { cn } from "@/lib/utils";
 
 type AdminUserRow = {
@@ -38,6 +41,16 @@ type UserProfileDetails = {
   website: string | null;
   created_at: string | null;
   updated_at: string | null;
+  search_tariff_id?: string | null;
+};
+
+type AdminSearchTariffDto = {
+  id: string;
+  title: string;
+  max_scan_count: number;
+  target_found_count: number;
+  min_relevance_percent: number;
+  sort_order: number;
 };
 
 type UserPromptsDetails = {
@@ -55,10 +68,21 @@ type AdminJobSearchDto = {
   search_query: string;
   location: string | null;
   filter_prompt: string;
+  search_tariff_id?: string | null;
   status: string | null;
   last_run_at: string | null;
   created_at: string | null;
   updated_at: string | null;
+};
+
+type AdminPostSearchDto = {
+  id: string;
+  user_id: string;
+  title: string;
+  search_tariff_id?: string | null;
+  status: string | null;
+  last_run_at: string | null;
+  created_at: string | null;
 };
 
 const fieldClassName =
@@ -134,8 +158,24 @@ export function AdminUsersTable({
   const [jobSearchesErrorByUserId, setJobSearchesErrorByUserId] = useState<Record<string, string | null>>(
     {},
   );
+  const [postSearchesByUserId, setPostSearchesByUserId] = useState<
+    Record<string, AdminPostSearchDto[] | null>
+  >({});
+  const [postSearchesErrorByUserId, setPostSearchesErrorByUserId] = useState<Record<string, string | null>>(
+    {},
+  );
   const [jobSearchDraftByKey, setJobSearchDraftByKey] = useState<Record<string, string>>({});
   const [jobSearchOpenByKey, setJobSearchOpenByKey] = useState<Record<string, boolean>>({});
+  const [postSearchOpenByKey, setPostSearchOpenByKey] = useState<Record<string, boolean>>({});
+  const [savePostSearchPendingByKey, setSavePostSearchPendingByKey] = useState<Record<string, boolean>>({});
+  const [savePostSearchErrorByKey, setSavePostSearchErrorByKey] = useState<Record<string, string | null>>({});
+  const [savePostSearchSuccessByKey, setSavePostSearchSuccessByKey] = useState<Record<string, string | null>>(
+    {},
+  );
+  const [postCardRunPendingByKey, setPostCardRunPendingByKey] = useState<Record<string, boolean>>({});
+  const [postCardRunStatusByKey, setPostCardRunStatusByKey] = useState<Record<string, string | null>>({});
+  const [postCardRunMessageByKey, setPostCardRunMessageByKey] = useState<Record<string, string | null>>({});
+  const [postCardRunErrorByKey, setPostCardRunErrorByKey] = useState<Record<string, string | null>>({});
   const [saveJobSearchPendingByKey, setSaveJobSearchPendingByKey] = useState<Record<string, boolean>>({});
   const [saveJobSearchErrorByKey, setSaveJobSearchErrorByKey] = useState<Record<string, string | null>>({});
   const [saveJobSearchSuccessByKey, setSaveJobSearchSuccessByKey] = useState<Record<string, string | null>>(
@@ -145,8 +185,30 @@ export function AdminUsersTable({
   const [jobRunStatusByKey, setJobRunStatusByKey] = useState<Record<string, string | null>>({});
   const [jobRunMessageByKey, setJobRunMessageByKey] = useState<Record<string, string | null>>({});
   const [jobRunErrorByKey, setJobRunErrorByKey] = useState<Record<string, string | null>>({});
+  const [deleteJobSearchPendingByKey, setDeleteJobSearchPendingByKey] = useState<Record<string, boolean>>({});
+  const [deletePostSearchPendingByKey, setDeletePostSearchPendingByKey] = useState<Record<string, boolean>>({});
+
+  const [tariffs, setTariffs] = useState<AdminSearchTariffDto[] | null>(null);
+  const [tariffsError, setTariffsError] = useState<string | null>(null);
 
   const users = useMemo(() => initialUsers || [], [initialUsers]);
+
+  async function ensureTariffs() {
+    if (tariffs !== null || tariffsError) return;
+    setTariffsError(null);
+    try {
+      const resp = await fetch("/api/admin/search-tariffs", { method: "GET", cache: "no-store" });
+      if (!resp.ok) {
+        const text = await resp.text().catch(() => "");
+        throw new Error(text || "Failed to load tariffs");
+      }
+      const json = (await resp.json()) as AdminSearchTariffDto[];
+      setTariffs(Array.isArray(json) ? json : []);
+    } catch (e: unknown) {
+      setTariffs([]);
+      setTariffsError(e instanceof Error ? e.message : "Failed to load tariffs");
+    }
+  }
 
   async function ensureDetails(userId: string) {
     if (detailsById[userId] !== undefined) return;
@@ -269,6 +331,10 @@ export function AdminUsersTable({
     return `${userId}:${jobSearchId}`;
   }
 
+  function postKey(userId: string, postSearchId: string) {
+    return `${userId}:${postSearchId}`;
+  }
+
   async function sleep(ms: number) {
     await new Promise((r) => setTimeout(r, ms));
   }
@@ -336,7 +402,7 @@ export function AdminUsersTable({
       const runResp = await fetch(`/api/admin/users/${encodeURIComponent(userId)}/job-search/run`, {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ job_search_id: jobSearchId, limit: 25 }),
+        body: JSON.stringify({ job_search_id: jobSearchId }),
       });
       const runJson = (await runResp.json().catch(() => null)) as
         | { session_id?: string; status?: string; message?: string | null }
@@ -411,6 +477,51 @@ export function AdminUsersTable({
     }
   }
 
+  async function ensurePostSearches(userId: string) {
+    if (postSearchesByUserId[userId] !== undefined) return;
+    setPostSearchesErrorByUserId((m) => ({ ...m, [userId]: null }));
+    try {
+      const resp = await fetch(`/api/admin/users/${encodeURIComponent(userId)}/post-searches`, {
+        method: "GET",
+        cache: "no-store",
+      });
+      if (!resp.ok) {
+        const text = await resp.text().catch(() => "");
+        throw new Error(text || t("postsSearches.errors.load"));
+      }
+      const json = (await resp.json()) as AdminPostSearchDto[];
+      setPostSearchesByUserId((m) => ({ ...m, [userId]: json }));
+    } catch (e: unknown) {
+      setPostSearchesByUserId((m) => ({ ...m, [userId]: null }));
+      setPostSearchesErrorByUserId((m) => ({
+        ...m,
+        [userId]: e instanceof Error ? e.message : t("postsSearches.errors.load"),
+      }));
+    }
+  }
+
+  async function refreshPostSearches(userId: string) {
+    setPostSearchesErrorByUserId((m) => ({ ...m, [userId]: null }));
+    try {
+      const resp = await fetch(`/api/admin/users/${encodeURIComponent(userId)}/post-searches`, {
+        method: "GET",
+        cache: "no-store",
+      });
+      if (!resp.ok) {
+        const text = await resp.text().catch(() => "");
+        throw new Error(text || t("postsSearches.errors.load"));
+      }
+      const json = (await resp.json()) as AdminPostSearchDto[];
+      setPostSearchesByUserId((m) => ({ ...m, [userId]: json }));
+    } catch (e: unknown) {
+      setPostSearchesByUserId((m) => ({ ...m, [userId]: null }));
+      setPostSearchesErrorByUserId((m) => ({
+        ...m,
+        [userId]: e instanceof Error ? e.message : t("postsSearches.errors.load"),
+      }));
+    }
+  }
+
   async function refreshJobSearches(userId: string) {
     setJobSearchesErrorByUserId((m) => ({ ...m, [userId]: null }));
     try {
@@ -458,6 +569,169 @@ export function AdminUsersTable({
       setSaveJobSearchErrorByKey((m) => ({ ...m, [k]: e instanceof Error ? e.message : t("jobs.errors.save") }));
     } finally {
       setSaveJobSearchPendingByKey((m) => ({ ...m, [k]: false }));
+    }
+  }
+
+  async function onSaveJobSearchTariff(userId: string, jobSearchId: string, tariffId: string | null) {
+    const k = jobKey(userId, jobSearchId);
+    setSaveJobSearchPendingByKey((m) => ({ ...m, [k]: true }));
+    setSaveJobSearchErrorByKey((m) => ({ ...m, [k]: null }));
+    setSaveJobSearchSuccessByKey((m) => ({ ...m, [k]: null }));
+    try {
+      const resp = await fetch(
+        `/api/admin/users/${encodeURIComponent(userId)}/job-searches/${encodeURIComponent(jobSearchId)}`,
+        {
+          method: "PATCH",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ search_tariff_id: tariffId }),
+        },
+      );
+      const text = await resp.text().catch(() => "");
+      if (!resp.ok) throw new Error(text || t("jobs.errors.save"));
+      setSaveJobSearchSuccessByKey((m) => ({ ...m, [k]: t("common.saved") }));
+      await refreshJobSearches(userId);
+    } catch (e: unknown) {
+      setSaveJobSearchErrorByKey((m) => ({ ...m, [k]: e instanceof Error ? e.message : t("jobs.errors.save") }));
+    } finally {
+      setSaveJobSearchPendingByKey((m) => ({ ...m, [k]: false }));
+    }
+  }
+
+  async function onSavePostSearchTariff(userId: string, postSearchId: string, tariffId: string | null) {
+    const k = postKey(userId, postSearchId);
+    setSavePostSearchPendingByKey((m) => ({ ...m, [k]: true }));
+    setSavePostSearchErrorByKey((m) => ({ ...m, [k]: null }));
+    setSavePostSearchSuccessByKey((m) => ({ ...m, [k]: null }));
+    try {
+      const resp = await fetch(
+        `/api/admin/users/${encodeURIComponent(userId)}/post-searches/${encodeURIComponent(postSearchId)}`,
+        {
+          method: "PATCH",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ search_tariff_id: tariffId }),
+        },
+      );
+      const text = await resp.text().catch(() => "");
+      if (!resp.ok) throw new Error(text || t("postsSearches.errors.save"));
+      setSavePostSearchSuccessByKey((m) => ({ ...m, [k]: t("common.saved") }));
+      await refreshPostSearches(userId);
+    } catch (e: unknown) {
+      setSavePostSearchErrorByKey((m) => ({
+        ...m,
+        [k]: e instanceof Error ? e.message : t("postsSearches.errors.save"),
+      }));
+    } finally {
+      setSavePostSearchPendingByKey((m) => ({ ...m, [k]: false }));
+    }
+  }
+
+  async function onDeleteJobSearch(userId: string, jobSearchId: string) {
+    if (!window.confirm(t("jobs.delete.confirm"))) return;
+    const k = jobKey(userId, jobSearchId);
+    setDeleteJobSearchPendingByKey((m) => ({ ...m, [k]: true }));
+    setSaveJobSearchErrorByKey((m) => ({ ...m, [k]: null }));
+    try {
+      const resp = await fetch(
+        `/api/admin/users/${encodeURIComponent(userId)}/job-searches/${encodeURIComponent(jobSearchId)}`,
+        { method: "DELETE" },
+      );
+      const text = await resp.text().catch(() => "");
+      if (!resp.ok) throw new Error(text || t("jobs.errors.delete"));
+      setJobSearchOpenByKey((m) => {
+        const next = { ...m };
+        delete next[k];
+        return next;
+      });
+      await refreshJobSearches(userId);
+    } catch (e: unknown) {
+      setSaveJobSearchErrorByKey((m) => ({
+        ...m,
+        [k]: e instanceof Error ? e.message : t("jobs.errors.delete"),
+      }));
+    } finally {
+      setDeleteJobSearchPendingByKey((m) => ({ ...m, [k]: false }));
+    }
+  }
+
+  async function onDeletePostSearch(userId: string, postSearchId: string) {
+    if (!window.confirm(t("postsSearches.delete.confirm"))) return;
+    const k = postKey(userId, postSearchId);
+    setDeletePostSearchPendingByKey((m) => ({ ...m, [k]: true }));
+    setSavePostSearchErrorByKey((m) => ({ ...m, [k]: null }));
+    try {
+      const resp = await fetch(
+        `/api/admin/users/${encodeURIComponent(userId)}/post-searches/${encodeURIComponent(postSearchId)}`,
+        { method: "DELETE" },
+      );
+      const text = await resp.text().catch(() => "");
+      if (!resp.ok) throw new Error(text || t("postsSearches.errors.delete"));
+      setPostSearchOpenByKey((m) => {
+        const next = { ...m };
+        delete next[k];
+        return next;
+      });
+      await refreshPostSearches(userId);
+    } catch (e: unknown) {
+      setSavePostSearchErrorByKey((m) => ({
+        ...m,
+        [k]: e instanceof Error ? e.message : t("postsSearches.errors.delete"),
+      }));
+    } finally {
+      setDeletePostSearchPendingByKey((m) => ({ ...m, [k]: false }));
+    }
+  }
+
+  async function startPostSearchById(userId: string, postSearchId: string) {
+    const k = postKey(userId, postSearchId);
+    setPostCardRunPendingByKey((m) => ({ ...m, [k]: true }));
+    setPostCardRunErrorByKey((m) => ({ ...m, [k]: null }));
+    setPostCardRunStatusByKey((m) => ({ ...m, [k]: null }));
+    setPostCardRunMessageByKey((m) => ({ ...m, [k]: null }));
+    try {
+      const runResp = await fetch(`/api/admin/users/${encodeURIComponent(userId)}/post-search/run`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ post_search_id: postSearchId }),
+      });
+      const runJson = (await runResp.json().catch(() => null)) as
+        | { session_id?: string; status?: string; message?: string | null }
+        | null;
+      if (!runResp.ok || !runJson?.session_id) {
+        throw new Error(runJson?.message || tPostSearch("errors.startFailed"));
+      }
+
+      setPostCardRunStatusByKey((m) => ({ ...m, [k]: runJson.status ?? "running" }));
+      setPostCardRunMessageByKey((m) => ({ ...m, [k]: runJson.message ?? null }));
+
+      for (let attempt = 0; attempt < 600; attempt += 1) {
+        await sleep(1000);
+        const stResp = await fetch(
+          `/api/admin/users/${encodeURIComponent(userId)}/post-search/run/${encodeURIComponent(runJson.session_id)}`,
+          { method: "GET", cache: "no-store" },
+        );
+        const stJson = (await stResp.json().catch(() => null)) as
+          | { status?: string; message?: string | null }
+          | null;
+        if (!stResp.ok || !stJson) throw new Error(tPostSearch("errors.statusFailed"));
+        setPostCardRunStatusByKey((m) => ({ ...m, [k]: stJson.status ?? null }));
+        setPostCardRunMessageByKey((m) => ({ ...m, [k]: stJson.message ?? null }));
+        if (stJson.status === "done") {
+          await refreshPostSearches(userId);
+          router.refresh();
+          return;
+        }
+        if (stJson.status === "error") {
+          throw new Error(stJson.message || tPostSearch("errors.runFailed"));
+        }
+      }
+      throw new Error(tPostSearch("errors.timeout"));
+    } catch (e: unknown) {
+      setPostCardRunErrorByKey((m) => ({
+        ...m,
+        [k]: e instanceof Error ? e.message : tPostSearch("errors.startFailed"),
+      }));
+    } finally {
+      setPostCardRunPendingByKey((m) => ({ ...m, [k]: false }));
     }
   }
 
@@ -605,6 +879,16 @@ export function AdminUsersTable({
                       </div>
 
                       <div className="flex flex-wrap items-center justify-end gap-2">
+                        <Link
+                          href={`/admin/search-runs?user_id=${encodeURIComponent(u.id)}`}
+                          className={cn(
+                            buttonVariants({ variant: "outline", size: "sm" }),
+                            "h-9 rounded-full px-4 text-muted-foreground hover:text-foreground",
+                          )}
+                        >
+                          {t("actions.openReport")}
+                        </Link>
+
                         <button
                           type="button"
                           className={cn(
@@ -614,7 +898,10 @@ export function AdminUsersTable({
                           onClick={() => {
                             const next = !openDetails;
                             setOpenDetailsById((m) => ({ ...m, [u.id]: next }));
-                            if (next) void ensureDetails(u.id);
+                            if (next) {
+                              void ensureDetails(u.id);
+                              void ensureTariffs();
+                            }
                           }}
                         >
                           <ChevronDown className={cn("size-4 transition-transform", openDetails && "rotate-180")} />
@@ -633,6 +920,8 @@ export function AdminUsersTable({
                             if (next) {
                               void ensurePrompts(u.id);
                               void ensureJobSearches(u.id);
+                              void ensurePostSearches(u.id);
+                              void ensureTariffs();
                             }
                           }}
                         >
@@ -723,6 +1012,55 @@ export function AdminUsersTable({
                           </div>
 
                           <div className="grid gap-5 sm:grid-cols-2">
+                            <div className="space-y-2">
+                              <Label htmlFor={`tariff_${u.id}`}>{t("tariff.label")}</Label>
+                              <select
+                                id={`tariff_${u.id}`}
+                                className={fieldClassName}
+                                value={details?.search_tariff_id || ""}
+                                onChange={async (e) => {
+                                  const nextId = e.target.value || null;
+                                  setDetailsById((m) => ({
+                                    ...m,
+                                    [u.id]: {
+                                      ...(m[u.id] as UserProfileDetails),
+                                      search_tariff_id: nextId,
+                                    },
+                                  }));
+                                  try {
+                                    const resp = await fetch(
+                                      `/api/admin/users/${encodeURIComponent(u.id)}/search-tariff`,
+                                      {
+                                        method: "POST",
+                                        headers: { "content-type": "application/json" },
+                                        body: JSON.stringify({ search_tariff_id: nextId }),
+                                      },
+                                    );
+                                    if (!resp.ok) {
+                                      const text = await resp.text().catch(() => "");
+                                      throw new Error(text || t("errors.request"));
+                                    }
+                                  } catch (err: unknown) {
+                                    setSaveErrorById((m) => ({
+                                      ...m,
+                                      [u.id]: err instanceof Error ? err.message : t("errors.request"),
+                                    }));
+                                  }
+                                }}
+                                disabled={Boolean(savePendingById[u.id])}
+                              >
+                                <option value="">{t("tariff.default")}</option>
+                                {(tariffs || []).map((tr) => (
+                                  <option key={tr.id} value={tr.id}>
+                                    {tr.title} · {t("tariff.option", { scan: tr.max_scan_count, found: tr.target_found_count, min: tr.min_relevance_percent })}
+                                  </option>
+                                ))}
+                              </select>
+                              {tariffsError ? (
+                                <p className="text-xs text-destructive">{tariffsError}</p>
+                              ) : null}
+                            </div>
+
                             <div className="space-y-2">
                               <Label htmlFor={`phone_${u.id}`}>{tProfile("fields.phone.label")}</Label>
                               <Input
@@ -902,6 +1240,143 @@ export function AdminUsersTable({
 
                       <div className="space-y-6 rounded-xl border border-border bg-background/60 p-4">
                         <div className="text-sm font-semibold">{t("sections.posts")}</div>
+
+                        {postSearchesErrorByUserId[u.id] ? (
+                          <div className="rounded-xl border border-destructive/30 bg-destructive/10 px-3 py-2 text-sm text-destructive">
+                            {postSearchesErrorByUserId[u.id]}
+                          </div>
+                        ) : null}
+
+                        {postSearchesByUserId[u.id] ? (
+                          postSearchesByUserId[u.id]!.length === 0 ? (
+                            <div className="rounded-xl border border-border/70 bg-muted/30 px-3 py-2 text-sm text-muted-foreground">
+                              {t("postsSearches.empty")}
+                            </div>
+                          ) : (
+                            <div className="space-y-3">
+                              {postSearchesByUserId[u.id]!.map((ps) => {
+                                const k = postKey(u.id, ps.id);
+                                const open = Boolean(postSearchOpenByKey[k]);
+                                const saving = Boolean(savePostSearchPendingByKey[k]);
+                                return (
+                                  <div key={ps.id} className="rounded-2xl border border-border/80 bg-background/40 p-4">
+                                    <div className="flex flex-wrap items-start justify-between gap-3">
+                                      <div className="min-w-0">
+                                        <div className="text-sm font-semibold">{ps.title}</div>
+                                        <div className="mt-1 text-xs text-muted-foreground">
+                                          {ps.status ? ps.status : "—"}
+                                        </div>
+                                        <SearchTariffSummary
+                                          tariff={pickSearchTariff(ps.search_tariff_id, tariffs || [])}
+                                          className="mt-2"
+                                        />
+                                      </div>
+                                      <button
+                                        type="button"
+                                        className={cn(
+                                          buttonVariants({ variant: "outline", size: "sm" }),
+                                          "h-9 rounded-full px-4 text-muted-foreground hover:text-foreground",
+                                        )}
+                                        onClick={() => setPostSearchOpenByKey((m) => ({ ...m, [k]: !open }))}
+                                      >
+                                        <ChevronDown className={cn("size-4 transition-transform", open && "rotate-180")} />
+                                        {open ? t("actions.collapse") : t("posts.actions.edit")}
+                                      </button>
+                                    </div>
+
+                                    {open ? (
+                                      <div className="mt-4 grid gap-3">
+                                        <div className="grid gap-2">
+                                          <Label htmlFor={`post_tariff_${ps.id}`}>{t("tariffSearch.label")}</Label>
+                                          <select
+                                            id={`post_tariff_${ps.id}`}
+                                            className={fieldClassName}
+                                            value={ps.search_tariff_id || ""}
+                                            disabled={saving || tariffs === null}
+                                            onChange={(e) =>
+                                              void onSavePostSearchTariff(u.id, ps.id, e.target.value || null)
+                                            }
+                                          >
+                                            <option value="">{t("tariffSearch.default")}</option>
+                                            {(tariffs || []).map((tr) => (
+                                              <option key={tr.id} value={tr.id}>
+                                                {tr.title}
+                                              </option>
+                                            ))}
+                                          </select>
+                                        </div>
+
+                                        {savePostSearchErrorByKey[k] ? (
+                                          <div className="text-sm text-destructive">{savePostSearchErrorByKey[k]}</div>
+                                        ) : null}
+                                        {savePostSearchSuccessByKey[k] ? (
+                                          <div className="text-sm text-emerald-600 dark:text-emerald-300">
+                                            {savePostSearchSuccessByKey[k]}
+                                          </div>
+                                        ) : null}
+
+                                        <div className="flex flex-wrap items-center gap-2">
+                                          <Button
+                                            type="button"
+                                            className="h-9 rounded-full"
+                                            variant="outline"
+                                            onClick={() => void startPostSearchById(u.id, ps.id)}
+                                            disabled={Boolean(postCardRunPendingByKey[k])}
+                                          >
+                                            {postCardRunPendingByKey[k] ? (
+                                              <RefreshCw className="mr-2 h-4 w-4 animate-spin" />
+                                            ) : (
+                                              <Play className="mr-2 h-4 w-4" />
+                                            )}
+                                            {postCardRunPendingByKey[k]
+                                              ? t("postsSearches.run.pending")
+                                              : t("postsSearches.run.idle")}
+                                          </Button>
+                                          <Button
+                                            type="button"
+                                            className="h-9 rounded-full"
+                                            variant="destructive"
+                                            onClick={() => void onDeletePostSearch(u.id, ps.id)}
+                                            disabled={saving || Boolean(deletePostSearchPendingByKey[k])}
+                                          >
+                                            {deletePostSearchPendingByKey[k]
+                                              ? t("actions.deleting")
+                                              : t("actions.delete")}
+                                          </Button>
+                                        </div>
+
+                                        {postCardRunStatusByKey[k] || postCardRunMessageByKey[k] ? (
+                                          <div className="rounded-xl border border-border/80 bg-muted/40 px-4 py-3 text-sm text-muted-foreground">
+                                            <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
+                                              <span className="font-medium text-foreground">{tPostSearch("statusLabel")}</span>
+                                              <span
+                                                className={cn(
+                                                  postCardRunStatusByKey[k] === "error" ? "text-destructive" : "",
+                                                )}
+                                              >
+                                                {postCardRunStatusByKey[k] || "—"}
+                                              </span>
+                                            </div>
+                                            {postCardRunMessageByKey[k] ? (
+                                              <div className="mt-1 whitespace-pre-wrap">{postCardRunMessageByKey[k]}</div>
+                                            ) : null}
+                                          </div>
+                                        ) : null}
+
+                                        {postCardRunErrorByKey[k] ? (
+                                          <div className="text-sm text-destructive">{postCardRunErrorByKey[k]}</div>
+                                        ) : null}
+                                      </div>
+                                    ) : null}
+                                  </div>
+                                );
+                              })}
+                            </div>
+                          )
+                        ) : (
+                          <div className="text-sm text-muted-foreground">{t("postsSearches.loading")}</div>
+                        )}
+
                         {prompts ? (
                           <div className="space-y-6">
                             <div className="rounded-2xl border border-border/80 bg-background/40 p-4">
@@ -1056,6 +1531,11 @@ export function AdminUsersTable({
                                             {s.location ? ` · ${s.location}` : ""}
                                             {s.status ? ` · ${s.status}` : ""}
                                           </div>
+                                          <SearchTariffSummary
+                                            tariff={pickSearchTariff(s.search_tariff_id, tariffs || [])}
+                                            kind="job"
+                                            className="mt-2"
+                                          />
                                         </div>
 
                                         <button
@@ -1073,6 +1553,23 @@ export function AdminUsersTable({
 
                                       {open ? (
                                         <div className="mt-4 grid gap-3">
+                                          <div className="grid gap-2">
+                                            <Label htmlFor={`job_tariff_${k}`}>{t("tariffSearch.label")}</Label>
+                                            <select
+                                              id={`job_tariff_${k}`}
+                                              className={fieldClassName}
+                                              value={s.search_tariff_id || ""}
+                                              disabled={saving || tariffs === null}
+                                              onChange={(e) => void onSaveJobSearchTariff(u.id, s.id, e.target.value || null)}
+                                            >
+                                              <option value="">{t("tariffSearch.default")}</option>
+                                              {(tariffs || []).map((tr) => (
+                                                <option key={tr.id} value={tr.id}>
+                                                  {tr.title}
+                                                </option>
+                                              ))}
+                                            </select>
+                                          </div>
                                           <div className="grid gap-2">
                                             <Label htmlFor={`job_prompt_${k}`}>{t("jobs.fields.filterPrompt")}</Label>
                                             <Textarea
@@ -1121,6 +1618,17 @@ export function AdminUsersTable({
                                                 <Play className="mr-2 h-4 w-4" />
                                               )}
                                               {jobRunPendingByKey[k] ? t("jobs.run.pending") : t("jobs.run.idle")}
+                                            </Button>
+                                            <Button
+                                              type="button"
+                                              className="h-9 rounded-full"
+                                              variant="destructive"
+                                              onClick={() => void onDeleteJobSearch(u.id, s.id)}
+                                              disabled={saving || Boolean(deleteJobSearchPendingByKey[k])}
+                                            >
+                                              {deleteJobSearchPendingByKey[k]
+                                                ? t("actions.deleting")
+                                                : t("actions.delete")}
                                             </Button>
                                           </div>
 

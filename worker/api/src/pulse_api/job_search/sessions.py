@@ -48,6 +48,8 @@ class JobSearchSessionManager:
         user_id: str,
         job_search_id: str,
         limit: int,
+        min_score: int = 0,
+        target_found: int = 1,
         account_label: str | None,
         search_run_id: str | None = None,
     ) -> JobSearchSession:
@@ -62,7 +64,14 @@ class JobSearchSessionManager:
             )
             self._sessions[session_id] = sess
             fut = self._executor.submit(
-                self._run, sess.session_id, job_search_id, limit, account_label, search_run_id
+                self._run,
+                sess.session_id,
+                job_search_id,
+                limit,
+                min_score,
+                target_found,
+                account_label,
+                search_run_id,
             )
             sess.future = fut
             return sess
@@ -99,6 +108,8 @@ class JobSearchSessionManager:
         session_id: str,
         job_search_id: str,
         limit: int,
+        min_score: int,
+        target_found: int,
         account_label: str | None,
         search_run_id: str | None,
     ) -> None:
@@ -124,6 +135,10 @@ class JobSearchSessionManager:
                 job_search_id,
                 "--limit",
                 str(limit),
+                "--min-score",
+                str(min_score),
+                "--target-found",
+                str(target_found),
             ]
 
             import subprocess  # noqa: PLC0415

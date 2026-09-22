@@ -18,6 +18,39 @@ class AdminUserRow(BaseModel):
     post_search_run_count: int
 
 
+class AdminSearchTariffRow(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+
+    id: str
+    title: str
+    max_scan_count: int
+    target_found_count: int
+    min_relevance_percent: int
+    sort_order: int
+    created_at: datetime | None = None
+    updated_at: datetime | None = None
+
+
+class AdminSearchTariffCreate(BaseModel):
+    title: str
+    max_scan_count: int = Field(ge=1, le=500)
+    target_found_count: int = Field(ge=1, le=500)
+    min_relevance_percent: int = Field(ge=0, le=100)
+    sort_order: int = 0
+
+
+class AdminSearchTariffUpdate(BaseModel):
+    title: str | None = None
+    max_scan_count: int | None = Field(default=None, ge=1, le=500)
+    target_found_count: int | None = Field(default=None, ge=1, le=500)
+    min_relevance_percent: int | None = Field(default=None, ge=0, le=100)
+    sort_order: int | None = None
+
+
+class AdminUserSearchTariffUpdate(BaseModel):
+    search_tariff_id: str | None = None
+
+
 class AdminUserProfileDetails(BaseModel):
     id: str
     full_name: str | None = None
@@ -29,6 +62,7 @@ class AdminUserProfileDetails(BaseModel):
     city: str | None = None
     bio: str | None = None
     website: str | None = None
+    search_tariff_id: str | None = None
     created_at: datetime | None = None
     updated_at: datetime | None = None
 
@@ -65,6 +99,7 @@ class AdminJobSearchRow(BaseModel):
     search_query: str
     location: str | None = None
     filter_prompt: str
+    search_tariff_id: str | None = None
     status: str | None = None
     last_run_at: datetime | None = None
     created_at: datetime | None = None
@@ -76,12 +111,13 @@ class AdminJobSearchUpdate(BaseModel):
     search_query: str | None = None
     location: str | None = None
     filter_prompt: str | None = None
+    search_tariff_id: str | None = None
     status: str | None = None
 
 
 class AdminPostSearchStartRequest(BaseModel):
     post_search_id: str | None = None
-    limit: int = Field(default=10, ge=1, le=200)
+    limit: int | None = Field(default=None, ge=1, le=500)
     account_label: str | None = None
 
 
@@ -89,9 +125,14 @@ class AdminPostSearchRow(BaseModel):
     id: str
     user_id: str
     title: str
+    search_tariff_id: str | None = None
     status: str | None = None
     last_run_at: datetime | None = None
     created_at: datetime | None = None
+
+
+class AdminPostSearchUpdate(BaseModel):
+    search_tariff_id: str | None = None
 
 
 class AdminSearchRunRow(BaseModel):

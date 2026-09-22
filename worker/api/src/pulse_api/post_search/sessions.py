@@ -55,6 +55,8 @@ class PostSearchSessionManager:
         user_id: str,
         post_search_id: str,
         limit: int,
+        min_score: int = 0,
+        target_found: int = 1,
         account_label: str | None,
         search_run_id: str | None = None,
     ) -> PostSearchSession:
@@ -70,7 +72,14 @@ class PostSearchSessionManager:
             )
             self._sessions[session_id] = sess
             fut = self._executor.submit(
-                self._run, sess.session_id, post_search_id, limit, account_label, search_run_id
+                self._run,
+                sess.session_id,
+                post_search_id,
+                limit,
+                min_score,
+                target_found,
+                account_label,
+                search_run_id,
             )
             sess.future = fut
             return sess
@@ -113,6 +122,8 @@ class PostSearchSessionManager:
         session_id: str,
         post_search_id: str,
         limit: int,
+        min_score: int,
+        target_found: int,
         account_label: str | None,
         search_run_id: str | None,
     ) -> None:
@@ -139,6 +150,10 @@ class PostSearchSessionManager:
                 post_search_id,
                 "--limit",
                 str(limit),
+                "--min-score",
+                str(min_score),
+                "--target-found",
+                str(target_found),
             ]
 
             import subprocess  # noqa: PLC0415

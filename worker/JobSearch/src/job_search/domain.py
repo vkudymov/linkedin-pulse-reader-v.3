@@ -41,6 +41,8 @@ class JobSearchSpec:
     location: str | None
     filter_prompt: str
     limit: int = 25
+    min_score: int = 0
+    target_found: int = 10
     linkedin_filters: Mapping[str, Any] | None = None
 
 

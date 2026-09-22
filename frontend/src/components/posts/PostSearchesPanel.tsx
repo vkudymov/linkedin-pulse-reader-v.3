@@ -9,6 +9,8 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { cn } from "@/lib/utils";
+import { SearchTariffSummary } from "@/components/SearchTariffSummary";
+import type { SearchTariffInfo } from "@/lib/searchTariffs";
 
 export type PostSearchDto = {
   id: string;
@@ -18,6 +20,9 @@ export type PostSearchDto = {
   account_label: string | null;
   status: "active" | "paused" | string;
   last_run_at: string | null;
+  target_found_count?: number;
+  search_tariff_id?: string | null;
+  search_tariff?: SearchTariffInfo | null;
   created_at?: string | null;
   updated_at?: string | null;
 };
@@ -250,7 +255,7 @@ function PostSearchCard({
       const runResp = await fetch("/api/post-search/run", {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ post_search_id: item.id, limit: 10 }),
+        body: JSON.stringify({ post_search_id: item.id }),
       });
       const runJson = (await runResp.json().catch(() => null)) as RunResponse | null;
       if (!runResp.ok || !runJson?.session_id) throw new Error(runJson?.message || t("errors.runStartFailed"));
@@ -285,7 +290,11 @@ function PostSearchCard({
           <div className="text-base font-semibold">{item.title}</div>
           <div className="text-sm text-muted-foreground">
             {item.status === "paused" ? t("status.paused") : t("status.active")}
+            {typeof item.target_found_count === "number"
+              ? ` · ${t("list.targetFound", { count: item.target_found_count })}`
+              : ""}
           </div>
+          <SearchTariffSummary tariff={item.search_tariff ?? null} className="text-sm" />
         </div>
 
         {!open ? (
@@ -360,7 +369,16 @@ function PostSearchCard({
               {running ? <RefreshCw className="mr-2 h-4 w-4 animate-spin" /> : <Play className="mr-2 h-4 w-4" />}
               {running ? t("run.pending") : t("run.idle")}
             </Button>
-            <Button type="button" variant="destructive" className="h-9 rounded-full" onClick={() => onRemove(item.id)} disabled={busy || saving || running}>
+            <Button
+              type="button"
+              variant="destructive"
+              className="h-9 rounded-full"
+              onClick={() => {
+                if (!window.confirm(t("edit.deleteConfirm"))) return;
+                void onRemove(item.id);
+              }}
+              disabled={busy || saving || running}
+            >
               {t("edit.delete")}
             </Button>
           </div>

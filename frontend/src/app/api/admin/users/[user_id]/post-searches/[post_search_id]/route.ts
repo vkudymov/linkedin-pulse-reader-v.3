@@ -7,12 +7,12 @@ import {
 
 export async function PATCH(
   request: Request,
-  { params }: { params: Promise<{ user_id: string; job_search_id: string }> },
+  { params }: { params: Promise<{ user_id: string; post_search_id: string }> },
 ) {
   const accessToken = await getWorkerAccessToken();
   if (!accessToken) return unauthorizedResponse();
 
-  const { user_id, job_search_id } = await params;
+  const { user_id, post_search_id } = await params;
   const baseUrl = getWorkerApiBaseUrl();
 
   let body: unknown = null;
@@ -23,7 +23,7 @@ export async function PATCH(
   }
 
   const resp = await fetch(
-    `${baseUrl}/v1/admin/users/${encodeURIComponent(user_id)}/job-searches/${encodeURIComponent(job_search_id)}`,
+    `${baseUrl}/v1/admin/users/${encodeURIComponent(user_id)}/post-searches/${encodeURIComponent(post_search_id)}`,
     {
       method: "PATCH",
       headers: {
@@ -39,16 +39,16 @@ export async function PATCH(
 
 export async function DELETE(
   _request: Request,
-  { params }: { params: Promise<{ user_id: string; job_search_id: string }> },
+  { params }: { params: Promise<{ user_id: string; post_search_id: string }> },
 ) {
   const accessToken = await getWorkerAccessToken();
   if (!accessToken) return unauthorizedResponse();
 
-  const { user_id, job_search_id } = await params;
+  const { user_id, post_search_id } = await params;
   const baseUrl = getWorkerApiBaseUrl();
 
   const resp = await fetch(
-    `${baseUrl}/v1/admin/users/${encodeURIComponent(user_id)}/job-searches/${encodeURIComponent(job_search_id)}`,
+    `${baseUrl}/v1/admin/users/${encodeURIComponent(user_id)}/post-searches/${encodeURIComponent(post_search_id)}`,
     {
       method: "DELETE",
       headers: {

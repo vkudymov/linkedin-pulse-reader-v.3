@@ -20,12 +20,10 @@ async function sleep(ms: number) {
 export function JobSearchRunButton({
   jobSearchId,
   disabled,
-  limit = 25,
   onDone,
 }: {
   jobSearchId: string;
   disabled?: boolean;
-  limit?: number;
   onDone?: () => void;
 }) {
   const t = useTranslations("jobs.runner");
@@ -42,7 +40,7 @@ export function JobSearchRunButton({
       const runResp = await fetch("/api/job-search/run", {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ job_search_id: jobSearchId, limit }),
+        body: JSON.stringify({ job_search_id: jobSearchId }),
       });
       const runJson = (await runResp.json().catch(() => null)) as RunResponse | null;
       if (!runResp.ok || !runJson?.session_id) {

@@ -522,6 +522,8 @@ def analyze_and_store_posts(
     posts: list[dict[str, Any]],
     search_prompt: str,
     comment_prompt: str | None,
+    min_score: int = 0,
+    target_found: int = 10,
 ) -> tuple[int, int]:
     from storage import compute_source_key  # type: ignore[import-not-found]
 
@@ -551,6 +553,7 @@ def analyze_and_store_posts(
     now = datetime.now(UTC).isoformat()
 
     upserts: list[dict[str, Any]] = []
+    matched_count = 0
     for ap in analyzed_posts:
         if not isinstance(ap, dict):
             continue
@@ -570,11 +573,15 @@ def analyze_and_store_posts(
         missing = rel.get("missing_requirements")
         red_flags = rel.get("red_flags")
 
+        effective_match = bool(match and score >= int(min_score or 0))
+        if effective_match:
+            matched_count += 1
+
         upserts.append(
             {
                 "post_search_id": post_search_id,
                 "feed_post_id": feed_post_id,
-                "match": match,
+                "match": effective_match,
                 "score": score,
                 "reason": reason,
                 "matched_requirements": matched if isinstance(matched, list) else [],
@@ -589,24 +596,30 @@ def analyze_and_store_posts(
             }
         )
 
+        if matched_count >= int(target_found or 0):
+            break
+
     written = storage.post_analyses.upsert_analyses(analyses=upserts)
-    matched = sum(1 for u in upserts if u.get("match"))
     log.info("Wrote %s post_analyses row(s) (post_search=%s)", written, post_search_id)
-    return written, matched
+    return written, matched_count
 
 
 def main() -> None:
     parser = argparse.ArgumentParser(description="Fetch LinkedIn posts via LinkedInClient.")
     parser.add_argument("--post-search-id", required=True)
     parser.add_argument("--limit", type=int, default=10)
+    parser.add_argument("--min-score", type=int, default=0)
+    parser.add_argument("--target-found", type=int, default=10)
     parser.add_argument("--account-label", default=None)
     parser.add_argument("--headless", action="store_true")
     args = parser.parse_args()
 
     log.info(
-        "Starting LinkedIn post search: post_search_id=%s limit=%s headless=%s",
+        "Starting LinkedIn post search: post_search_id=%s limit=%s min_score=%s target_found=%s headless=%s",
         args.post_search_id,
         args.limit,
+        args.min_score,
+        args.target_found,
         args.headless,
     )
     login_timeout_ms = int(os.getenv("LINKEDIN_AUTH_TIMEOUT_MS", "300000"))
@@ -708,6 +721,8 @@ def main() -> None:
             posts=payload,
             search_prompt=search_prompt,
             comment_prompt=comment_prompt,
+            min_score=args.min_score,
+            target_found=args.target_found,
         )
         storage.post_searches.update(post_search_id=post_search_id, last_run_at=run_at)
         _finalize_search_run(
@@ -742,6 +757,8 @@ def main() -> None:
             posts=payload,
             search_prompt=search_prompt,
             comment_prompt=comment_prompt,
+            min_score=args.min_score,
+            target_found=args.target_found,
         )
         storage.post_searches.update(post_search_id=post_search_id, last_run_at=run_at)
         _finalize_search_run(
