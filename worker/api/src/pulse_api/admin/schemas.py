@@ -183,3 +183,100 @@ class AdminSearchRunsListResponse(BaseModel):
     limit: int
     offset: int
 
+
+class AdminSearchPromptRow(BaseModel):
+    id: str
+    search_id: str
+    role: str
+    body: str
+    created_at: datetime | None = None
+    updated_at: datetime | None = None
+
+
+class AdminSearchRow(BaseModel):
+    """
+    Unified search row for admin reports (jobs + posts).
+    Includes nested prompts and derived prompt fields for convenience.
+    """
+
+    id: str
+    user_id: str
+    search_type_code: str
+
+    title: str
+    status: str
+    last_run_at: datetime | None = None
+
+    search_tariff_id: str | None = None
+    email_report_enabled: bool = False
+    email_report_format: str = "none"
+
+    search_query: str | None = None
+    location: str | None = None
+    linkedin_filters: dict[str, Any] | None = None
+    account_label: str | None = None
+
+    filter_prompt: str | None = None
+    search_prompt: str | None = None
+    comment_prompt: str | None = None
+    prompts: list[AdminSearchPromptRow] = []
+
+    user_full_name: str | None = None
+    user_email: str | None = None
+
+    created_at: datetime | None = None
+    updated_at: datetime | None = None
+
+
+class AdminSearchesListResponse(BaseModel):
+    items: list[AdminSearchRow]
+    total: int
+    limit: int
+    offset: int
+
+
+class AdminSearchUpdate(BaseModel):
+    # searches fields
+    title: str | None = None
+    status: str | None = None
+    search_tariff_id: str | None = None
+    email_report_enabled: bool | None = None
+    email_report_format: str | None = None
+
+    search_query: str | None = None
+    location: str | None = None
+    linkedin_filters: dict[str, Any] | None = None
+    account_label: str | None = None
+
+    # prompts (stored in prompts table)
+    filter_prompt: str | None = None
+    search_prompt: str | None = None
+    comment_prompt: str | None = None
+
+
+class AdminPromptRow(BaseModel):
+    id: str
+    search_id: str
+    role: str
+    body: str
+    created_at: datetime | None = None
+    updated_at: datetime | None = None
+
+    # context
+    user_id: str
+    search_title: str
+    search_type_code: str
+    user_full_name: str | None = None
+    user_email: str | None = None
+
+
+class AdminPromptsListResponse(BaseModel):
+    items: list[AdminPromptRow]
+    total: int
+    limit: int
+    offset: int
+
+
+class AdminPromptUpdate(BaseModel):
+    body: str
+

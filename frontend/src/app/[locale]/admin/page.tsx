@@ -4,18 +4,9 @@ import { getTranslations } from "next-intl/server";
 import { AppHeader } from "@/components/AppHeader";
 import { AdminSectionTabs } from "@/components/admin/AdminSectionTabs";
 import { AdminUsersTable } from "@/components/admin/AdminUsersTable";
+import { loadAdminUsers, type AdminUserRow } from "@/lib/admin/users";
+import { getSupabaseAccessToken } from "@/lib/admin/workerAccess";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
-
-type AdminUserRow = {
-  id: string;
-  email: string | null;
-  created_at: string | null;
-  full_name: string | null;
-  is_admin: boolean;
-  is_blocked: boolean;
-  blocked_at: string | null;
-  post_search_run_count: number;
-};
 
 export default async function AdminPage({
   params,
@@ -43,31 +34,15 @@ export default async function AdminPage({
   let users: AdminUserRow[] = [];
   let loadError: string | null = null;
   try {
-    const { data: sessionData } = await supabase.auth.getSession();
-    const accessToken = sessionData.session?.access_token ?? null;
+    const accessToken = await getSupabaseAccessToken(supabase);
     if (!accessToken) {
       loadError = "missing session";
     } else {
-      const baseUrl = (process.env.WORKER_API_URL || "http://127.0.0.1:8000")
-        .trim()
-        .replace(/\/+$/, "");
-      const resp = await fetch(`${baseUrl}/v1/admin/users`, {
-        method: "GET",
-        cache: "no-store",
-        headers: { authorization: `Bearer ${accessToken}` },
-      });
-      const parsed: unknown = await resp.json().catch(() => null);
-      if (resp.ok && Array.isArray(parsed)) {
-        users = parsed as AdminUserRow[];
-      } else if (!resp.ok) {
-        loadError = `worker ${resp.status}`;
-      } else {
-        loadError = "invalid worker payload";
-      }
+      users = await loadAdminUsers(accessToken);
     }
-  } catch {
+  } catch (e: unknown) {
     users = [];
-    loadError = "worker unreachable";
+    loadError = e instanceof Error ? e.message : "worker unreachable";
   }
 
   return (

@@ -1,25 +1,10 @@
 import { createSupabaseServerClient } from "@/lib/supabase/server";
+import { loadPostSearchRows } from "@/lib/postSearches";
 import { attachSearchTariff, loadSearchTariffs } from "@/lib/searchTariffs";
+import { getSearchTypeId } from "@/lib/searchTypes";
 
 const SEARCH_MARKER = "<<<POST_TEXT>>>";
 const REQUIRED_COMMENT_MARKERS = ["<<<POST_TEXT>>>", "<<<CONTENT_TYPE>>>", "<<<MAIN_TOPICS>>>", "<<<TARGET_LANGUAGE>>>"];
-const SELECT_WITH_TARIFF =
-  "id,user_id,title,search_prompt,comment_prompt,account_label,status,last_run_at,created_at,updated_at,search_tariff_id,email_report_enabled,email_report_format";
-const SELECT_WITHOUT_TARIFF =
-  "id,user_id,title,search_prompt,comment_prompt,account_label,status,last_run_at,created_at,updated_at,email_report_enabled,email_report_format";
-
-function isMissingTariffColumn(error: unknown): boolean {
-  if (!error || typeof error !== "object") return false;
-  const e = error as { code?: unknown; message?: unknown };
-  const code = typeof e.code === "string" ? e.code : "";
-  const msg = typeof e.message === "string" ? e.message : "";
-  return (
-    code === "42703" ||
-    msg.includes("search_tariff_id") ||
-    msg.includes("email_report_enabled") ||
-    msg.includes("email_report_format")
-  );
-}
 
 function isNonEmptyString(v: unknown): v is string {
   return typeof v === "string" && v.trim().length > 0;
@@ -34,32 +19,10 @@ export async function GET() {
   const { data } = await supabase.auth.getUser();
   if (!data.user) return new Response("unauthorized", { status: 401 });
 
-  const first = await supabase
-    .from("post_searches")
-    .select(SELECT_WITH_TARIFF)
-    .eq("user_id", data.user.id)
-    .order("created_at", { ascending: true });
-
   const tariffs = await loadSearchTariffs(supabase);
-
-  if (!first.error) {
-    const rows = (Array.isArray(first.data) ? first.data : []).map((s) =>
-      attachSearchTariff((s || {}) as Record<string, unknown>, tariffs),
-    );
-    return Response.json({ ok: true, post_searches: rows });
-  }
-  if (!isMissingTariffColumn(first.error)) {
-    return Response.json({ ok: false, error: first.error.message }, { status: 400 });
-  }
-  const second = await supabase
-    .from("post_searches")
-    .select(SELECT_WITHOUT_TARIFF)
-    .eq("user_id", data.user.id)
-    .order("created_at", { ascending: true });
-  if (second.error) return Response.json({ ok: false, error: second.error.message }, { status: 400 });
-  const rows = (Array.isArray(second.data) ? second.data : []).map((s) =>
-    attachSearchTariff((s || {}) as Record<string, unknown>, tariffs),
-  );
+  const loaded = await loadPostSearchRows(supabase, data.user.id);
+  if (loaded.error) return Response.json({ ok: false, error: loaded.error.message }, { status: 400 });
+  const rows = loaded.rows.map((s) => attachSearchTariff((s || {}) as Record<string, unknown>, tariffs));
   return Response.json({ ok: true, post_searches: rows });
 }
 
@@ -102,39 +65,34 @@ export async function POST(request: Request) {
   const userTariffId =
     !st.error && st.data && typeof st.data.search_tariff_id === "string" ? st.data.search_tariff_id : null;
 
-  const first = await supabase
-    .from("post_searches")
+  const typeId = await getSearchTypeId(supabase, "posts");
+  const created = await supabase
+    .from("searches")
     .insert({
       user_id: data.user.id,
+      search_type_id: typeId,
       title,
-      search_prompt,
-      comment_prompt,
       account_label,
       status,
       search_tariff_id: userTariffId,
     })
-    .select(SELECT_WITH_TARIFF)
+    .select("id,user_id,title,account_label,status,last_run_at,created_at,updated_at,search_tariff_id,email_report_enabled,email_report_format")
     .maybeSingle();
 
-  if (!first.error) return Response.json({ ok: true, post_search: first.data }, { status: 200 });
-  if (!isMissingTariffColumn(first.error)) {
-    return Response.json({ ok: false, error: first.error.message }, { status: 400 });
+  if (created.error) return Response.json({ ok: false, error: created.error.message }, { status: 400 });
+  const search = created.data as Record<string, unknown>;
+
+  const promptRows: Array<Record<string, unknown>> = [{ search_id: search.id, role: "search", body: search_prompt }];
+  if (comment_prompt) promptRows.push({ search_id: search.id, role: "comment", body: comment_prompt });
+  const promptResp = await supabase.from("prompts").insert(promptRows);
+  if (promptResp.error) {
+    await supabase.from("searches").delete().eq("id", search.id).eq("user_id", data.user.id);
+    return Response.json({ ok: false, error: promptResp.error.message }, { status: 400 });
   }
 
-  const second = await supabase
-    .from("post_searches")
-    .insert({
-      user_id: data.user.id,
-      title,
-      search_prompt,
-      comment_prompt,
-      account_label,
-      status,
-    })
-    .select(SELECT_WITHOUT_TARIFF)
-    .maybeSingle();
-
-  if (second.error) return Response.json({ ok: false, error: second.error.message }, { status: 400 });
-  return Response.json({ ok: true, post_search: second.data }, { status: 200 });
+  return Response.json(
+    { ok: true, post_search: { ...search, search_prompt, comment_prompt, account_label } },
+    { status: 200 },
+  );
 }
 

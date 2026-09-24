@@ -48,10 +48,11 @@ def start_run(
     client = _get_supabase_admin_client()
     try:
         resp = (
-            client.table("post_searches")
-            .select("id")
+            client.table("searches")
+            .select("id,search_types!inner(code)")
             .eq("id", req.post_search_id)
             .eq("user_id", user_id)
+            .eq("search_types.code", "posts")
             .maybe_single()
             .execute()
         )

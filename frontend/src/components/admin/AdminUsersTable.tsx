@@ -90,6 +90,12 @@ type AdminPostSearchDto = {
   created_at: string | null;
 };
 
+type PostSearchSettingsDraft = {
+  search_tariff_id: string | null;
+  email_report_enabled: boolean;
+  email_report_format: string;
+};
+
 const fieldClassName =
   "h-11 rounded-full border-border/80 bg-secondary px-4 text-sm text-foreground shadow-none";
 
@@ -172,6 +178,7 @@ export function AdminUsersTable({
   const [jobSearchDraftByKey, setJobSearchDraftByKey] = useState<Record<string, string>>({});
   const [jobSearchOpenByKey, setJobSearchOpenByKey] = useState<Record<string, boolean>>({});
   const [postSearchOpenByKey, setPostSearchOpenByKey] = useState<Record<string, boolean>>({});
+  const [postSearchDraftByKey, setPostSearchDraftByKey] = useState<Record<string, PostSearchSettingsDraft>>({});
   const [savePostSearchPendingByKey, setSavePostSearchPendingByKey] = useState<Record<string, boolean>>({});
   const [savePostSearchErrorByKey, setSavePostSearchErrorByKey] = useState<Record<string, string | null>>({});
   const [savePostSearchSuccessByKey, setSavePostSearchSuccessByKey] = useState<Record<string, string | null>>(
@@ -632,55 +639,48 @@ export function AdminUsersTable({
     }
   }
 
-  async function onSavePostSearchTariff(userId: string, postSearchId: string, tariffId: string | null) {
-    const k = postKey(userId, postSearchId);
-    setSavePostSearchPendingByKey((m) => ({ ...m, [k]: true }));
-    setSavePostSearchErrorByKey((m) => ({ ...m, [k]: null }));
-    setSavePostSearchSuccessByKey((m) => ({ ...m, [k]: null }));
-    try {
-      const resp = await fetch(
-        `/api/admin/users/${encodeURIComponent(userId)}/post-searches/${encodeURIComponent(postSearchId)}`,
-        {
-          method: "PATCH",
-          headers: { "content-type": "application/json" },
-          body: JSON.stringify({ search_tariff_id: tariffId }),
-        },
-      );
-      const text = await resp.text().catch(() => "");
-      if (!resp.ok) throw new Error(text || t("postsSearches.errors.save"));
-      setSavePostSearchSuccessByKey((m) => ({ ...m, [k]: t("common.saved") }));
-      await refreshPostSearches(userId);
-    } catch (e: unknown) {
-      setSavePostSearchErrorByKey((m) => ({
-        ...m,
-        [k]: e instanceof Error ? e.message : t("postsSearches.errors.save"),
-      }));
-    } finally {
-      setSavePostSearchPendingByKey((m) => ({ ...m, [k]: false }));
-    }
+  function patchPostSearchDraft(key: string, ps: AdminPostSearchDto, patch: Partial<PostSearchSettingsDraft>) {
+    setPostSearchDraftByKey((m) => {
+      const current = m[key] ?? {
+        search_tariff_id: ps.search_tariff_id ?? null,
+        email_report_enabled: Boolean(ps.email_report_enabled),
+        email_report_format: (ps.email_report_format || "none").toString(),
+      };
+      return { ...m, [key]: { ...current, ...patch } };
+    });
+    setSavePostSearchSuccessByKey((m) => ({ ...m, [key]: null }));
   }
 
-  async function onSavePostSearchEmailSettings(
-    userId: string,
-    postSearchId: string,
-    enabled: boolean,
-    format: string,
-  ) {
-    const k = postKey(userId, postSearchId);
+  async function onSavePostSearchSettings(userId: string, ps: AdminPostSearchDto) {
+    const k = postKey(userId, ps.id);
+    const draft = postSearchDraftByKey[k];
+    if (!draft) return;
+    const tariff = pickSearchTariff(draft.search_tariff_id, tariffs || []);
+    const allowsEmail = tariff?.email_reports_enabled === true;
+    const payload = {
+      search_tariff_id: draft.search_tariff_id,
+      email_report_enabled: allowsEmail ? draft.email_report_enabled : false,
+      email_report_format: allowsEmail ? draft.email_report_format || "none" : "none",
+    };
     setSavePostSearchPendingByKey((m) => ({ ...m, [k]: true }));
     setSavePostSearchErrorByKey((m) => ({ ...m, [k]: null }));
     setSavePostSearchSuccessByKey((m) => ({ ...m, [k]: null }));
     try {
       const resp = await fetch(
-        `/api/admin/users/${encodeURIComponent(userId)}/post-searches/${encodeURIComponent(postSearchId)}`,
+        `/api/admin/users/${encodeURIComponent(userId)}/post-searches/${encodeURIComponent(ps.id)}`,
         {
           method: "PATCH",
           headers: { "content-type": "application/json" },
-          body: JSON.stringify({ email_report_enabled: enabled, email_report_format: format }),
+          body: JSON.stringify(payload),
         },
       );
       const text = await resp.text().catch(() => "");
       if (!resp.ok) throw new Error(text || t("postsSearches.errors.save"));
+      setPostSearchDraftByKey((m) => {
+        const next = { ...m };
+        delete next[k];
+        return next;
+      });
       setSavePostSearchSuccessByKey((m) => ({ ...m, [k]: t("common.saved") }));
       await refreshPostSearches(userId);
     } catch (e: unknown) {
@@ -1326,10 +1326,26 @@ export function AdminUsersTable({
                                 const k = postKey(u.id, ps.id);
                                 const open = Boolean(postSearchOpenByKey[k]);
                                 const saving = Boolean(savePostSearchPendingByKey[k]);
-                                const psTariff = pickSearchTariff(ps.search_tariff_id, tariffs || []);
+                                const draft = postSearchDraftByKey[k];
+                                const psTariffId = draft ? draft.search_tariff_id : ps.search_tariff_id || null;
+                                const psTariff = pickSearchTariff(psTariffId, tariffs || []);
                                 const psTariffAllowsEmail = psTariff?.email_reports_enabled === true;
-                                const psEmailEnabled = Boolean(ps.email_report_enabled);
-                                const psEmailFormat = (ps.email_report_format || "none").toString();
+                                const psEmailEnabled = draft
+                                  ? draft.email_report_enabled
+                                  : Boolean(ps.email_report_enabled);
+                                const psEmailFormat = draft
+                                  ? draft.email_report_format
+                                  : (ps.email_report_format || "none").toString();
+                                const savedTariffId = ps.search_tariff_id || null;
+                                const savedEmailEnabled = Boolean(ps.email_report_enabled);
+                                const savedEmailFormat = (ps.email_report_format || "none").toString();
+                                const nextEmailEnabled = psTariffAllowsEmail ? psEmailEnabled : false;
+                                const nextEmailFormat = psTariffAllowsEmail ? psEmailFormat || "none" : "none";
+                                const postSettingsDirty =
+                                  Boolean(draft) &&
+                                  (psTariffId !== savedTariffId ||
+                                    nextEmailEnabled !== savedEmailEnabled ||
+                                    nextEmailFormat !== savedEmailFormat);
                                 return (
                                   <div key={ps.id} className="rounded-2xl border border-border/80 bg-background/40 p-4">
                                     <div className="flex flex-wrap items-start justify-between gap-3">
@@ -1363,10 +1379,10 @@ export function AdminUsersTable({
                                           <select
                                             id={`post_tariff_${ps.id}`}
                                             className={fieldClassName}
-                                            value={ps.search_tariff_id || ""}
+                                            value={psTariffId || ""}
                                             disabled={saving || tariffs === null}
                                             onChange={(e) =>
-                                              void onSavePostSearchTariff(u.id, ps.id, e.target.value || null)
+                                              patchPostSearchDraft(k, ps, { search_tariff_id: e.target.value || null })
                                             }
                                           >
                                             <option value="">{t("tariffSearch.default")}</option>
@@ -1386,12 +1402,9 @@ export function AdminUsersTable({
                                             value={psTariffAllowsEmail ? psEmailFormat : "none"}
                                             disabled={saving || !psTariffAllowsEmail}
                                             onChange={(e) =>
-                                              void onSavePostSearchEmailSettings(
-                                                u.id,
-                                                ps.id,
-                                                psEmailEnabled,
-                                                e.target.value || "none",
-                                              )
+                                              patchPostSearchDraft(k, ps, {
+                                                email_report_format: e.target.value || "none",
+                                              })
                                             }
                                           >
                                             <option value="none">{t("emailReport.formats.none")}</option>
@@ -1413,12 +1426,7 @@ export function AdminUsersTable({
                                             checked={psTariffAllowsEmail ? psEmailEnabled : false}
                                             disabled={saving || !psTariffAllowsEmail}
                                             onChange={(e) =>
-                                              void onSavePostSearchEmailSettings(
-                                                u.id,
-                                                ps.id,
-                                                e.target.checked,
-                                                psEmailFormat,
-                                              )
+                                              patchPostSearchDraft(k, ps, { email_report_enabled: e.target.checked })
                                             }
                                           />
                                           <Label htmlFor={`post_email_enabled_${ps.id}`}>{t("emailReport.enabledLabel")}</Label>
@@ -1434,6 +1442,15 @@ export function AdminUsersTable({
                                         ) : null}
 
                                         <div className="flex flex-wrap items-center gap-2">
+                                          <Button
+                                            type="button"
+                                            className="h-9 rounded-full"
+                                            onClick={() => void onSavePostSearchSettings(u.id, ps)}
+                                            disabled={saving || !postSettingsDirty}
+                                          >
+                                            <Save className="mr-2 size-4" />
+                                            {saving ? t("actions.saving") : t("actions.save")}
+                                          </Button>
                                           <Button
                                             type="button"
                                             className="h-9 rounded-full"

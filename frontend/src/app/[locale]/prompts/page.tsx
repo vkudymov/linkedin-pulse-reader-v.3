@@ -10,6 +10,7 @@ import { Link } from "@/i18n/navigation";
 import { requireNotBlocked } from "@/lib/auth/blocked";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { loadJobSearchRows } from "@/lib/jobSearches";
+import { loadPostSearchRows } from "@/lib/postSearches";
 import { attachSearchTariff, loadSearchTariffs } from "@/lib/searchTariffs";
 
 export default async function PromptsPage({
@@ -31,11 +32,10 @@ export default async function PromptsPage({
 
   let jobSearchesInitial: JobSearchDto[] = [];
   let postSearchesInitial: PostSearchDto[] = [];
-  let supportsLinkedinFilters = false;
+  const supportsLinkedinFilters = true;
   const tariffs = await loadSearchTariffs(supabase);
   if (activeTab === "jobs") {
-    const { rows, usedFiltersColumn } = await loadJobSearchRows(supabase, data.user.id);
-    supportsLinkedinFilters = usedFiltersColumn;
+    const { rows } = await loadJobSearchRows(supabase, data.user.id);
     const withCounts = await Promise.all(
       rows.map(async (s) => {
         const lastRunAt = typeof s.last_run_at === "string" ? s.last_run_at : null;
@@ -53,21 +53,7 @@ export default async function PromptsPage({
     jobSearchesInitial = withCounts as JobSearchDto[];
   }
   if (activeTab === "posts") {
-    let postSearchesResp = await supabase
-      .from("post_searches")
-      .select(
-        "id,user_id,title,search_prompt,comment_prompt,account_label,status,last_run_at,created_at,updated_at,search_tariff_id",
-      )
-      .eq("user_id", data.user.id)
-      .order("created_at", { ascending: true });
-    if (postSearchesResp.error) {
-      postSearchesResp = await supabase
-        .from("post_searches")
-        .select("id,user_id,title,search_prompt,comment_prompt,account_label,status,last_run_at,created_at,updated_at")
-        .eq("user_id", data.user.id)
-        .order("created_at", { ascending: true });
-    }
-    const rows = (postSearchesResp.data || []) as Record<string, unknown>[];
+    const { rows } = await loadPostSearchRows(supabase, data.user.id);
     postSearchesInitial = rows.map((s) => attachSearchTariff(s, tariffs)) as PostSearchDto[];
   }
 

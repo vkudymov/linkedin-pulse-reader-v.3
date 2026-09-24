@@ -2,14 +2,9 @@ import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { loadJobSearchRows } from "@/lib/jobSearches";
 import { normalizeLinkedInJobFilters } from "@/lib/linkedinJobFilters";
 import { attachSearchTariff, loadSearchTariffs } from "@/lib/searchTariffs";
+import { getSearchTypeId } from "@/lib/searchTypes";
 
 const MARKER = "<<<JOB_TEXT>>>";
-const SELECT_WITH_FILTERS =
-  "id,title,search_query,location,filter_prompt,status,last_run_at,linkedin_filters,created_at,updated_at,search_tariff_id,email_report_enabled,email_report_format";
-const SELECT_WITHOUT_FILTERS =
-  "id,title,search_query,location,filter_prompt,status,last_run_at,created_at,updated_at,search_tariff_id,email_report_enabled,email_report_format";
-const SELECT_LEGACY =
-  "id,title,search_query,location,filter_prompt,status,last_run_at,created_at,updated_at";
 
 function normalizeStatus(v: unknown): "active" | "paused" | null {
   if (v === "active" || v === "paused") return v;
@@ -18,22 +13,6 @@ function normalizeStatus(v: unknown): "active" | "paused" | null {
 
 function isNonEmptyString(v: unknown): v is string {
   return typeof v === "string" && v.trim().length > 0;
-}
-
-function isMissingLinkedinFiltersColumn(error: unknown): boolean {
-  if (!error || typeof error !== "object") return false;
-  const e = error as { code?: unknown; message?: unknown };
-  const code = typeof e.code === "string" ? e.code : "";
-  const msg = typeof e.message === "string" ? e.message : "";
-  return code === "42703" || msg.includes("linkedin_filters");
-}
-
-function isMissingSearchTariffColumn(error: unknown): boolean {
-  if (!error || typeof error !== "object") return false;
-  const e = error as { code?: unknown; message?: unknown };
-  const code = typeof e.code === "string" ? e.code : "";
-  const msg = typeof e.message === "string" ? e.message : "";
-  return code === "42703" || msg.includes("search_tariff_id");
 }
 
 export async function GET() {
@@ -103,61 +82,35 @@ export async function POST(request: Request) {
   const userTariffId =
     !st.error && st.data && typeof st.data.search_tariff_id === "string" ? st.data.search_tariff_id : null;
 
-  const first = await supabase
-    .from("job_searches")
+  const typeId = await getSearchTypeId(supabase, "jobs");
+  const created = await supabase
+    .from("searches")
     .insert({
       user_id: data.user.id,
+      search_type_id: typeId,
       title,
       search_query,
       location,
-      filter_prompt,
       status,
       linkedin_filters,
       search_tariff_id: userTariffId,
     })
-    .select(SELECT_WITH_FILTERS)
+    .select(
+      "id,user_id,title,search_query,location,status,last_run_at,linkedin_filters,created_at,updated_at,search_tariff_id,email_report_enabled,email_report_format",
+    )
     .maybeSingle();
 
-  if (!first.error) return Response.json({ ok: true, job_search: first.data }, { status: 200 });
+  if (created.error) return Response.json({ ok: false, error: created.error.message }, { status: 400 });
+  const search = created.data as Record<string, unknown>;
 
-  // Backward-compatible: if DB migration wasn't applied yet, ignore linkedin_filters.
-  if (!isMissingLinkedinFiltersColumn(first.error) && !isMissingSearchTariffColumn(first.error)) {
-    return Response.json({ ok: false, error: first.error.message }, { status: 400 });
+  const promptResp = await supabase
+    .from("prompts")
+    .insert({ search_id: search.id, role: "filter", body: filter_prompt });
+  if (promptResp.error) {
+    await supabase.from("searches").delete().eq("id", search.id).eq("user_id", data.user.id);
+    return Response.json({ ok: false, error: promptResp.error.message }, { status: 400 });
   }
 
-  const second = await supabase
-    .from("job_searches")
-    .insert({
-      user_id: data.user.id,
-      title,
-      search_query,
-      location,
-      filter_prompt,
-      status,
-      search_tariff_id: userTariffId,
-    })
-    .select(SELECT_WITHOUT_FILTERS)
-    .maybeSingle();
-
-  if (!second.error) return Response.json({ ok: true, job_search: second.data }, { status: 200 });
-  if (!isMissingSearchTariffColumn(second.error)) {
-    return Response.json({ ok: false, error: second.error.message }, { status: 400 });
-  }
-
-  const third = await supabase
-    .from("job_searches")
-    .insert({
-      user_id: data.user.id,
-      title,
-      search_query,
-      location,
-      filter_prompt,
-      status,
-    })
-    .select(SELECT_LEGACY)
-    .maybeSingle();
-
-  if (third.error) return Response.json({ ok: false, error: third.error.message }, { status: 400 });
-  return Response.json({ ok: true, job_search: third.data }, { status: 200 });
+  return Response.json({ ok: true, job_search: { ...search, filter_prompt } }, { status: 200 });
 }
 

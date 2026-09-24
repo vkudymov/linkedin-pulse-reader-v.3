@@ -1,20 +1,15 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 
-const SELECT_WITH_FILTERS =
-  "id,title,search_query,location,filter_prompt,status,last_run_at,linkedin_filters,created_at,updated_at,search_tariff_id,email_report_enabled,email_report_format";
-const SELECT_WITHOUT_FILTERS =
-  "id,title,search_query,location,filter_prompt,status,last_run_at,created_at,updated_at,search_tariff_id,email_report_enabled,email_report_format";
-const SELECT_LEGACY =
-  "id,title,search_query,location,filter_prompt,status,last_run_at,created_at,updated_at";
+const SELECT =
+  "id,title,search_query,location,status,last_run_at,linkedin_filters,created_at,updated_at,search_tariff_id,email_report_enabled,email_report_format,prompts(role,body),search_types!inner(code)";
 
-function isMissingLinkedinFiltersColumn(error: { code?: string; message?: string } | null): boolean {
-  if (!error) return false;
-  return error.code === "42703" || (error.message || "").includes("linkedin_filters");
-}
-
-function isMissingTariffColumn(error: { code?: string; message?: string } | null): boolean {
-  if (!error) return false;
-  return error.code === "42703" || (error.message || "").includes("search_tariff_id");
+function attachFilterPrompt(row: Record<string, unknown>): Record<string, unknown> {
+  const prompts = Array.isArray(row.prompts) ? (row.prompts as Array<Record<string, unknown>>) : [];
+  const filterPrompt = prompts.find((p) => p && p.role === "filter" && typeof p.body === "string")?.body;
+  const out = { ...row, filter_prompt: typeof filterPrompt === "string" ? filterPrompt : "" };
+  delete (out as Record<string, unknown>).prompts;
+  delete (out as Record<string, unknown>).search_types;
+  return out;
 }
 
 export async function loadJobSearchRows(
@@ -22,54 +17,16 @@ export async function loadJobSearchRows(
   userId: string,
 ): Promise<{
   rows: Record<string, unknown>[];
-  usedFiltersColumn: boolean;
   error: { code?: string; message?: string } | null;
 }> {
-  const first = await supabase
-    .from("job_searches")
-    .select(SELECT_WITH_FILTERS)
+  const resp = await supabase
+    .from("searches")
+    .select(SELECT)
     .eq("user_id", userId)
+    .eq("search_types.code", "jobs")
     .order("created_at", { ascending: true });
 
-  if (!first.error) {
-    return {
-      rows: Array.isArray(first.data) ? first.data : [],
-      usedFiltersColumn: true,
-      error: null,
-    };
-  }
-
-  if (!isMissingLinkedinFiltersColumn(first.error)) {
-    return { rows: [], usedFiltersColumn: false, error: first.error };
-  }
-
-  const second = await supabase
-    .from("job_searches")
-    .select(SELECT_WITHOUT_FILTERS)
-    .eq("user_id", userId)
-    .order("created_at", { ascending: true });
-
-  if (!second.error) {
-    return {
-      rows: Array.isArray(second.data) ? second.data : [],
-      usedFiltersColumn: false,
-      error: null,
-    };
-  }
-
-  if (!isMissingTariffColumn(second.error)) {
-    return { rows: [], usedFiltersColumn: false, error: second.error };
-  }
-
-  const third = await supabase
-    .from("job_searches")
-    .select(SELECT_LEGACY)
-    .eq("user_id", userId)
-    .order("created_at", { ascending: true });
-
-  return {
-    rows: Array.isArray(third.data) ? third.data : [],
-    usedFiltersColumn: false,
-    error: third.error,
-  };
+  if (resp.error) return { rows: [], error: resp.error };
+  const rows = (Array.isArray(resp.data) ? resp.data : []) as Record<string, unknown>[];
+  return { rows: rows.map(attachFilterPrompt), error: null };
 }

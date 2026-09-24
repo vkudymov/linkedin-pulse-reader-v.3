@@ -399,8 +399,34 @@
     "tabs": {
       "users": "Users",
       "searchRuns": "Search runs",
+      "searches": "Searches list",
+      "prompts": "Prompts list",
       "settings": "Settings"
     }
+  },
+  "adminSearches": {
+    "title": "Searches list",
+    "empty": "No searches yet (or no matches for filters).",
+    "actions": {
+      "refresh": "Refresh",
+      "save": "Save",
+      "saving": "Saving...",
+      "expand": "Expand",
+      "collapse": "Collapse"
+    },
+    "errors": { "load": "Failed to load searches.", "save": "Failed to save changes." }
+  },
+  "adminPrompts": {
+    "title": "Prompts list",
+    "empty": "No prompts yet (or no matches for filters).",
+    "actions": {
+      "refresh": "Refresh",
+      "save": "Save",
+      "saving": "Saving...",
+      "expand": "Expand",
+      "collapse": "Collapse"
+    },
+    "errors": { "load": "Failed to load prompts.", "save": "Failed to save changes." }
   },
   "adminSearchRuns": {
     "title": "Search runs report",

@@ -19,11 +19,17 @@ from .schemas import (
     AdminPostSearchRow,
     AdminPostSearchStartRequest,
     AdminPostSearchUpdate,
+    AdminPromptRow,
+    AdminPromptUpdate,
     AdminSearchTariffCreate,
     AdminSearchTariffRow,
     AdminSearchTariffUpdate,
+    AdminSearchRow,
+    AdminSearchUpdate,
+    AdminSearchesListResponse,
     AdminSearchRunRow,
     AdminSearchRunsListResponse,
+    AdminPromptsListResponse,
     AdminUserProfileDetails,
     AdminUserProfileUpdate,
     AdminUserPromptsDetails,
@@ -43,6 +49,81 @@ def _get_service_client() -> Any:
 
     return create_client(settings.supabase_url, settings.supabase_service_role_key)
 
+
+_SEARCH_TYPE_ID_CACHE: dict[str, str] = {}
+
+
+def _search_type_id(*, client: Any, code: str) -> str:
+    cached = _SEARCH_TYPE_ID_CACHE.get(code)
+    if cached:
+        return cached
+    resp = client.table("search_types").select("id").eq("code", code).maybe_single().execute()
+    row = getattr(resp, "data", None)
+    tid = str(row.get("id") or "") if isinstance(row, dict) else ""
+    if not tid:
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"Missing search_types: {code}")
+    _SEARCH_TYPE_ID_CACHE[code] = tid
+    return tid
+
+
+def _job_row_from_search(*, search_row: dict[str, Any]) -> dict[str, Any]:
+    prompts = search_row.get("prompts")
+    filter_prompt = ""
+    if isinstance(prompts, list):
+        for p in prompts:
+            if isinstance(p, dict) and p.get("role") == "filter" and isinstance(p.get("body"), str):
+                filter_prompt = str(p.get("body") or "")
+                break
+    out = dict(search_row)
+    out.pop("prompts", None)
+    out.pop("search_type_id", None)
+    out["filter_prompt"] = filter_prompt
+    return out
+
+
+def _post_prompts_from_search(*, search_row: dict[str, Any]) -> tuple[str, str | None]:
+    prompts = search_row.get("prompts")
+    search_prompt = ""
+    comment_prompt: str | None = None
+    if isinstance(prompts, list):
+        for p in prompts:
+            if not isinstance(p, dict) or not isinstance(p.get("body"), str):
+                continue
+            if p.get("role") == "search":
+                search_prompt = str(p.get("body") or "")
+            elif p.get("role") == "comment":
+                comment_prompt = str(p.get("body") or "")
+    return search_prompt, comment_prompt
+
+
+def _admin_search_row_from_search(*, search_row: dict[str, Any]) -> dict[str, Any]:
+    st = search_row.get("search_types")
+    code = st.get("code") if isinstance(st, dict) else None
+    search_type_code = str(code or "")
+    prompts = search_row.get("prompts")
+    prompts_list: list[dict[str, Any]] = [p for p in prompts if isinstance(p, dict)] if isinstance(prompts, list) else []
+
+    filter_prompt = None
+    search_prompt = None
+    comment_prompt = None
+    if search_type_code == "jobs":
+        for p in prompts_list:
+            if p.get("role") == "filter" and isinstance(p.get("body"), str):
+                filter_prompt = str(p.get("body") or "")
+                break
+    elif search_type_code == "posts":
+        sp, cp = _post_prompts_from_search(search_row=search_row)
+        search_prompt = sp
+        comment_prompt = cp
+
+    out = dict(search_row)
+    out.pop("search_type_id", None)
+    out["search_type_code"] = search_type_code
+    out["prompts"] = prompts_list
+    out["filter_prompt"] = filter_prompt
+    out["search_prompt"] = search_prompt
+    out["comment_prompt"] = comment_prompt
+    return out
 
 def _ensure_not_blocked(*, user_id: str) -> None:
     client = _get_service_client()
@@ -228,6 +309,23 @@ def _first_updated_row(resp: Any) -> dict[str, Any] | None:
     if isinstance(data, dict):
         return data
     return None
+
+
+def _load_user_names(*, client: Any, user_ids: list[str]) -> dict[str, str | None]:
+    if not user_ids:
+        return {}
+    try:
+        prof = client.table("user_profiles").select("id,full_name").in_("id", user_ids).execute()
+        data = getattr(prof, "data", None)
+        if not isinstance(data, list):
+            return {}
+        out: dict[str, str | None] = {}
+        for p in data:
+            if isinstance(p, dict) and p.get("id"):
+                out[str(p["id"])] = p.get("full_name") if isinstance(p.get("full_name"), str) else None
+        return out
+    except Exception:
+        return {}
 
 
 def _to_nullable_date(v: str | None) -> str | None:
@@ -541,11 +639,12 @@ def list_user_job_searches(
     client = _get_service_client()
     try:
         resp = (
-            client.table("job_searches")
+            client.table("searches")
             .select(
-                "id,user_id,title,search_query,location,filter_prompt,search_tariff_id,email_report_enabled,email_report_format,status,last_run_at,created_at,updated_at"
+                "id,user_id,title,search_query,location,linkedin_filters,search_tariff_id,email_report_enabled,email_report_format,status,last_run_at,created_at,updated_at,search_type_id,prompts(role,body)"
             )
             .eq("user_id", target_user_id)
+            .eq("search_type_id", _search_type_id(client=client, code="jobs"))
             .order("created_at", desc=False)
             .execute()
         )
@@ -557,7 +656,8 @@ def list_user_job_searches(
     rows: list[dict[str, Any]] = (
         [r for r in rows_raw if isinstance(r, dict)] if isinstance(rows_raw, list) else []
     )
-    return [AdminJobSearchRow(**r) for r in rows if r.get("id")]
+    mapped = [_job_row_from_search(search_row=r) for r in rows if r.get("id")]
+    return [AdminJobSearchRow(**r) for r in mapped if r.get("id")]
 
 
 @router.patch("/users/{target_user_id}/job-searches/{job_search_id}", response_model=AdminJobSearchRow)
@@ -585,7 +685,8 @@ def update_user_job_search(
     if body.location is not None:
         payload["location"] = location
     if filter_prompt is not None:
-        payload["filter_prompt"] = filter_prompt
+        # stored in prompts table
+        pass
     if body.status is not None:
         payload["status"] = status_value
     if "search_tariff_id" in body.model_fields_set:
@@ -609,10 +710,11 @@ def update_user_job_search(
         else:
             try:
                 st = (
-                    client.table("job_searches")
+                    client.table("searches")
                     .select("search_tariff_id")
                     .eq("id", job_search_id)
                     .eq("user_id", target_user_id)
+                    .eq("search_type_id", _search_type_id(client=client, code="jobs"))
                     .maybe_single()
                     .execute()
                 )
@@ -629,13 +731,18 @@ def update_user_job_search(
 
     # No-op update is allowed but should still validate ownership.
     try:
+        prompt_to_save = filter_prompt
+        if prompt_to_save is not None:
+            # Remove prompt from search update payload.
+            pass
         resp = (
-            client.table("job_searches")
+            client.table("searches")
             .update(payload)
             .eq("id", job_search_id)
             .eq("user_id", target_user_id)
+            .eq("search_type_id", _search_type_id(client=client, code="jobs"))
             .select(
-                "id,user_id,title,search_query,location,filter_prompt,search_tariff_id,email_report_enabled,email_report_format,status,last_run_at,created_at,updated_at"
+                "id,user_id,title,search_query,location,linkedin_filters,search_tariff_id,email_report_enabled,email_report_format,status,last_run_at,created_at,updated_at,search_type_id,prompts(role,body)"
             )
             .execute()
         )
@@ -647,7 +754,33 @@ def update_user_job_search(
     row = _first_updated_row(resp)
     if not row or not row.get("id"):
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Job search not found.")
-    return AdminJobSearchRow(**row)
+    if prompt_to_save is not None:
+        try:
+            client.table("prompts").upsert(
+                [{"search_id": job_search_id, "role": "filter", "body": prompt_to_save}],
+                on_conflict="search_id,role",
+            ).execute()
+        except Exception as e:
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Failed to update job prompt."
+            ) from e
+        # Re-fetch with prompts to return consistent row
+        resp2 = (
+            client.table("searches")
+            .select(
+                "id,user_id,title,search_query,location,linkedin_filters,search_tariff_id,email_report_enabled,email_report_format,status,last_run_at,created_at,updated_at,search_type_id,prompts(role,body)"
+            )
+            .eq("id", job_search_id)
+            .eq("user_id", target_user_id)
+            .eq("search_type_id", _search_type_id(client=client, code="jobs"))
+            .maybe_single()
+            .execute()
+        )
+        row2 = getattr(resp2, "data", None)
+        if isinstance(row2, dict) and row2.get("id"):
+            row = row2
+
+    return AdminJobSearchRow(**_job_row_from_search(search_row=row))
 
 
 @router.delete("/users/{target_user_id}/job-searches/{job_search_id}")
@@ -659,10 +792,11 @@ def delete_user_job_search(
     client = _get_service_client()
     try:
         resp = (
-            client.table("job_searches")
+            client.table("searches")
             .delete()
             .eq("id", job_search_id)
             .eq("user_id", target_user_id)
+            .eq("search_type_id", _search_type_id(client=client, code="jobs"))
             .select("id")
             .execute()
         )
@@ -688,10 +822,11 @@ def admin_start_post_search_run(
     if post_search_id:
         try:
             resp = (
-                client.table("post_searches")
-                .select("id")
+                client.table("searches")
+                .select("id,search_type_id")
                 .eq("id", post_search_id)
                 .eq("user_id", target_user_id)
+                .eq("search_type_id", _search_type_id(client=client, code="posts"))
                 .maybe_single()
                 .execute()
             )
@@ -706,9 +841,10 @@ def admin_start_post_search_run(
         # Backward-compatible default: pick the oldest post_search for this user.
         try:
             resp = (
-                client.table("post_searches")
+                client.table("searches")
                 .select("id")
                 .eq("user_id", target_user_id)
+                .eq("search_type_id", _search_type_id(client=client, code="posts"))
                 .order("created_at", desc=False)
                 .limit(1)
                 .maybe_single()
@@ -760,10 +896,11 @@ def admin_start_job_search_run(
 
     try:
         resp = (
-            client.table("job_searches")
-            .select("id")
+            client.table("searches")
+            .select("id,search_type_id")
             .eq("id", req.job_search_id)
             .eq("user_id", target_user_id)
+            .eq("search_type_id", _search_type_id(client=client, code="jobs"))
             .maybe_single()
             .execute()
         )
@@ -792,9 +929,10 @@ def list_user_post_searches(
     client = _get_service_client()
     try:
         resp = (
-            client.table("post_searches")
+            client.table("searches")
             .select("id,user_id,title,search_tariff_id,email_report_enabled,email_report_format,status,last_run_at,created_at")
             .eq("user_id", target_user_id)
+            .eq("search_type_id", _search_type_id(client=client, code="posts"))
             .order("created_at", desc=False)
             .execute()
         )
@@ -838,10 +976,11 @@ def update_user_post_search(
         else:
             try:
                 st = (
-                    client.table("post_searches")
+                    client.table("searches")
                     .select("search_tariff_id")
                     .eq("id", post_search_id)
                     .eq("user_id", target_user_id)
+                    .eq("search_type_id", _search_type_id(client=client, code="posts"))
                     .maybe_single()
                     .execute()
                 )
@@ -858,10 +997,11 @@ def update_user_post_search(
 
     try:
         resp = (
-            client.table("post_searches")
+            client.table("searches")
             .update(payload)
             .eq("id", post_search_id)
             .eq("user_id", target_user_id)
+            .eq("search_type_id", _search_type_id(client=client, code="posts"))
             .select("id,user_id,title,search_tariff_id,email_report_enabled,email_report_format,status,last_run_at,created_at")
             .execute()
         )
@@ -884,10 +1024,11 @@ def delete_user_post_search(
     client = _get_service_client()
     try:
         resp = (
-            client.table("post_searches")
+            client.table("searches")
             .delete()
             .eq("id", post_search_id)
             .eq("user_id", target_user_id)
+            .eq("search_type_id", _search_type_id(client=client, code="posts"))
             .select("id")
             .execute()
         )
@@ -968,6 +1109,449 @@ def list_search_runs(
         )
 
     return AdminSearchRunsListResponse(items=items, total=total, limit=limit, offset=offset)
+
+
+@router.get("/searches", response_model=AdminSearchesListResponse)
+def list_searches(
+    user_id: str | None = None,
+    type: str | None = None,  # noqa: A002
+    status: str | None = None,
+    search_tariff_id: str | None = None,
+    email_report_enabled: bool | None = None,
+    q: str | None = None,
+    order_by: str = "created_at",
+    order: str = "desc",
+    limit: int = 50,
+    offset: int = 0,
+    _: str = Depends(require_admin_user_id),
+) -> AdminSearchesListResponse:
+    client = _get_service_client()
+
+    type_val = type if type in ("jobs", "posts") else None
+    status_val = status if status in ("active", "paused") else None
+    order_val = "asc" if order == "asc" else "desc"
+    order_by_val = order_by if order_by in ("created_at", "updated_at", "last_run_at", "title") else "created_at"
+    limit_val = max(1, min(200, int(limit)))
+    offset_val = max(0, int(offset))
+
+    sel = (
+        "id,user_id,title,status,last_run_at,search_tariff_id,email_report_enabled,email_report_format,"
+        "search_query,location,linkedin_filters,account_label,created_at,updated_at,"
+        "search_types!inner(code),prompts(id,search_id,role,body,created_at,updated_at)"
+    )
+    req = client.table("searches").select(sel, count="exact")
+    if isinstance(user_id, str) and user_id.strip():
+        req = req.eq("user_id", user_id.strip())
+    if type_val:
+        req = req.eq("search_types.code", type_val)
+    if status_val:
+        req = req.eq("status", status_val)
+    if isinstance(search_tariff_id, str) and search_tariff_id.strip():
+        req = req.eq("search_tariff_id", search_tariff_id.strip())
+    if email_report_enabled is True:
+        req = req.eq("email_report_enabled", True)
+    if email_report_enabled is False:
+        req = req.eq("email_report_enabled", False)
+    if isinstance(q, str) and (qs := q.strip()):
+        req = req.ilike("title", f"%{qs}%")
+
+    req = req.order(order_by_val, desc=(order_val == "desc")).range(offset_val, offset_val + limit_val - 1)
+    try:
+        resp = req.execute()
+    except Exception as e:
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Failed to load searches.") from e
+
+    total = int(getattr(resp, "count", None) or 0)
+    rows_raw = getattr(resp, "data", None)
+    rows: list[dict[str, Any]] = (
+        [r for r in rows_raw if isinstance(r, dict)] if isinstance(rows_raw, list) else []
+    )
+    uids = list({str(r.get("user_id")) for r in rows if r.get("user_id")})
+    names_by_id = _load_user_names(client=client, user_ids=uids)
+
+    items: list[AdminSearchRow] = []
+    for r in rows:
+        mapped = _admin_search_row_from_search(search_row=r)
+        uid = str(mapped.get("user_id") or "")
+        mapped["user_full_name"] = names_by_id.get(uid)
+        mapped["user_email"] = None
+        items.append(AdminSearchRow(**mapped))
+    return AdminSearchesListResponse(items=items, total=total, limit=limit_val, offset=offset_val)
+
+
+@router.patch("/searches/{search_id}", response_model=AdminSearchRow)
+def update_search(
+    search_id: str,
+    body: AdminSearchUpdate,
+    _: str = Depends(require_admin_user_id),
+) -> AdminSearchRow:
+    client = _get_service_client()
+
+    # Load search + type
+    try:
+        base = (
+            client.table("searches")
+            .select("id,user_id,search_tariff_id,search_types!inner(code)")
+            .eq("id", search_id)
+            .maybe_single()
+            .execute()
+        )
+    except Exception as e:
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Failed to load search.") from e
+    row = getattr(base, "data", None)
+    if not isinstance(row, dict) or not row.get("id"):
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Search not found.")
+    st = row.get("search_types")
+    search_type_code = st.get("code") if isinstance(st, dict) else None
+    if search_type_code not in ("jobs", "posts"):
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid search type.")
+
+    payload: dict[str, Any] = {"updated_at": datetime.now(timezone.utc).isoformat()}
+
+    title = _require_non_empty_string(body.title, field="title")
+    status_val = _to_nullable_trimmed_string(body.status)
+    tariff_id = _to_nullable_trimmed_string(body.search_tariff_id)
+    email_report_format = _validate_email_report_format(body.email_report_format)
+
+    if title is not None:
+        payload["title"] = title
+    if body.status is not None:
+        if status_val not in ("active", "paused", None):
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid status.")
+        payload["status"] = status_val
+    if "search_tariff_id" in body.model_fields_set:
+        payload["search_tariff_id"] = tariff_id
+    if "email_report_enabled" in body.model_fields_set:
+        payload["email_report_enabled"] = bool(body.email_report_enabled)
+    if "email_report_format" in body.model_fields_set:
+        payload["email_report_format"] = email_report_format or "none"
+
+    # Type-specific fields
+    if search_type_code == "jobs":
+        if body.account_label is not None:
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="account_label is posts-only.")
+        if body.search_query is not None:
+            payload["search_query"] = _require_non_empty_string(body.search_query, field="search_query")
+        if body.location is not None:
+            payload["location"] = _to_nullable_trimmed_string(body.location)
+        if body.linkedin_filters is not None:
+            payload["linkedin_filters"] = body.linkedin_filters
+        if body.search_prompt is not None or body.comment_prompt is not None:
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Post prompts are not allowed for jobs.")
+    else:
+        # posts
+        if body.search_query is not None or body.location is not None or body.linkedin_filters is not None:
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Job fields are not allowed for posts.")
+        if body.account_label is not None:
+            payload["account_label"] = _to_nullable_trimmed_string(body.account_label)
+        if body.filter_prompt is not None:
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="filter_prompt is jobs-only.")
+
+    # Enforce tariff capability for email reports.
+    wants_email = bool(payload.get("email_report_enabled") is True)
+    wants_format = bool(
+        ("email_report_format" in payload)
+        and isinstance(payload.get("email_report_format"), str)
+        and payload.get("email_report_format") != "none"
+    )
+    if wants_email or wants_format:
+        effective_tariff_id = payload.get("search_tariff_id") if "search_tariff_id" in payload else row.get("search_tariff_id")
+        effective_tariff_id = effective_tariff_id if isinstance(effective_tariff_id, str) else None
+        if not _resolve_tariff_email_reports_enabled(client=client, tariff_id=effective_tariff_id):
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Tariff does not allow email reports.")
+
+    # Prompt updates
+    filter_prompt_to_save = _validate_job_search_filter_prompt(body.filter_prompt) if search_type_code == "jobs" else None
+
+    post_search_prompt_to_save: str | None = None
+    post_comment_prompt_to_save: str | None = None
+    post_comment_delete = False
+    if search_type_code == "posts" and ("search_prompt" in body.model_fields_set or "comment_prompt" in body.model_fields_set):
+        # Load existing prompts if needed for validation.
+        try:
+            p_resp = client.table("prompts").select("role,body").eq("search_id", search_id).execute()
+        except Exception as e:
+            raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Failed to load prompts.") from e
+        p_raw = getattr(p_resp, "data", None)
+        p_rows = [p for p in p_raw if isinstance(p, dict)] if isinstance(p_raw, list) else []
+        existing_search_prompt = next((p.get("body") for p in p_rows if p.get("role") == "search" and isinstance(p.get("body"), str)), None)
+        existing_comment_prompt = next((p.get("body") for p in p_rows if p.get("role") == "comment" and isinstance(p.get("body"), str)), None)
+
+        next_search_prompt = body.search_prompt if "search_prompt" in body.model_fields_set else existing_search_prompt
+        next_comment_prompt = body.comment_prompt if "comment_prompt" in body.model_fields_set else existing_comment_prompt
+
+        # comment_prompt may be explicitly cleared with empty string / None
+        if "comment_prompt" in body.model_fields_set and (next_comment_prompt is None or (isinstance(next_comment_prompt, str) and not next_comment_prompt.strip())):
+            post_comment_delete = True
+            next_comment_prompt = None
+
+        s_valid, c_valid = _validate_prompts(
+            search_prompt=next_search_prompt if isinstance(next_search_prompt, str) else None,
+            comment_prompt=next_comment_prompt if isinstance(next_comment_prompt, str) else None,
+        )
+        if "search_prompt" in body.model_fields_set:
+            post_search_prompt_to_save = s_valid
+        if "comment_prompt" in body.model_fields_set:
+            post_comment_prompt_to_save = c_valid
+
+    # Update search row
+    try:
+        upd = (
+            client.table("searches")
+            .update(payload)
+            .eq("id", search_id)
+            .select(
+                "id,user_id,title,status,last_run_at,search_tariff_id,email_report_enabled,email_report_format,"
+                "search_query,location,linkedin_filters,account_label,created_at,updated_at,"
+                "search_types!inner(code),prompts(id,search_id,role,body,created_at,updated_at)"
+            )
+            .maybe_single()
+            .execute()
+        )
+    except Exception as e:
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Failed to update search.") from e
+    updated_row = getattr(upd, "data", None)
+    if not isinstance(updated_row, dict) or not updated_row.get("id"):
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Search not found.")
+
+    # Apply prompt changes after search update (same strategy as per-user handlers).
+    if search_type_code == "jobs" and filter_prompt_to_save is not None:
+        try:
+            client.table("prompts").upsert(
+                [{"search_id": search_id, "role": "filter", "body": filter_prompt_to_save}],
+                on_conflict="search_id,role",
+            ).execute()
+        except Exception as e:
+            raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Failed to update prompt.") from e
+
+    if search_type_code == "posts":
+        if post_search_prompt_to_save is not None:
+            try:
+                client.table("prompts").upsert(
+                    [{"search_id": search_id, "role": "search", "body": post_search_prompt_to_save}],
+                    on_conflict="search_id,role",
+                ).execute()
+            except Exception as e:
+                raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Failed to update prompt.") from e
+        if post_comment_delete:
+            try:
+                client.table("prompts").delete().eq("search_id", search_id).eq("role", "comment").execute()
+            except Exception as e:
+                raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Failed to delete prompt.") from e
+        elif post_comment_prompt_to_save is not None:
+            try:
+                client.table("prompts").upsert(
+                    [{"search_id": search_id, "role": "comment", "body": post_comment_prompt_to_save}],
+                    on_conflict="search_id,role",
+                ).execute()
+            except Exception as e:
+                raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Failed to update prompt.") from e
+
+    # Re-fetch to include updated prompts in response.
+    try:
+        fresh = (
+            client.table("searches")
+            .select(
+                "id,user_id,title,status,last_run_at,search_tariff_id,email_report_enabled,email_report_format,"
+                "search_query,location,linkedin_filters,account_label,created_at,updated_at,"
+                "search_types!inner(code),prompts(id,search_id,role,body,created_at,updated_at)"
+            )
+            .eq("id", search_id)
+            .maybe_single()
+            .execute()
+        )
+    except Exception as e:
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Failed to load search.") from e
+    out = getattr(fresh, "data", None)
+    if not isinstance(out, dict) or not out.get("id"):
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Search not found.")
+
+    mapped = _admin_search_row_from_search(search_row=out)
+    uid = str(mapped.get("user_id") or "")
+    mapped["user_full_name"] = _load_user_names(client=client, user_ids=[uid]).get(uid)
+    mapped["user_email"] = None
+    return AdminSearchRow(**mapped)
+
+
+@router.get("/prompts", response_model=AdminPromptsListResponse)
+def list_prompts(
+    user_id: str | None = None,
+    search_id: str | None = None,
+    type: str | None = None,  # noqa: A002
+    role: str | None = None,
+    q: str | None = None,
+    order_by: str = "updated_at",
+    order: str = "desc",
+    limit: int = 50,
+    offset: int = 0,
+    _: str = Depends(require_admin_user_id),
+) -> AdminPromptsListResponse:
+    client = _get_service_client()
+    type_val = type if type in ("jobs", "posts") else None
+    role_val = role if role in ("filter", "search", "comment") else None
+    order_val = "asc" if order == "asc" else "desc"
+    order_by_val = order_by if order_by in ("created_at", "updated_at", "role") else "updated_at"
+    limit_val = max(1, min(200, int(limit)))
+    offset_val = max(0, int(offset))
+
+    sel = (
+        "id,search_id,role,body,created_at,updated_at,"
+        "searches!inner(id,user_id,title,search_type_id,search_types!inner(code))"
+    )
+    req = client.table("prompts").select(sel, count="exact")
+    if isinstance(search_id, str) and search_id.strip():
+        req = req.eq("search_id", search_id.strip())
+    if isinstance(user_id, str) and user_id.strip():
+        req = req.eq("searches.user_id", user_id.strip())
+    if type_val:
+        req = req.eq("searches.search_types.code", type_val)
+    if role_val:
+        req = req.eq("role", role_val)
+    if isinstance(q, str) and (qs := q.strip()):
+        req = req.ilike("body", f"%{qs}%")
+
+    req = req.order(order_by_val, desc=(order_val == "desc")).range(offset_val, offset_val + limit_val - 1)
+    try:
+        resp = req.execute()
+    except Exception as e:
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Failed to load prompts.") from e
+
+    total = int(getattr(resp, "count", None) or 0)
+    rows_raw = getattr(resp, "data", None)
+    rows: list[dict[str, Any]] = (
+        [r for r in rows_raw if isinstance(r, dict)] if isinstance(rows_raw, list) else []
+    )
+
+    uids: list[str] = []
+    items: list[AdminPromptRow] = []
+    for r in rows:
+        s = r.get("searches")
+        if not isinstance(s, dict):
+            continue
+        uid = str(s.get("user_id") or "")
+        if uid:
+            uids.append(uid)
+        st = s.get("search_types")
+        code = st.get("code") if isinstance(st, dict) else None
+        items.append(
+            AdminPromptRow(
+                id=str(r.get("id") or ""),
+                search_id=str(r.get("search_id") or ""),
+                role=str(r.get("role") or ""),
+                body=str(r.get("body") or ""),
+                created_at=r.get("created_at"),
+                updated_at=r.get("updated_at"),
+                user_id=uid,
+                search_title=str(s.get("title") or ""),
+                search_type_code=str(code or ""),
+                user_full_name=None,
+                user_email=None,
+            )
+        )
+
+    names_by_id = _load_user_names(client=client, user_ids=list({u for u in uids if u}))
+    out_items: list[AdminPromptRow] = []
+    for it in items:
+        out_items.append(
+            AdminPromptRow(
+                **{
+                    **it.model_dump(),
+                    "user_full_name": names_by_id.get(it.user_id),
+                    "user_email": None,
+                }
+            )
+        )
+    return AdminPromptsListResponse(items=out_items, total=total, limit=limit_val, offset=offset_val)
+
+
+@router.patch("/prompts/{prompt_id}", response_model=AdminPromptRow)
+def update_prompt(
+    prompt_id: str,
+    body: AdminPromptUpdate,
+    _: str = Depends(require_admin_user_id),
+) -> AdminPromptRow:
+    client = _get_service_client()
+    # Load prompt + context
+    try:
+        resp = (
+            client.table("prompts")
+            .select("id,search_id,role,body,created_at,updated_at,searches!inner(id,user_id,title,search_types!inner(code))")
+            .eq("id", prompt_id)
+            .maybe_single()
+            .execute()
+        )
+    except Exception as e:
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Failed to load prompt.") from e
+    row = getattr(resp, "data", None)
+    if not isinstance(row, dict) or not row.get("id"):
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Prompt not found.")
+    role_val = row.get("role")
+    if role_val not in ("filter", "search", "comment"):
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid prompt role.")
+    s = row.get("searches")
+    if not isinstance(s, dict):
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid prompt context.")
+    st = s.get("search_types")
+    code = st.get("code") if isinstance(st, dict) else None
+    search_type_code = str(code or "")
+
+    text = body.body if isinstance(body.body, str) else ""
+    text = text.strip()
+    if not text:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Prompt body must be non-empty.")
+
+    # Validate body according to role/type.
+    if role_val == "filter":
+        _validate_job_search_filter_prompt(text)
+        if search_type_code != "jobs":
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="filter prompt must belong to jobs search.")
+    elif role_val == "search":
+        _validate_prompts(search_prompt=text, comment_prompt=None)
+        if search_type_code != "posts":
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="search prompt must belong to posts search.")
+    else:
+        # comment
+        if search_type_code != "posts":
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="comment prompt must belong to posts search.")
+        if missing := _missing_markers(text, _COMMENT_REQUIRED_MARKERS):
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"Промпт комментария должен содержать маркеры: {', '.join(missing)}.",
+            )
+
+    now = datetime.now(timezone.utc).isoformat()
+    try:
+        upd = (
+            client.table("prompts")
+            .update({"body": text, "updated_at": now})
+            .eq("id", prompt_id)
+            .select("id,search_id,role,body,created_at,updated_at,searches!inner(id,user_id,title,search_types!inner(code))")
+            .maybe_single()
+            .execute()
+        )
+    except Exception as e:
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Failed to update prompt.") from e
+    out = getattr(upd, "data", None)
+    if not isinstance(out, dict) or not out.get("id"):
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Prompt not found.")
+    s2 = out.get("searches") if isinstance(out.get("searches"), dict) else s
+    uid = str(s2.get("user_id") or "")
+    st2 = s2.get("search_types")
+    code2 = st2.get("code") if isinstance(st2, dict) else None
+    full_name = _load_user_names(client=client, user_ids=[uid]).get(uid)
+    return AdminPromptRow(
+        id=str(out.get("id") or ""),
+        search_id=str(out.get("search_id") or ""),
+        role=str(out.get("role") or ""),
+        body=str(out.get("body") or ""),
+        created_at=out.get("created_at"),
+        updated_at=out.get("updated_at"),
+        user_id=uid,
+        search_title=str(s2.get("title") or ""),
+        search_type_code=str(code2 or ""),
+        user_full_name=full_name,
+        user_email=None,
+    )
 
 
 @router.get("/users/{target_user_id}/job-search/run/{session_id}", response_model=JobSearchRunResponse)

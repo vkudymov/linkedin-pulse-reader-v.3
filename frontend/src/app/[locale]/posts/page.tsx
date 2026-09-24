@@ -66,9 +66,10 @@ export default async function PostsPage({
   const accountIds = accounts.map((a) => a.id).filter(Boolean);
 
   const postSearchesResp = await supabase
-    .from("post_searches")
-    .select("id,title,created_at")
+    .from("searches")
+    .select("id,title,created_at,search_types!inner(code)")
     .eq("user_id", data.user.id)
+    .eq("search_types.code", "posts")
     .order("created_at", { ascending: true });
   if (postSearchesResp.error) {
     log.error("posts", "failed to load post_searches", {
@@ -76,7 +77,8 @@ export default async function PostsPage({
       meta: { code: postSearchesResp.error.code },
     });
   }
-  const postSearches = (postSearchesResp.data || []) as Array<{ id: string; title: string; created_at: string }>;
+  const postSearchesRaw = (postSearchesResp.data || []) as Array<{ id: string; title: string; created_at: string }>;
+  const postSearches = postSearchesRaw.map((s) => ({ id: s.id, title: s.title, created_at: s.created_at }));
   const byId = new Set(postSearches.map((s) => s.id));
   const activePostSearchId =
     typeof rawPostSearchId === "string" && byId.has(rawPostSearchId)

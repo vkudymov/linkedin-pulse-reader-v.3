@@ -8,13 +8,8 @@ import { useTranslations } from "next-intl";
 import { useRouter } from "@/i18n/navigation";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
+import type { AdminUserOption } from "@/lib/admin/users";
 import { cn } from "@/lib/utils";
-
-type AdminUserOption = {
-  id: string;
-  email: string | null;
-  full_name: string | null;
-};
 
 type SearchOption = { id: string; title: string };
 
@@ -62,7 +57,13 @@ function formatDt(value: string | null, locale: "ru" | "en") {
   });
 }
 
-export function AdminSearchRunsPanel({ locale }: { locale: "ru" | "en" }) {
+export function AdminSearchRunsPanel({
+  locale,
+  initialUsers = [],
+}: {
+  locale: "ru" | "en";
+  initialUsers?: AdminUserOption[];
+}) {
   const t = useTranslations("adminSearchRuns");
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -74,7 +75,7 @@ export function AdminSearchRunsPanel({ locale }: { locale: "ru" | "en" }) {
   const status = searchParams.get("status") || "all";
   const order = searchParams.get("order") || "desc";
 
-  const [users, setUsers] = useState<AdminUserOption[]>([]);
+  const [users] = useState<AdminUserOption[]>(initialUsers);
   const [searchOptionsByKey, setSearchOptionsByKey] = useState<Record<string, SearchOption[]>>({});
   const [rows, setRows] = useState<SearchRunRow[]>([]);
   const [total, setTotal] = useState(0);
@@ -121,18 +122,6 @@ export function AdminSearchRunsPanel({ locale }: { locale: "ru" | "en" }) {
     },
     [router, searchParams],
   );
-
-  useEffect(() => {
-    void (async () => {
-      try {
-        const resp = await fetch("/api/admin/users", { cache: "no-store" });
-        const json = (await resp.json().catch(() => null)) as AdminUserOption[] | null;
-        if (resp.ok && Array.isArray(json)) setUsers(json);
-      } catch {
-        /* ignore */
-      }
-    })();
-  }, []);
 
   useEffect(() => {
     if (!searchOptionsKey) return;

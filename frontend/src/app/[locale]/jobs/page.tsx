@@ -63,11 +63,17 @@ export default async function JobsPage({
   const isAdmin = await requireNotBlocked(supabase, data.user.id);
 
   const searchesResp = await supabase
-    .from("job_searches")
-    .select("id,title,status")
+    .from("searches")
+    .select("id,title,status,search_types!inner(code)")
     .eq("user_id", data.user.id)
+    .eq("search_types.code", "jobs")
     .order("created_at", { ascending: true });
-  const searches = Array.isArray(searchesResp.data) ? searchesResp.data : [];
+  const searchesRaw = Array.isArray(searchesResp.data) ? searchesResp.data : [];
+  const searches = searchesRaw.map((s) => ({
+    id: (s as { id?: string }).id,
+    title: (s as { title?: string }).title,
+    status: (s as { status?: string }).status,
+  }));
 
   const selectedId =
     typeof rawSearchId === "string" && rawSearchId

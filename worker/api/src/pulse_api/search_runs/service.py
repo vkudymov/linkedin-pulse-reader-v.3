@@ -98,10 +98,11 @@ def create_post_search_run(
 ) -> tuple[str, TariffParams | None]:
     client = _get_supabase_admin_client()
     resp = (
-        client.table("post_searches")
-        .select("id,title,search_prompt,comment_prompt,account_label,search_tariff_id")
+        client.table("searches")
+        .select("id,title,account_label,search_tariff_id,prompts(role,body),search_types!inner(code)")
         .eq("id", post_search_id)
         .eq("user_id", user_id)
+        .eq("search_types.code", "posts")
         .maybe_single()
         .execute()
     )
@@ -112,6 +113,23 @@ def create_post_search_run(
     label = account_label if account_label else (
         row.get("account_label") if isinstance(row.get("account_label"), str) else None
     )
+    prompts = row.get("prompts")
+    search_prompt = ""
+    comment_prompt = None
+    if isinstance(prompts, list):
+        for p in prompts:
+            if not isinstance(p, dict):
+                continue
+            role = p.get("role")
+            body = p.get("body")
+            if not isinstance(body, str):
+                continue
+            if role == "search":
+                search_prompt = body
+            elif role == "comment":
+                comment_prompt = body
+    if not search_prompt:
+        raise ValueError("post_search prompt not found")
     tariff = _resolve_tariff_params(client=client, tariff_id=row.get("search_tariff_id"))
     scan_limit, _, _ = resolve_run_limits(tariff=tariff, kind="post", request_limit=limit)
     created = _repo().create_running(
@@ -121,8 +139,8 @@ def create_post_search_run(
         search_title=str(row.get("title") or "Post search"),
         limit_count=scan_limit,
         account_label=label,
-        search_prompt=str(row.get("search_prompt") or ""),
-        comment_prompt=row.get("comment_prompt") if isinstance(row.get("comment_prompt"), str) else None,
+        search_prompt=search_prompt,
+        comment_prompt=comment_prompt,
         initiated_by=initiated_by,
         admin_actor_id=admin_actor_id,
     )
@@ -140,12 +158,11 @@ def create_job_search_run(
 ) -> tuple[str, TariffParams | None]:
     client = _get_supabase_admin_client()
     resp = (
-        client.table("job_searches")
-        .select(
-            "id,title,search_query,location,filter_prompt,linkedin_filters,search_tariff_id"
-        )
+        client.table("searches")
+        .select("id,title,search_query,location,linkedin_filters,search_tariff_id,prompts(role,body),search_types!inner(code)")
         .eq("id", job_search_id)
         .eq("user_id", user_id)
+        .eq("search_types.code", "jobs")
         .maybe_single()
         .execute()
     )
@@ -154,6 +171,15 @@ def create_job_search_run(
         raise ValueError("job_search not found")
 
     filters = row.get("linkedin_filters") if isinstance(row.get("linkedin_filters"), dict) else None
+    prompts = row.get("prompts")
+    filter_prompt = ""
+    if isinstance(prompts, list):
+        for p in prompts:
+            if isinstance(p, dict) and p.get("role") == "filter" and isinstance(p.get("body"), str):
+                filter_prompt = str(p.get("body") or "")
+                break
+    if not filter_prompt:
+        raise ValueError("job_search filter_prompt not found")
     tariff = _resolve_tariff_params(client=client, tariff_id=row.get("search_tariff_id"))
     scan_limit, _, _ = resolve_run_limits(tariff=tariff, kind="job", request_limit=limit)
     created = _repo().create_running(
@@ -166,7 +192,7 @@ def create_job_search_run(
         search_query=str(row.get("search_query") or ""),
         location=row.get("location") if isinstance(row.get("location"), str) else None,
         linkedin_filters=filters,
-        filter_prompt=str(row.get("filter_prompt") or ""),
+        filter_prompt=filter_prompt,
         initiated_by=initiated_by,
         admin_actor_id=admin_actor_id,
     )

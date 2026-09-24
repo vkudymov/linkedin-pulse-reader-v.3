@@ -3,22 +3,10 @@ import { normalizeLinkedInJobFilters } from "@/lib/linkedinJobFilters";
 
 const MARKER = "<<<JOB_TEXT>>>";
 const EMAIL_FORMATS = new Set(["none", "xlsx", "docx", "txt", "json", "xml"]);
-const SELECT_WITH_FILTERS =
-  "id,title,search_query,location,filter_prompt,status,last_run_at,linkedin_filters,created_at,updated_at,search_tariff_id,email_report_enabled,email_report_format";
-const SELECT_WITHOUT_FILTERS =
-  "id,title,search_query,location,filter_prompt,status,last_run_at,created_at,updated_at,search_tariff_id,email_report_enabled,email_report_format";
 
 function normalizeStatus(v: unknown): "active" | "paused" | null {
   if (v === "active" || v === "paused") return v;
   return null;
-}
-
-function isMissingLinkedinFiltersColumn(error: unknown): boolean {
-  if (!error || typeof error !== "object") return false;
-  const e = error as { code?: unknown; message?: unknown };
-  const code = typeof e.code === "string" ? e.code : "";
-  const msg = typeof e.message === "string" ? e.message : "";
-  return code === "42703" || msg.includes("linkedin_filters");
 }
 
 export async function PATCH(request: Request, ctx: { params: Promise<{ job_search_id: string }> }) {
@@ -27,6 +15,14 @@ export async function PATCH(request: Request, ctx: { params: Promise<{ job_searc
   if (!data.user) return new Response("unauthorized", { status: 401 });
 
   const { job_search_id } = await ctx.params;
+  const exists = await supabase
+    .from("searches")
+    .select("id,search_types!inner(code)")
+    .eq("id", job_search_id)
+    .eq("user_id", data.user.id)
+    .eq("search_types.code", "jobs")
+    .maybeSingle();
+  if (exists.error || !exists.data) return new Response("not found", { status: 404 });
 
   let json: unknown = null;
   try {
@@ -37,6 +33,7 @@ export async function PATCH(request: Request, ctx: { params: Promise<{ job_searc
   const body = (json && typeof json === "object" ? json : {}) as Record<string, unknown>;
 
   const payload: Record<string, unknown> = { updated_at: new Date().toISOString() };
+  let filterPromptToSave: string | null = null;
 
   if (typeof body.title === "string") payload.title = body.title.trim();
   if (typeof body.search_query === "string") payload.search_query = body.search_query.trim();
@@ -45,7 +42,7 @@ export async function PATCH(request: Request, ctx: { params: Promise<{ job_searc
     if (!body.filter_prompt.includes(MARKER)) {
       return Response.json({ ok: false, error: `filter_prompt must contain ${MARKER}` }, { status: 400 });
     }
-    payload.filter_prompt = body.filter_prompt;
+    filterPromptToSave = body.filter_prompt;
   }
   const st = normalizeStatus(body.status);
   if (st) payload.status = st;
@@ -67,17 +64,18 @@ export async function PATCH(request: Request, ctx: { params: Promise<{ job_searc
 
   if ((wantsEmailEnabled || (hasEmailFormat && fmt && fmt !== "none"))) {
     const st = await supabase
-      .from("job_searches")
-      .select("search_tariff_id")
+      .from("searches")
+      .select("search_tariff_id,search_types!inner(code)")
       .eq("id", job_search_id)
       .eq("user_id", data.user.id)
+      .eq("search_types.code", "jobs")
       .maybeSingle();
     const tariffId = !st.error && st.data && typeof st.data.search_tariff_id === "string" ? st.data.search_tariff_id : null;
 
     let allows = false;
     if (tariffId) {
       const t = await supabase.from("search_tariffs").select("email_reports_enabled").eq("id", tariffId).maybeSingle();
-      allows = !t.error && t.data && (t.data as { email_reports_enabled?: unknown }).email_reports_enabled === true;
+      allows = Boolean(!t.error && t.data && (t.data as { email_reports_enabled?: unknown }).email_reports_enabled === true);
     }
     if (!allows) {
       const t0 = await supabase
@@ -87,39 +85,40 @@ export async function PATCH(request: Request, ctx: { params: Promise<{ job_searc
         .order("created_at", { ascending: true })
         .limit(1)
         .maybeSingle();
-      allows = !t0.error && t0.data && (t0.data as { email_reports_enabled?: unknown }).email_reports_enabled === true;
+      allows = Boolean(!t0.error && t0.data && (t0.data as { email_reports_enabled?: unknown }).email_reports_enabled === true);
     }
     if (!allows) {
       return Response.json({ ok: false, error: "tariff does not allow email reports" }, { status: 400 });
     }
   }
 
-  const first = await supabase
-    .from("job_searches")
+  const updated = await supabase
+    .from("searches")
     .update(payload)
     .eq("id", job_search_id)
     .eq("user_id", data.user.id)
-    .select(SELECT_WITH_FILTERS)
+    .select(
+      "id,user_id,title,search_query,location,status,last_run_at,linkedin_filters,created_at,updated_at,search_tariff_id,email_report_enabled,email_report_format,prompts(role,body),search_types!inner(code)",
+    )
     .maybeSingle();
 
-  if (!first.error) return Response.json({ ok: true, job_search: first.data }, { status: 200 });
+  if (updated.error) return Response.json({ ok: false, error: updated.error.message }, { status: 400 });
 
-  // Backward-compatible: if DB migration wasn't applied yet, ignore linkedin_filters.
-  if (!isMissingLinkedinFiltersColumn(first.error) || payload.linkedin_filters === undefined) {
-    return Response.json({ ok: false, error: first.error.message }, { status: 400 });
+  if (filterPromptToSave !== null) {
+    const up = await supabase
+      .from("prompts")
+      .upsert({ search_id: job_search_id, role: "filter", body: filterPromptToSave }, { onConflict: "search_id,role" });
+    if (up.error) return Response.json({ ok: false, error: up.error.message }, { status: 400 });
   }
 
-  delete payload.linkedin_filters;
-  const second = await supabase
-    .from("job_searches")
-    .update(payload)
-    .eq("id", job_search_id)
-    .eq("user_id", data.user.id)
-    .select(SELECT_WITHOUT_FILTERS)
-    .maybeSingle();
-
-  if (second.error) return Response.json({ ok: false, error: second.error.message }, { status: 400 });
-  return Response.json({ ok: true, job_search: second.data }, { status: 200 });
+  const row = (updated.data || {}) as Record<string, unknown>;
+  const prompts = Array.isArray((row as { prompts?: unknown }).prompts)
+    ? ((row as { prompts: Array<Record<string, unknown>> }).prompts || [])
+    : [];
+  const filter_prompt = prompts.find((p) => p.role === "filter" && typeof p.body === "string")?.body;
+  delete (row as Record<string, unknown>).prompts;
+  delete (row as Record<string, unknown>).search_types;
+  return Response.json({ ok: true, job_search: { ...row, filter_prompt: typeof filter_prompt === "string" ? filter_prompt : "" } }, { status: 200 });
 }
 
 export async function DELETE(_request: Request, ctx: { params: Promise<{ job_search_id: string }> }) {
@@ -128,8 +127,16 @@ export async function DELETE(_request: Request, ctx: { params: Promise<{ job_sea
   if (!data.user) return new Response("unauthorized", { status: 401 });
 
   const { job_search_id } = await ctx.params;
+  const exists = await supabase
+    .from("searches")
+    .select("id,search_types!inner(code)")
+    .eq("id", job_search_id)
+    .eq("user_id", data.user.id)
+    .eq("search_types.code", "jobs")
+    .maybeSingle();
+  if (exists.error || !exists.data) return new Response("not found", { status: 404 });
   const { error } = await supabase
-    .from("job_searches")
+    .from("searches")
     .delete()
     .eq("id", job_search_id)
     .eq("user_id", data.user.id);

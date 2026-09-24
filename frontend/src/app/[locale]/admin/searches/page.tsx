@@ -2,19 +2,18 @@ import { redirect } from "next/navigation";
 import { getTranslations } from "next-intl/server";
 
 import { AppHeader } from "@/components/AppHeader";
-import { AdminSearchRunsPanel } from "@/components/admin/AdminSearchRunsPanel";
 import { AdminSectionTabs } from "@/components/admin/AdminSectionTabs";
+import { AdminSearchesPanel } from "@/components/admin/AdminSearchesPanel";
 import { loadAdminUserOptions } from "@/lib/admin/users";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 
-export default async function AdminSearchRunsPage({
+export default async function AdminSearchesPage({
   params,
 }: {
   params: Promise<{ locale: string }>;
 }) {
   const { locale } = await params;
-  const loc = locale === "en" ? "en" : "ru";
-  const t = await getTranslations("admin");
+  const tAdmin = await getTranslations("admin");
 
   const supabase = await createSupabaseServerClient();
   const { data } = await supabase.auth.getUser();
@@ -31,16 +30,18 @@ export default async function AdminSearchRunsPage({
   if (!isAdmin) redirect(`/${locale}/posts`);
   if (isBlocked) redirect(`/${locale}/login?blocked=1`);
 
+  const loc = locale === "en" ? "en" : "ru";
   const userOptions = await loadAdminUserOptions(supabase);
 
   return (
     <div className="min-h-screen bg-background text-foreground">
-      <AppHeader title={t("title")} subtitle={data.user.email ?? null} active="admin" isAdmin />
+      <AppHeader title={tAdmin("title")} subtitle={data.user.email ?? null} active="admin" isAdmin />
 
-      <main className="mx-auto max-w-3xl px-6 py-6">
-        <AdminSectionTabs active="searchRuns" />
-        <AdminSearchRunsPanel locale={loc} initialUsers={userOptions} />
+      <main className="mx-auto max-w-5xl px-6 py-6">
+        <AdminSectionTabs active="searches" />
+        <AdminSearchesPanel locale={loc} initialUsers={userOptions} />
       </main>
     </div>
   );
 }
+

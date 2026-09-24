@@ -10,7 +10,7 @@ const tabInactive =
 export async function AdminSectionTabs({
   active,
 }: {
-  active: "users" | "searchRuns" | "settings";
+  active: "users" | "searchRuns" | "searches" | "prompts" | "settings";
 }) {
   const t = await getTranslations("admin");
 
@@ -21,6 +21,12 @@ export async function AdminSectionTabs({
       </Link>
       <Link href="/admin/search-runs" className={active === "searchRuns" ? tabActive : tabInactive}>
         {t("tabs.searchRuns")}
+      </Link>
+      <Link href="/admin/searches" className={active === "searches" ? tabActive : tabInactive}>
+        {t("tabs.searches")}
+      </Link>
+      <Link href="/admin/prompts" className={active === "prompts" ? tabActive : tabInactive}>
+        {t("tabs.prompts")}
       </Link>
       <Link href="/admin/settings" className={active === "settings" ? tabActive : tabInactive}>
         {t("tabs.settings")}

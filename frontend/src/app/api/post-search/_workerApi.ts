@@ -1,15 +1,13 @@
 import { NextResponse } from "next/server";
 
+import { getSupabaseAccessToken, getWorkerApiBaseUrl } from "@/lib/admin/workerAccess";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 
-export function getWorkerApiBaseUrl() {
-  return (process.env.WORKER_API_URL || "http://127.0.0.1:8000").trim().replace(/\/+$/, "");
-}
+export { getWorkerApiBaseUrl };
 
 export async function getWorkerAccessToken() {
   const supabase = await createSupabaseServerClient();
-  const { data: sessionData } = await supabase.auth.getSession();
-  return sessionData.session?.access_token ?? null;
+  return getSupabaseAccessToken(supabase);
 }
 
 export function unauthorizedResponse() {
