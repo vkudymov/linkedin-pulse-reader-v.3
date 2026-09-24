@@ -20,6 +20,8 @@ export type PostSearchDto = {
   account_label: string | null;
   status: "active" | "paused" | string;
   last_run_at: string | null;
+  email_report_enabled?: boolean;
+  email_report_format?: string | null;
   target_found_count?: number;
   search_tariff_id?: string | null;
   search_tariff?: SearchTariffInfo | null;
@@ -212,6 +214,10 @@ function PostSearchCard({
   const [accountLabel, setAccountLabel] = useState(item.account_label ?? "");
   const [searchPrompt, setSearchPrompt] = useState(item.search_prompt);
   const [commentPrompt, setCommentPrompt] = useState(item.comment_prompt ?? "");
+  const [emailEnabled, setEmailEnabled] = useState(Boolean(item.email_report_enabled));
+  const [emailFormat, setEmailFormat] = useState((item.email_report_format || "none").toString());
+
+  const tariffAllowsEmailReports = item.search_tariff?.email_reports_enabled === true;
 
   const canSave = title.trim().length > 0 && searchPrompt.trim().length > 0 && searchPrompt.includes(SEARCH_MARKER);
 
@@ -233,6 +239,8 @@ function PostSearchCard({
           account_label: accountLabel.trim() || null,
           search_prompt: sp,
           comment_prompt: cp || null,
+          email_report_enabled: tariffAllowsEmailReports ? emailEnabled : false,
+          email_report_format: tariffAllowsEmailReports ? emailFormat : "none",
         }),
       });
       const json = (await resp.json().catch(() => null)) as { ok?: boolean; error?: string } | null;
@@ -336,6 +344,37 @@ function PostSearchCard({
             <Label>{t("fields.commentPrompt")}</Label>
             <Textarea value={commentPrompt} rows={6} onChange={(e) => setCommentPrompt(e.target.value)} disabled={busy || saving || running} />
             <p className="text-xs text-muted-foreground">{t("fields.commentMarkerHint")}</p>
+          </div>
+
+          <div className="grid gap-2">
+            <Label>{t("fields.emailReportFormat")}</Label>
+            <select
+              className="h-10 rounded-xl border border-border bg-background px-3 text-sm"
+              value={tariffAllowsEmailReports ? emailFormat : "none"}
+              disabled={busy || saving || running || !tariffAllowsEmailReports}
+              onChange={(e) => setEmailFormat(e.target.value)}
+            >
+              <option value="none">{t("emailReport.formats.none")}</option>
+              <option value="xlsx">{t("emailReport.formats.xlsx")}</option>
+              <option value="docx">{t("emailReport.formats.docx")}</option>
+              <option value="txt">{t("emailReport.formats.txt")}</option>
+              <option value="json">{t("emailReport.formats.json")}</option>
+              <option value="xml">{t("emailReport.formats.xml")}</option>
+            </select>
+            {!tariffAllowsEmailReports ? (
+              <p className="text-xs text-muted-foreground">{t("emailReport.disabledByTariff")}</p>
+            ) : null}
+          </div>
+
+          <div className="flex items-center gap-3">
+            <input
+              id={`email_enabled_${item.id}`}
+              type="checkbox"
+              checked={tariffAllowsEmailReports ? emailEnabled : false}
+              disabled={busy || saving || running || !tariffAllowsEmailReports}
+              onChange={(e) => setEmailEnabled(e.target.checked)}
+            />
+            <Label htmlFor={`email_enabled_${item.id}`}>{t("fields.emailReportEnabled")}</Label>
           </div>
 
           {runStatus || runMessage ? (

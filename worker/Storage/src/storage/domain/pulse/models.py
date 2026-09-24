@@ -68,6 +68,8 @@ class PostSearchRow(TypedDict):
     comment_prompt: str | None
     account_label: str | None
     search_tariff_id: NotRequired[str | None]
+    email_report_enabled: NotRequired[bool]
+    email_report_format: NotRequired[str]
     status: str
     last_run_at: str | None
     created_at: str
@@ -81,6 +83,8 @@ class PostSearchCreate(TypedDict):
     comment_prompt: NotRequired[str | None]
     account_label: NotRequired[str | None]
     search_tariff_id: NotRequired[str | None]
+    email_report_enabled: NotRequired[bool]
+    email_report_format: NotRequired[str]
     status: NotRequired[str]
     last_run_at: NotRequired[str | None]
 

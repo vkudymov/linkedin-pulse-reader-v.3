@@ -26,6 +26,7 @@ class AdminSearchTariffRow(BaseModel):
     max_scan_count: int
     target_found_count: int
     min_relevance_percent: int
+    email_reports_enabled: bool = False
     sort_order: int
     created_at: datetime | None = None
     updated_at: datetime | None = None
@@ -36,6 +37,7 @@ class AdminSearchTariffCreate(BaseModel):
     max_scan_count: int = Field(ge=1, le=500)
     target_found_count: int = Field(ge=1, le=500)
     min_relevance_percent: int = Field(ge=0, le=100)
+    email_reports_enabled: bool = False
     sort_order: int = 0
 
 
@@ -44,6 +46,7 @@ class AdminSearchTariffUpdate(BaseModel):
     max_scan_count: int | None = Field(default=None, ge=1, le=500)
     target_found_count: int | None = Field(default=None, ge=1, le=500)
     min_relevance_percent: int | None = Field(default=None, ge=0, le=100)
+    email_reports_enabled: bool | None = None
     sort_order: int | None = None
 
 
@@ -100,6 +103,8 @@ class AdminJobSearchRow(BaseModel):
     location: str | None = None
     filter_prompt: str
     search_tariff_id: str | None = None
+    email_report_enabled: bool = False
+    email_report_format: str = "none"
     status: str | None = None
     last_run_at: datetime | None = None
     created_at: datetime | None = None
@@ -112,6 +117,8 @@ class AdminJobSearchUpdate(BaseModel):
     location: str | None = None
     filter_prompt: str | None = None
     search_tariff_id: str | None = None
+    email_report_enabled: bool | None = None
+    email_report_format: str | None = None
     status: str | None = None
 
 
@@ -126,6 +133,8 @@ class AdminPostSearchRow(BaseModel):
     user_id: str
     title: str
     search_tariff_id: str | None = None
+    email_report_enabled: bool = False
+    email_report_format: str = "none"
     status: str | None = None
     last_run_at: datetime | None = None
     created_at: datetime | None = None
@@ -133,6 +142,8 @@ class AdminPostSearchRow(BaseModel):
 
 class AdminPostSearchUpdate(BaseModel):
     search_tariff_id: str | None = None
+    email_report_enabled: bool | None = None
+    email_report_format: str | None = None
 
 
 class AdminSearchRunRow(BaseModel):

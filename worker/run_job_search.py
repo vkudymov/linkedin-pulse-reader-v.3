@@ -183,6 +183,19 @@ def main() -> None:
                 matched_count=int(r.matched),
             )
 
+        _maybe_send_email_report(
+            storage=storage,
+            user_id=user_id,
+            job_search_row=js_row,
+            run_at=now,
+            fetched_count=int(r.collected),
+            analyzed_count=int(r.analyzed),
+            matched_count=int(r.matched),
+            report_items=list(getattr(r, "report_items", ()) or ()),
+            min_score=min_score,
+            target_found=target_found,
+        )
+
         log.info(
             "Job search done: collected=%s unique=%s analyzed=%s matched=%s errors=%s",
             r.collected,
@@ -200,6 +213,95 @@ def main() -> None:
             except Exception:
                 pass
         raise
+
+
+def _maybe_send_email_report(
+    *,
+    storage: PulseStorage,
+    user_id: str,
+    job_search_row: dict[str, Any],
+    run_at: str,
+    fetched_count: int,
+    analyzed_count: int,
+    matched_count: int,
+    report_items: list[dict[str, object]],
+    min_score: int,
+    target_found: int,
+) -> None:
+    """
+    Best-effort: send a report email (never fails the run).
+    """
+    try:
+        from search_report_mailer.types import ReportItem, ReportMeta
+        from search_report_integration.dispatch import dispatch_report, default_body, default_subject
+        from search_report_integration.policy import should_send_email_report
+        from search_report_integration.user_email import get_user_email
+    except Exception:
+        return
+
+    try:
+        tariff_row = storage.search_tariffs.resolve(tariff_id=job_search_row.get("search_tariff_id"))
+        should_send, fmt = should_send_email_report(tariff_row=tariff_row, search_row=job_search_row)
+        if not should_send:
+            return
+
+        email = get_user_email(client=storage.client, user_id=user_id)
+        if not email:
+            log.warning("Email report is enabled, but user email is missing (user_id=%s)", user_id)
+            return
+
+        items: list[ReportItem] = []
+        for d in report_items:
+            job = d.get("job") if isinstance(d.get("job"), dict) else {}
+            items.append(
+                ReportItem(
+                    kind="job",
+                    analyzed=bool(d.get("analyzed")),
+                    match=d.get("match") if isinstance(d.get("match"), bool) else None,
+                    score=int(d.get("score")) if isinstance(d.get("score"), int) else None,
+                    reason=d.get("reason") if isinstance(d.get("reason"), str) else None,
+                    matched_requirements=tuple(
+                        x for x in (d.get("matched_requirements") or []) if isinstance(x, str)
+                    ),
+                    missing_requirements=tuple(
+                        x for x in (d.get("missing_requirements") or []) if isinstance(x, str)
+                    ),
+                    red_flags=tuple(x for x in (d.get("red_flags") or []) if isinstance(x, str)),
+                    title=job.get("title") if isinstance(job.get("title"), str) else None,
+                    url=job.get("job_url") if isinstance(job.get("job_url"), str) else None,
+                    company=job.get("company") if isinstance(job.get("company"), str) else None,
+                    location=job.get("location") if isinstance(job.get("location"), str) else None,
+                    description=job.get("description") if isinstance(job.get("description"), str) else None,
+                    extra=None,
+                )
+            )
+
+        search_title = str(job_search_row.get("title") or "Job search")
+        meta = ReportMeta(
+            kind="job",
+            search_title=search_title,
+            run_at_iso=run_at,
+            min_score=int(min_score or 0),
+            target_found=int(target_found or 0),
+            fetched_count=int(fetched_count),
+            analyzed_count=int(analyzed_count),
+            matched_count=int(matched_count),
+        )
+        subject = default_subject(kind="jobs", search_title=search_title)
+        body = default_body(kind="jobs", search_title=search_title) + f"\n\nFetched: {fetched_count}\nAnalyzed: {analyzed_count}\nMatched: {matched_count}\n"
+
+        r = dispatch_report(
+            to_email=email,
+            subject=subject,
+            body_text=body,
+            file_format=fmt,
+            items=items,
+            meta=meta,
+        )
+        if not r.ok:
+            log.warning("Failed to send email report: %s", r.error or "<unknown>")
+    except Exception as e:
+        log.warning("Email report failed (ignored): %s", e)
 
 
 if __name__ == "__main__":

@@ -430,6 +430,60 @@ def _validate_job_search_filter_prompt(v: str | None) -> str | None:
     return s
 
 
+_EMAIL_REPORT_FORMATS = {"none", "xlsx", "docx", "txt", "json", "xml"}
+
+
+def _validate_email_report_format(v: str | None) -> str | None:
+    if v is None:
+        return None
+    if not isinstance(v, str):
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid email_report_format.")
+    s = v.strip().lower()
+    if s not in _EMAIL_REPORT_FORMATS:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Invalid email_report_format. Allowed: {', '.join(sorted(_EMAIL_REPORT_FORMATS))}.",
+        )
+    return s
+
+
+def _resolve_tariff_email_reports_enabled(*, client: Any, tariff_id: str | None) -> bool:
+    """
+    Best-effort: read search_tariffs.email_reports_enabled.
+    Falls back to default tariff if tariff_id is missing/invalid.
+    If the column isn't present yet, returns False.
+    """
+    try:
+        row: dict[str, Any] | None = None
+        if tariff_id:
+            resp = (
+                client.table("search_tariffs")
+                .select("email_reports_enabled")
+                .eq("id", tariff_id)
+                .maybe_single()
+                .execute()
+            )
+            data = getattr(resp, "data", None)
+            row = data if isinstance(data, dict) else None
+        if not row:
+            resp = (
+                client.table("search_tariffs")
+                .select("email_reports_enabled")
+                .order("sort_order", desc=False)
+                .order("created_at", desc=False)
+                .limit(1)
+                .execute()
+            )
+            data = getattr(resp, "data", None)
+            if isinstance(data, list) and data and isinstance(data[0], dict):
+                row = data[0]
+            elif isinstance(data, dict):
+                row = data
+        return bool(row and row.get("email_reports_enabled") is True)
+    except Exception:
+        return False
+
+
 @router.get("/users/{target_user_id}/prompts", response_model=AdminUserPromptsDetails)
 def get_user_prompts_details(
     target_user_id: str, _: str = Depends(require_admin_user_id)
@@ -489,7 +543,7 @@ def list_user_job_searches(
         resp = (
             client.table("job_searches")
             .select(
-                "id,user_id,title,search_query,location,filter_prompt,search_tariff_id,status,last_run_at,created_at,updated_at"
+                "id,user_id,title,search_query,location,filter_prompt,search_tariff_id,email_report_enabled,email_report_format,status,last_run_at,created_at,updated_at"
             )
             .eq("user_id", target_user_id)
             .order("created_at", desc=False)
@@ -522,6 +576,7 @@ def update_user_job_search(
     filter_prompt = _validate_job_search_filter_prompt(body.filter_prompt)
     status_value = _to_nullable_trimmed_string(body.status)
     tariff_id = _to_nullable_trimmed_string(body.search_tariff_id)
+    email_report_format = _validate_email_report_format(body.email_report_format)
 
     if title is not None:
         payload["title"] = title
@@ -535,6 +590,42 @@ def update_user_job_search(
         payload["status"] = status_value
     if "search_tariff_id" in body.model_fields_set:
         payload["search_tariff_id"] = tariff_id
+    if "email_report_enabled" in body.model_fields_set:
+        payload["email_report_enabled"] = bool(body.email_report_enabled)
+    if "email_report_format" in body.model_fields_set:
+        payload["email_report_format"] = email_report_format or "none"
+
+    # Enforce tariff capability for email reports.
+    wants_email = bool(payload.get("email_report_enabled") is True)
+    wants_format = bool(
+        ("email_report_format" in payload)
+        and isinstance(payload.get("email_report_format"), str)
+        and payload.get("email_report_format") != "none"
+    )
+    if wants_email or wants_format:
+        effective_tariff_id: str | None = None
+        if "search_tariff_id" in payload:
+            effective_tariff_id = payload.get("search_tariff_id") if isinstance(payload.get("search_tariff_id"), str) else None
+        else:
+            try:
+                st = (
+                    client.table("job_searches")
+                    .select("search_tariff_id")
+                    .eq("id", job_search_id)
+                    .eq("user_id", target_user_id)
+                    .maybe_single()
+                    .execute()
+                )
+                row = getattr(st, "data", None)
+                effective_tariff_id = row.get("search_tariff_id") if isinstance(row, dict) else None
+            except Exception:
+                effective_tariff_id = None
+
+        if not _resolve_tariff_email_reports_enabled(client=client, tariff_id=effective_tariff_id):
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Tariff does not allow email reports.",
+            )
 
     # No-op update is allowed but should still validate ownership.
     try:
@@ -544,7 +635,7 @@ def update_user_job_search(
             .eq("id", job_search_id)
             .eq("user_id", target_user_id)
             .select(
-                "id,user_id,title,search_query,location,filter_prompt,search_tariff_id,status,last_run_at,created_at,updated_at"
+                "id,user_id,title,search_query,location,filter_prompt,search_tariff_id,email_report_enabled,email_report_format,status,last_run_at,created_at,updated_at"
             )
             .execute()
         )
@@ -702,7 +793,7 @@ def list_user_post_searches(
     try:
         resp = (
             client.table("post_searches")
-            .select("id,user_id,title,search_tariff_id,status,last_run_at,created_at")
+            .select("id,user_id,title,search_tariff_id,email_report_enabled,email_report_format,status,last_run_at,created_at")
             .eq("user_id", target_user_id)
             .order("created_at", desc=False)
             .execute()
@@ -729,6 +820,41 @@ def update_user_post_search(
     payload: dict[str, Any] = {"updated_at": datetime.now(timezone.utc).isoformat()}
     if "search_tariff_id" in body.model_fields_set:
         payload["search_tariff_id"] = _to_nullable_trimmed_string(body.search_tariff_id)
+    if "email_report_enabled" in body.model_fields_set:
+        payload["email_report_enabled"] = bool(body.email_report_enabled)
+    if "email_report_format" in body.model_fields_set:
+        payload["email_report_format"] = _validate_email_report_format(body.email_report_format) or "none"
+
+    wants_email = bool(payload.get("email_report_enabled") is True)
+    wants_format = bool(
+        ("email_report_format" in payload)
+        and isinstance(payload.get("email_report_format"), str)
+        and payload.get("email_report_format") != "none"
+    )
+    if wants_email or wants_format:
+        effective_tariff_id: str | None = None
+        if "search_tariff_id" in payload:
+            effective_tariff_id = payload.get("search_tariff_id") if isinstance(payload.get("search_tariff_id"), str) else None
+        else:
+            try:
+                st = (
+                    client.table("post_searches")
+                    .select("search_tariff_id")
+                    .eq("id", post_search_id)
+                    .eq("user_id", target_user_id)
+                    .maybe_single()
+                    .execute()
+                )
+                row = getattr(st, "data", None)
+                effective_tariff_id = row.get("search_tariff_id") if isinstance(row, dict) else None
+            except Exception:
+                effective_tariff_id = None
+
+        if not _resolve_tariff_email_reports_enabled(client=client, tariff_id=effective_tariff_id):
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Tariff does not allow email reports.",
+            )
 
     try:
         resp = (
@@ -736,7 +862,7 @@ def update_user_post_search(
             .update(payload)
             .eq("id", post_search_id)
             .eq("user_id", target_user_id)
-            .select("id,user_id,title,search_tariff_id,status,last_run_at,created_at")
+            .select("id,user_id,title,search_tariff_id,email_report_enabled,email_report_format,status,last_run_at,created_at")
             .execute()
         )
     except Exception as e:

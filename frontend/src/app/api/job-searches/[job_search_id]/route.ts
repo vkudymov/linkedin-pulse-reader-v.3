@@ -2,10 +2,11 @@ import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { normalizeLinkedInJobFilters } from "@/lib/linkedinJobFilters";
 
 const MARKER = "<<<JOB_TEXT>>>";
+const EMAIL_FORMATS = new Set(["none", "xlsx", "docx", "txt", "json", "xml"]);
 const SELECT_WITH_FILTERS =
-  "id,title,search_query,location,filter_prompt,status,last_run_at,linkedin_filters,created_at,updated_at";
+  "id,title,search_query,location,filter_prompt,status,last_run_at,linkedin_filters,created_at,updated_at,search_tariff_id,email_report_enabled,email_report_format";
 const SELECT_WITHOUT_FILTERS =
-  "id,title,search_query,location,filter_prompt,status,last_run_at,created_at,updated_at";
+  "id,title,search_query,location,filter_prompt,status,last_run_at,created_at,updated_at,search_tariff_id,email_report_enabled,email_report_format";
 
 function normalizeStatus(v: unknown): "active" | "paused" | null {
   if (v === "active" || v === "paused") return v;
@@ -50,6 +51,47 @@ export async function PATCH(request: Request, ctx: { params: Promise<{ job_searc
   if (st) payload.status = st;
   if (body.linkedin_filters !== undefined) {
     payload.linkedin_filters = normalizeLinkedInJobFilters(body.linkedin_filters);
+  }
+
+  // Email report settings (gated by tariff capability).
+  const wantsEmailEnabled = body.email_report_enabled === true;
+  const hasEmailEnabled = body.email_report_enabled !== undefined;
+  const hasEmailFormat = body.email_report_format !== undefined;
+  const rawFormat = typeof body.email_report_format === "string" ? body.email_report_format.trim().toLowerCase() : null;
+  const fmt = rawFormat && EMAIL_FORMATS.has(rawFormat) ? rawFormat : rawFormat ? null : null;
+  if (hasEmailFormat && !fmt) {
+    return Response.json({ ok: false, error: "invalid email_report_format" }, { status: 400 });
+  }
+  if (hasEmailEnabled) payload.email_report_enabled = Boolean(body.email_report_enabled);
+  if (hasEmailFormat) payload.email_report_format = fmt ?? "none";
+
+  if ((wantsEmailEnabled || (hasEmailFormat && fmt && fmt !== "none"))) {
+    const st = await supabase
+      .from("job_searches")
+      .select("search_tariff_id")
+      .eq("id", job_search_id)
+      .eq("user_id", data.user.id)
+      .maybeSingle();
+    const tariffId = !st.error && st.data && typeof st.data.search_tariff_id === "string" ? st.data.search_tariff_id : null;
+
+    let allows = false;
+    if (tariffId) {
+      const t = await supabase.from("search_tariffs").select("email_reports_enabled").eq("id", tariffId).maybeSingle();
+      allows = !t.error && t.data && (t.data as { email_reports_enabled?: unknown }).email_reports_enabled === true;
+    }
+    if (!allows) {
+      const t0 = await supabase
+        .from("search_tariffs")
+        .select("email_reports_enabled")
+        .order("sort_order", { ascending: true })
+        .order("created_at", { ascending: true })
+        .limit(1)
+        .maybeSingle();
+      allows = !t0.error && t0.data && (t0.data as { email_reports_enabled?: unknown }).email_reports_enabled === true;
+    }
+    if (!allows) {
+      return Response.json({ ok: false, error: "tariff does not allow email reports" }, { status: 400 });
+    }
   }
 
   const first = await supabase

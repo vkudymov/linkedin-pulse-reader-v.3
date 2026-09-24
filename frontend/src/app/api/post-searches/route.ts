@@ -4,16 +4,21 @@ import { attachSearchTariff, loadSearchTariffs } from "@/lib/searchTariffs";
 const SEARCH_MARKER = "<<<POST_TEXT>>>";
 const REQUIRED_COMMENT_MARKERS = ["<<<POST_TEXT>>>", "<<<CONTENT_TYPE>>>", "<<<MAIN_TOPICS>>>", "<<<TARGET_LANGUAGE>>>"];
 const SELECT_WITH_TARIFF =
-  "id,user_id,title,search_prompt,comment_prompt,account_label,status,last_run_at,created_at,updated_at,search_tariff_id";
+  "id,user_id,title,search_prompt,comment_prompt,account_label,status,last_run_at,created_at,updated_at,search_tariff_id,email_report_enabled,email_report_format";
 const SELECT_WITHOUT_TARIFF =
-  "id,user_id,title,search_prompt,comment_prompt,account_label,status,last_run_at,created_at,updated_at";
+  "id,user_id,title,search_prompt,comment_prompt,account_label,status,last_run_at,created_at,updated_at,email_report_enabled,email_report_format";
 
 function isMissingTariffColumn(error: unknown): boolean {
   if (!error || typeof error !== "object") return false;
   const e = error as { code?: unknown; message?: unknown };
   const code = typeof e.code === "string" ? e.code : "";
   const msg = typeof e.message === "string" ? e.message : "";
-  return code === "42703" || msg.includes("search_tariff_id");
+  return (
+    code === "42703" ||
+    msg.includes("search_tariff_id") ||
+    msg.includes("email_report_enabled") ||
+    msg.includes("email_report_format")
+  );
 }
 
 function isNonEmptyString(v: unknown): v is string {

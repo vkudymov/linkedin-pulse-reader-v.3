@@ -102,8 +102,21 @@
         "accountLabelPlaceholder": "For example: default",
         "searchPrompt": "Search prompt (relevance)",
         "commentPrompt": "Comment prompt (optional)",
+        "emailReportEnabled": "Email a report after run",
+        "emailReportFormat": "Report file format",
         "searchMarkerHint": "Search prompt must contain marker {marker}.",
         "commentMarkerHint": "If provided, the comment template must include required markers."
+      },
+      "emailReport": {
+        "disabledByTariff": "Email reports are not available for this tariff.",
+        "formats": {
+          "none": "Do not send",
+          "xlsx": "Excel (.xlsx)",
+          "docx": "Word (.docx)",
+          "txt": "TXT (.txt)",
+          "json": "JSON (.json)",
+          "xml": "XML (.xml)"
+        }
       },
       "edit": {
         "toggle": "Edit",
@@ -317,7 +330,20 @@
         "location": "Location",
         "locationPlaceholder": "Europe / Remote / Berlin",
         "filterPrompt": "AI filter prompt",
+        "emailReportEnabled": "Email a report after run",
+        "emailReportFormat": "Report file format",
         "markerHint": "Must include marker: {marker}"
+      },
+      "emailReport": {
+        "disabledByTariff": "Email reports are not available for this tariff.",
+        "formats": {
+          "none": "Do not send",
+          "xlsx": "Excel (.xlsx)",
+          "docx": "Word (.docx)",
+          "txt": "TXT (.txt)",
+          "json": "JSON (.json)",
+          "xml": "XML (.xml)"
+        }
       },
       "linkedinFilters": {
         "title": "LinkedIn filters",
@@ -438,6 +464,7 @@
         "scan": "Max scan",
         "found": "Need to find",
         "min": "Min relevance (%)",
+        "emailReports": "Allow email reports",
         "order": "Order"
       },
       "preview": "Scan up to {scan} · Find {found} · Threshold {min}%"
@@ -468,6 +495,19 @@
     "tariffSearch": {
       "label": "Tariff for this search",
       "default": "Default (first tariff)"
+    },
+    "emailReport": {
+      "enabledLabel": "Email report after run",
+      "formatLabel": "Report file format",
+      "disabledByTariff": "Email reports are not available for this tariff.",
+      "formats": {
+        "none": "Do not send",
+        "xlsx": "Excel (.xlsx)",
+        "docx": "Word (.docx)",
+        "txt": "TXT (.txt)",
+        "json": "JSON (.json)",
+        "xml": "XML (.xml)"
+      }
     },
     "postsSearches": {
       "title": "Post searches tariffs",

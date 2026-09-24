@@ -14,6 +14,7 @@ class JobSearchResult:
     analyzed: int
     matched: int
     errors: int
+    report_items: tuple[dict[str, object], ...] = ()
 
 
 class JobSearchService:
@@ -46,6 +47,8 @@ class JobSearchService:
         matched = 0
         errors = 0
         analyses: list[StoredJobAnalysis] = []
+        report_items: list[dict[str, object]] = []
+        analyzed_keys: set[str] = set()
         now = datetime.now(UTC)
 
         for job in unique_jobs:
@@ -58,9 +61,28 @@ class JobSearchService:
             try:
                 r = self._analyzer.analyze(spec=spec, job=job)
                 analyzed += 1
+                analyzed_keys.add(job.source_key)
                 effective_match = bool(r.match and int(r.score) >= int(spec.min_score or 0))
                 if effective_match:
                     matched += 1
+                report_items.append(
+                    {
+                        "analyzed": True,
+                        "match": bool(effective_match),
+                        "score": int(r.score),
+                        "reason": r.reason,
+                        "matched_requirements": list(r.matched_requirements),
+                        "missing_requirements": list(r.missing_requirements),
+                        "red_flags": list(r.red_flags),
+                        "job": {
+                            "job_url": job.job_url,
+                            "title": job.title,
+                            "company": job.company,
+                            "location": job.location,
+                            "description": job.description,
+                        },
+                    }
+                )
                 analyses.append(
                     StoredJobAnalysis(
                         job_search_id=spec.job_search_id,
@@ -96,6 +118,29 @@ class JobSearchService:
                     ),
                 )
 
+        # Add not-analyzed jobs (early-stop) to the report payload.
+        for job in unique_jobs:
+            if not job.source_key or job.source_key in analyzed_keys:
+                continue
+            report_items.append(
+                {
+                    "analyzed": False,
+                    "match": None,
+                    "score": None,
+                    "reason": "not analyzed",
+                    "matched_requirements": [],
+                    "missing_requirements": [],
+                    "red_flags": [],
+                    "job": {
+                        "job_url": job.job_url,
+                        "title": job.title,
+                        "company": job.company,
+                        "location": job.location,
+                        "description": job.description,
+                    },
+                }
+            )
+
         self._repository.upsert_job_analyses(spec=spec, analyses=analyses)
 
         return JobSearchResult(
@@ -104,5 +149,6 @@ class JobSearchService:
             analyzed=analyzed,
             matched=matched,
             errors=errors,
+            report_items=tuple(report_items),
         )
 

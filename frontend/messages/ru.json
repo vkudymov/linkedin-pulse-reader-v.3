@@ -102,8 +102,21 @@
         "accountLabelPlaceholder": "Например: default",
         "searchPrompt": "Промпт поиска (релевантность)",
         "commentPrompt": "Промпт комментария (опционально)",
+        "emailReportEnabled": "Отправлять отчёт на почту после запуска",
+        "emailReportFormat": "Формат файла отчёта",
         "searchMarkerHint": "Промпт поиска должен содержать маркер {marker}.",
         "commentMarkerHint": "Если заполняете, шаблон комментария должен содержать обязательные маркеры."
+      },
+      "emailReport": {
+        "disabledByTariff": "Отчёты на почту недоступны для этого тарифа.",
+        "formats": {
+          "none": "Не отправлять",
+          "xlsx": "Excel (.xlsx)",
+          "docx": "Word (.docx)",
+          "txt": "TXT (.txt)",
+          "json": "JSON (.json)",
+          "xml": "XML (.xml)"
+        }
       },
       "edit": {
         "toggle": "Редактировать",
@@ -317,7 +330,20 @@
         "location": "Локация",
         "locationPlaceholder": "Европа / Remote / Berlin",
         "filterPrompt": "AI промпт-фильтр",
+        "emailReportEnabled": "Отправлять отчёт на почту после запуска",
+        "emailReportFormat": "Формат файла отчёта",
         "markerHint": "Должен содержать маркер: {marker}"
+      },
+      "emailReport": {
+        "disabledByTariff": "Отчёты на почту недоступны для этого тарифа.",
+        "formats": {
+          "none": "Не отправлять",
+          "xlsx": "Excel (.xlsx)",
+          "docx": "Word (.docx)",
+          "txt": "TXT (.txt)",
+          "json": "JSON (.json)",
+          "xml": "XML (.xml)"
+        }
       },
       "linkedinFilters": {
         "title": "Фильтры LinkedIn",
@@ -438,6 +464,7 @@
         "scan": "Макс. просматривать",
         "found": "Нужно найти",
         "min": "Мин. релевантность (%)",
+        "emailReports": "Разрешить отчёты на почту",
         "order": "Порядок"
       },
       "preview": "Смотреть до {scan} · Найти {found} · Порог {min}%"
@@ -468,6 +495,19 @@
     "tariffSearch": {
       "label": "Тариф для этого Search",
       "default": "По умолчанию (первый тариф)"
+    },
+    "emailReport": {
+      "enabledLabel": "Отправлять отчёт на почту после запуска",
+      "formatLabel": "Формат файла отчёта",
+      "disabledByTariff": "Отчёты на почту недоступны для этого тарифа.",
+      "formats": {
+        "none": "Не отправлять",
+        "xlsx": "Excel (.xlsx)",
+        "docx": "Word (.docx)",
+        "txt": "TXT (.txt)",
+        "json": "JSON (.json)",
+        "xml": "XML (.xml)"
+      }
     },
     "postsSearches": {
       "title": "Тарифы Post Searches",

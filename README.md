@@ -20,7 +20,7 @@ npm run dev
 
 ```bash
 cd worker
-python3 -m pip install -e LinkedInClient -e PostAnalyzer -e Storage
+python3 -m pip install -e LinkedInClient -e PostAnalyzer -e Storage -e api -e SearchReportMailer
 python run_post_search.py --limit 10
 ```
 

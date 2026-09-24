@@ -71,6 +71,8 @@ class JobSearchRepository:
         status: str | None = None,
         last_run_at: str | None = None,
         linkedin_filters: dict[str, Any] | None = None,
+        email_report_enabled: bool | None = None,
+        email_report_format: str | None = None,
     ) -> JobSearchRow:
         now = datetime.now(UTC).isoformat()
         payload: dict[str, Any] = {"updated_at": now}
@@ -88,6 +90,10 @@ class JobSearchRepository:
             payload["last_run_at"] = last_run_at
         if linkedin_filters is not None:
             payload["linkedin_filters"] = linkedin_filters
+        if email_report_enabled is not None:
+            payload["email_report_enabled"] = bool(email_report_enabled)
+        if email_report_format is not None:
+            payload["email_report_format"] = email_report_format
 
         resp = (
             self._client.table("job_searches")

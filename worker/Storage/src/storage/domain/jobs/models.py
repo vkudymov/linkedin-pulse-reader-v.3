@@ -11,6 +11,8 @@ class JobSearchRow(TypedDict):
     location: str | None
     filter_prompt: str
     search_tariff_id: NotRequired[str | None]
+    email_report_enabled: NotRequired[bool]
+    email_report_format: NotRequired[str]
     status: str  # "active" | "paused"
     last_run_at: str | None
     linkedin_filters: NotRequired[dict[str, Any] | None]
@@ -25,6 +27,8 @@ class JobSearchCreate(TypedDict):
     filter_prompt: str
     location: NotRequired[str | None]
     search_tariff_id: NotRequired[str | None]
+    email_report_enabled: NotRequired[bool]
+    email_report_format: NotRequired[str]
     status: NotRequired[str]
     last_run_at: NotRequired[str | None]
     linkedin_filters: NotRequired[dict[str, Any] | None]

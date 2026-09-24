@@ -1,0 +1,22 @@
+[build-system]
+requires = ["hatchling>=1.21.0"]
+build-backend = "hatchling.build"
+
+[project]
+name = "search-report-mailer"
+version = "0.1.0"
+description = "Portable module: build search report files and send them via an injected transport."
+requires-python = ">=3.11"
+license = { text = "MIT" }
+authors = [{ name = "SearchReportMailer" }]
+dependencies = [
+  "openpyxl>=3.1.0",
+  "python-docx>=1.1.0",
+]
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/search_report_mailer"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+

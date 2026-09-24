@@ -16,7 +16,7 @@
 
 ```bash
 cd worker
-python3 -m pip install -e LinkedInClient -e PostAnalyzer -e Storage -e api
+python3 -m pip install -e LinkedInClient -e PostAnalyzer -e Storage -e api -e SearchReportMailer
 ```
 
 ## Переменные окружения
@@ -28,6 +28,7 @@ SUPABASE_URL="https://<project-ref>.supabase.co"
 SUPABASE_SERVICE_ROLE_KEY="<service-role>"
 STORAGE_USER_ID="<auth.users.id>"
 STORAGE_ACCOUNT_LABEL="default"
+SEARCH_REPORT_FUNCTION_SECRET="<shared-secret-for-edge-function>"
 ```
 
 Важно: `STORAGE_USER_ID` должен совпадать с `auth.users.id`, который вы создали через фронтенд (`/register`). Тогда записи будут принадлежать этому пользователю и будут видны ему в UI.
@@ -49,6 +50,15 @@ python run_post_search.py --limit 10
 cd worker
 uvicorn pulse_api.main:app --app-dir api/src --reload --host 127.0.0.1 --port 8000
 ```
+
+### Email отчёты (после run)
+
+Отправка отчётов реализована через Supabase Edge Function `send-search-report`.
+
+- В Supabase задайте секреты:
+  - `SEARCH_REPORT_FUNCTION_SECRET` (должен совпадать с `worker/.env`)
+  - `RESEND_API_KEY`
+  - `REPORTS_FROM_EMAIL` (например `reports@your-domain.com`)
 
 ### HTTP API для LinkedIn login (worker only)
 

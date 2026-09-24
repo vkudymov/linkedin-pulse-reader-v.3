@@ -50,6 +50,7 @@ type AdminSearchTariffDto = {
   max_scan_count: number;
   target_found_count: number;
   min_relevance_percent: number;
+  email_reports_enabled?: boolean;
   sort_order: number;
 };
 
@@ -69,6 +70,8 @@ type AdminJobSearchDto = {
   location: string | null;
   filter_prompt: string;
   search_tariff_id?: string | null;
+  email_report_enabled?: boolean;
+  email_report_format?: string | null;
   status: string | null;
   last_run_at: string | null;
   created_at: string | null;
@@ -80,6 +83,8 @@ type AdminPostSearchDto = {
   user_id: string;
   title: string;
   search_tariff_id?: string | null;
+  email_report_enabled?: boolean;
+  email_report_format?: string | null;
   status: string | null;
   last_run_at: string | null;
   created_at: string | null;
@@ -597,6 +602,36 @@ export function AdminUsersTable({
     }
   }
 
+  async function onSaveJobSearchEmailSettings(
+    userId: string,
+    jobSearchId: string,
+    enabled: boolean,
+    format: string,
+  ) {
+    const k = jobKey(userId, jobSearchId);
+    setSaveJobSearchPendingByKey((m) => ({ ...m, [k]: true }));
+    setSaveJobSearchErrorByKey((m) => ({ ...m, [k]: null }));
+    setSaveJobSearchSuccessByKey((m) => ({ ...m, [k]: null }));
+    try {
+      const resp = await fetch(
+        `/api/admin/users/${encodeURIComponent(userId)}/job-searches/${encodeURIComponent(jobSearchId)}`,
+        {
+          method: "PATCH",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ email_report_enabled: enabled, email_report_format: format }),
+        },
+      );
+      const text = await resp.text().catch(() => "");
+      if (!resp.ok) throw new Error(text || t("jobs.errors.save"));
+      setSaveJobSearchSuccessByKey((m) => ({ ...m, [k]: t("common.saved") }));
+      await refreshJobSearches(userId);
+    } catch (e: unknown) {
+      setSaveJobSearchErrorByKey((m) => ({ ...m, [k]: e instanceof Error ? e.message : t("jobs.errors.save") }));
+    } finally {
+      setSaveJobSearchPendingByKey((m) => ({ ...m, [k]: false }));
+    }
+  }
+
   async function onSavePostSearchTariff(userId: string, postSearchId: string, tariffId: string | null) {
     const k = postKey(userId, postSearchId);
     setSavePostSearchPendingByKey((m) => ({ ...m, [k]: true }));
@@ -609,6 +644,39 @@ export function AdminUsersTable({
           method: "PATCH",
           headers: { "content-type": "application/json" },
           body: JSON.stringify({ search_tariff_id: tariffId }),
+        },
+      );
+      const text = await resp.text().catch(() => "");
+      if (!resp.ok) throw new Error(text || t("postsSearches.errors.save"));
+      setSavePostSearchSuccessByKey((m) => ({ ...m, [k]: t("common.saved") }));
+      await refreshPostSearches(userId);
+    } catch (e: unknown) {
+      setSavePostSearchErrorByKey((m) => ({
+        ...m,
+        [k]: e instanceof Error ? e.message : t("postsSearches.errors.save"),
+      }));
+    } finally {
+      setSavePostSearchPendingByKey((m) => ({ ...m, [k]: false }));
+    }
+  }
+
+  async function onSavePostSearchEmailSettings(
+    userId: string,
+    postSearchId: string,
+    enabled: boolean,
+    format: string,
+  ) {
+    const k = postKey(userId, postSearchId);
+    setSavePostSearchPendingByKey((m) => ({ ...m, [k]: true }));
+    setSavePostSearchErrorByKey((m) => ({ ...m, [k]: null }));
+    setSavePostSearchSuccessByKey((m) => ({ ...m, [k]: null }));
+    try {
+      const resp = await fetch(
+        `/api/admin/users/${encodeURIComponent(userId)}/post-searches/${encodeURIComponent(postSearchId)}`,
+        {
+          method: "PATCH",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ email_report_enabled: enabled, email_report_format: format }),
         },
       );
       const text = await resp.text().catch(() => "");
@@ -1258,6 +1326,10 @@ export function AdminUsersTable({
                                 const k = postKey(u.id, ps.id);
                                 const open = Boolean(postSearchOpenByKey[k]);
                                 const saving = Boolean(savePostSearchPendingByKey[k]);
+                                const psTariff = pickSearchTariff(ps.search_tariff_id, tariffs || []);
+                                const psTariffAllowsEmail = psTariff?.email_reports_enabled === true;
+                                const psEmailEnabled = Boolean(ps.email_report_enabled);
+                                const psEmailFormat = (ps.email_report_format || "none").toString();
                                 return (
                                   <div key={ps.id} className="rounded-2xl border border-border/80 bg-background/40 p-4">
                                     <div className="flex flex-wrap items-start justify-between gap-3">
@@ -1267,7 +1339,7 @@ export function AdminUsersTable({
                                           {ps.status ? ps.status : "—"}
                                         </div>
                                         <SearchTariffSummary
-                                          tariff={pickSearchTariff(ps.search_tariff_id, tariffs || [])}
+                                          tariff={psTariff}
                                           className="mt-2"
                                         />
                                       </div>
@@ -1304,6 +1376,52 @@ export function AdminUsersTable({
                                               </option>
                                             ))}
                                           </select>
+                                        </div>
+
+                                        <div className="grid gap-2">
+                                          <Label htmlFor={`post_email_format_${ps.id}`}>{t("emailReport.formatLabel")}</Label>
+                                          <select
+                                            id={`post_email_format_${ps.id}`}
+                                            className={fieldClassName}
+                                            value={psTariffAllowsEmail ? psEmailFormat : "none"}
+                                            disabled={saving || !psTariffAllowsEmail}
+                                            onChange={(e) =>
+                                              void onSavePostSearchEmailSettings(
+                                                u.id,
+                                                ps.id,
+                                                psEmailEnabled,
+                                                e.target.value || "none",
+                                              )
+                                            }
+                                          >
+                                            <option value="none">{t("emailReport.formats.none")}</option>
+                                            <option value="xlsx">{t("emailReport.formats.xlsx")}</option>
+                                            <option value="docx">{t("emailReport.formats.docx")}</option>
+                                            <option value="txt">{t("emailReport.formats.txt")}</option>
+                                            <option value="json">{t("emailReport.formats.json")}</option>
+                                            <option value="xml">{t("emailReport.formats.xml")}</option>
+                                          </select>
+                                          {!psTariffAllowsEmail ? (
+                                            <div className="text-xs text-muted-foreground">{t("emailReport.disabledByTariff")}</div>
+                                          ) : null}
+                                        </div>
+
+                                        <div className="flex items-center gap-3">
+                                          <input
+                                            id={`post_email_enabled_${ps.id}`}
+                                            type="checkbox"
+                                            checked={psTariffAllowsEmail ? psEmailEnabled : false}
+                                            disabled={saving || !psTariffAllowsEmail}
+                                            onChange={(e) =>
+                                              void onSavePostSearchEmailSettings(
+                                                u.id,
+                                                ps.id,
+                                                e.target.checked,
+                                                psEmailFormat,
+                                              )
+                                            }
+                                          />
+                                          <Label htmlFor={`post_email_enabled_${ps.id}`}>{t("emailReport.enabledLabel")}</Label>
                                         </div>
 
                                         {savePostSearchErrorByKey[k] ? (
@@ -1520,6 +1638,10 @@ export function AdminUsersTable({
                                   const open = Boolean(jobSearchOpenByKey[k]);
                                   const draft = jobSearchDraftByKey[k] ?? s.filter_prompt ?? "";
                                   const saving = Boolean(saveJobSearchPendingByKey[k]);
+                                  const sTariff = pickSearchTariff(s.search_tariff_id, tariffs || []);
+                                  const sTariffAllowsEmail = sTariff?.email_reports_enabled === true;
+                                  const sEmailEnabled = Boolean(s.email_report_enabled);
+                                  const sEmailFormat = (s.email_report_format || "none").toString();
                                   const canSave = draft.trim().length > 0 && draft.includes(JOB_MARKER);
                                   return (
                                     <div key={s.id} className="rounded-2xl border border-border/80 bg-background/40 p-4">
@@ -1532,7 +1654,7 @@ export function AdminUsersTable({
                                             {s.status ? ` · ${s.status}` : ""}
                                           </div>
                                           <SearchTariffSummary
-                                            tariff={pickSearchTariff(s.search_tariff_id, tariffs || [])}
+                                            tariff={sTariff}
                                             kind="job"
                                             className="mt-2"
                                           />
@@ -1570,6 +1692,48 @@ export function AdminUsersTable({
                                               ))}
                                             </select>
                                           </div>
+
+                                          <div className="grid gap-2">
+                                            <Label htmlFor={`job_email_format_${k}`}>{t("emailReport.formatLabel")}</Label>
+                                            <select
+                                              id={`job_email_format_${k}`}
+                                              className={fieldClassName}
+                                              value={sTariffAllowsEmail ? sEmailFormat : "none"}
+                                              disabled={saving || !sTariffAllowsEmail}
+                                              onChange={(e) =>
+                                                void onSaveJobSearchEmailSettings(
+                                                  u.id,
+                                                  s.id,
+                                                  sEmailEnabled,
+                                                  e.target.value || "none",
+                                                )
+                                              }
+                                            >
+                                              <option value="none">{t("emailReport.formats.none")}</option>
+                                              <option value="xlsx">{t("emailReport.formats.xlsx")}</option>
+                                              <option value="docx">{t("emailReport.formats.docx")}</option>
+                                              <option value="txt">{t("emailReport.formats.txt")}</option>
+                                              <option value="json">{t("emailReport.formats.json")}</option>
+                                              <option value="xml">{t("emailReport.formats.xml")}</option>
+                                            </select>
+                                            {!sTariffAllowsEmail ? (
+                                              <div className="text-xs text-muted-foreground">{t("emailReport.disabledByTariff")}</div>
+                                            ) : null}
+                                          </div>
+
+                                          <div className="flex items-center gap-3">
+                                            <input
+                                              id={`job_email_enabled_${k}`}
+                                              type="checkbox"
+                                              checked={sTariffAllowsEmail ? sEmailEnabled : false}
+                                              disabled={saving || !sTariffAllowsEmail}
+                                              onChange={(e) =>
+                                                void onSaveJobSearchEmailSettings(u.id, s.id, e.target.checked, sEmailFormat)
+                                              }
+                                            />
+                                            <Label htmlFor={`job_email_enabled_${k}`}>{t("emailReport.enabledLabel")}</Label>
+                                          </div>
+
                                           <div className="grid gap-2">
                                             <Label htmlFor={`job_prompt_${k}`}>{t("jobs.fields.filterPrompt")}</Label>
                                             <Textarea

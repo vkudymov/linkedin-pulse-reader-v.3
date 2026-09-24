@@ -6,6 +6,7 @@ export type SearchTariffInfo = {
   max_scan_count: number;
   target_found_count: number;
   min_relevance_percent: number;
+  email_reports_enabled?: boolean;
 };
 
 export function isSearchTariffInfo(v: unknown): v is SearchTariffInfo {
@@ -16,7 +17,8 @@ export function isSearchTariffInfo(v: unknown): v is SearchTariffInfo {
     typeof r.title === "string" &&
     typeof r.max_scan_count === "number" &&
     typeof r.target_found_count === "number" &&
-    typeof r.min_relevance_percent === "number"
+    typeof r.min_relevance_percent === "number" &&
+    (r.email_reports_enabled === undefined || typeof r.email_reports_enabled === "boolean")
   );
 }
 
@@ -34,7 +36,7 @@ export function pickSearchTariff(
 export async function loadSearchTariffs(supabase: SupabaseClient): Promise<SearchTariffInfo[]> {
   const resp = await supabase
     .from("search_tariffs")
-    .select("id,title,max_scan_count,target_found_count,min_relevance_percent")
+    .select("id,title,max_scan_count,target_found_count,min_relevance_percent,email_reports_enabled")
     .order("sort_order", { ascending: true })
     .order("created_at", { ascending: true });
   return Array.isArray(resp.data) ? resp.data.filter(isSearchTariffInfo) : [];

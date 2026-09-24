@@ -524,7 +524,7 @@ def analyze_and_store_posts(
     comment_prompt: str | None,
     min_score: int = 0,
     target_found: int = 10,
-) -> tuple[int, int]:
+) -> tuple[int, int, list[dict[str, Any]], list[dict[str, Any]]]:
     from storage import compute_source_key  # type: ignore[import-not-found]
 
     posts_repo = storage.feed_posts
@@ -554,10 +554,13 @@ def analyze_and_store_posts(
 
     upserts: list[dict[str, Any]] = []
     matched_count = 0
+    report_analyzed: list[dict[str, Any]] = []
+    analyzed_keys: set[str] = set()
     for ap in analyzed_posts:
         if not isinstance(ap, dict):
             continue
         source_key = compute_source_key(ap)
+        analyzed_keys.add(source_key)
         feed_post_id = ids_by_key.get(source_key)
         if not feed_post_id:
             continue
@@ -576,6 +579,36 @@ def analyze_and_store_posts(
         effective_match = bool(match and score >= int(min_score or 0))
         if effective_match:
             matched_count += 1
+
+        author = ap.get("author") if isinstance(ap.get("author"), dict) else {}
+        author_name = author.get("name") if isinstance(author.get("name"), str) else None
+        published = ap.get("published_at_text") if isinstance(ap.get("published_at_text"), str) else None
+        title = author_name or "Post"
+        if published:
+            title = f"{title} ({published})"
+        report_analyzed.append(
+            {
+                "analyzed": True,
+                "match": bool(effective_match),
+                "score": score,
+                "reason": reason,
+                "matched_requirements": rel.get("matched_requirements") if isinstance(rel, dict) else [],
+                "missing_requirements": rel.get("missing_requirements") if isinstance(rel, dict) else [],
+                "red_flags": rel.get("red_flags") if isinstance(rel, dict) else [],
+                "title": title,
+                "url": ap.get("post_url") if isinstance(ap.get("post_url"), str) else None,
+                "text": ap.get("text") if isinstance(ap.get("text"), str) else None,
+                "comment_text": ap.get("comment") if isinstance(ap.get("comment"), str) else None,
+                "extra": {
+                    "urn": ap.get("urn"),
+                    "author": author if author else None,
+                    "published_at_text": published,
+                    "reactions_count": ap.get("reactions_count"),
+                    "comments_count": ap.get("comments_count"),
+                    "media_urls": ap.get("media_urls"),
+                },
+            }
+        )
 
         upserts.append(
             {
@@ -601,7 +634,128 @@ def analyze_and_store_posts(
 
     written = storage.post_analyses.upsert_analyses(analyses=upserts)
     log.info("Wrote %s post_analyses row(s) (post_search=%s)", written, post_search_id)
-    return written, matched_count
+    # Add not-analyzed posts (early-stop) to the report payload.
+    report_not_analyzed: list[dict[str, Any]] = []
+    for p in posts:
+        if not isinstance(p, dict):
+            continue
+        key = compute_source_key(p)
+        if key in analyzed_keys:
+            continue
+        author = p.get("author") if isinstance(p.get("author"), dict) else {}
+        author_name = author.get("name") if isinstance(author.get("name"), str) else None
+        published = p.get("published_at_text") if isinstance(p.get("published_at_text"), str) else None
+        title = author_name or "Post"
+        if published:
+            title = f"{title} ({published})"
+        report_not_analyzed.append(
+            {
+                "analyzed": False,
+                "match": None,
+                "score": None,
+                "reason": "not analyzed",
+                "matched_requirements": [],
+                "missing_requirements": [],
+                "red_flags": [],
+                "title": title,
+                "url": p.get("post_url") if isinstance(p.get("post_url"), str) else None,
+                "text": p.get("content") if isinstance(p.get("content"), str) else None,
+                "comment_text": None,
+                "extra": {
+                    "urn": p.get("urn"),
+                    "author": author if author else None,
+                    "published_at_text": published,
+                    "reactions_count": p.get("reactions_count"),
+                    "comments_count": p.get("comments_count"),
+                    "media_urls": p.get("media_urls"),
+                },
+            }
+        )
+    return written, matched_count, report_analyzed, report_not_analyzed
+
+
+def _maybe_send_email_report(
+    *,
+    storage: Any,
+    user_id: str,
+    post_search_row: dict[str, Any],
+    run_at: str,
+    fetched_count: int,
+    analyzed_count: int,
+    matched_count: int,
+    analyzed_items: list[dict[str, Any]],
+    not_analyzed_items: list[dict[str, Any]],
+    min_score: int,
+    target_found: int,
+) -> None:
+    """
+    Best-effort: send a report email (never fails the run).
+    """
+    try:
+        from search_report_mailer.types import ReportItem, ReportMeta
+        from search_report_integration.dispatch import dispatch_report, default_body, default_subject
+        from search_report_integration.policy import should_send_email_report
+        from search_report_integration.user_email import get_user_email
+    except Exception:
+        return
+
+    try:
+        tariff_row = storage.search_tariffs.resolve(tariff_id=post_search_row.get("search_tariff_id"))
+        should_send, fmt = should_send_email_report(tariff_row=tariff_row, search_row=post_search_row)
+        if not should_send:
+            return
+
+        email = get_user_email(client=storage.client, user_id=user_id)
+        if not email:
+            log.warning("Email report is enabled, but user email is missing (user_id=%s)", user_id)
+            return
+
+        items: list[ReportItem] = []
+        for d in (analyzed_items + not_analyzed_items):
+            items.append(
+                ReportItem(
+                    kind="post",
+                    analyzed=bool(d.get("analyzed")),
+                    match=d.get("match") if isinstance(d.get("match"), bool) else None,
+                    score=int(d.get("score")) if isinstance(d.get("score"), int) else None,
+                    reason=d.get("reason") if isinstance(d.get("reason"), str) else None,
+                    matched_requirements=tuple(x for x in (d.get("matched_requirements") or []) if isinstance(x, str)),
+                    missing_requirements=tuple(x for x in (d.get("missing_requirements") or []) if isinstance(x, str)),
+                    red_flags=tuple(x for x in (d.get("red_flags") or []) if isinstance(x, str)),
+                    title=d.get("title") if isinstance(d.get("title"), str) else None,
+                    url=d.get("url") if isinstance(d.get("url"), str) else None,
+                    text=d.get("text") if isinstance(d.get("text"), str) else None,
+                    comment_text=d.get("comment_text") if isinstance(d.get("comment_text"), str) else None,
+                    extra=d.get("extra") if isinstance(d.get("extra"), dict) else None,
+                )
+            )
+
+        search_title = str(post_search_row.get("title") or "Post search")
+        meta = ReportMeta(
+            kind="post",
+            search_title=search_title,
+            run_at_iso=run_at,
+            min_score=int(min_score or 0),
+            target_found=int(target_found or 0),
+            fetched_count=int(fetched_count),
+            analyzed_count=int(analyzed_count),
+            matched_count=int(matched_count),
+        )
+        subject = default_subject(kind="posts", search_title=search_title)
+        body = default_body(kind="posts", search_title=search_title) + f"\n\nFetched: {fetched_count}\nAnalyzed: {analyzed_count}\nMatched: {matched_count}\n"
+
+        r = dispatch_report(
+            to_email=email,
+            subject=subject,
+            body_text=body,
+            file_format=fmt,
+            items=items,
+            meta=meta,
+        )
+        if not r.ok:
+            log.warning("Failed to send email report: %s", r.error or "<unknown>")
+    except Exception as e:
+        log.warning("Email report failed (ignored): %s", e)
 
 
 def main() -> None:
@@ -714,7 +868,7 @@ def main() -> None:
             cfg=cfg,
             limit=args.limit,
         )
-        analyzed, matched = analyze_and_store_posts(
+        analyzed, matched, report_analyzed, report_not_analyzed = analyze_and_store_posts(
             storage=storage,
             linkedin_account_id=account_id,
             post_search_id=post_search_id,
@@ -732,6 +886,19 @@ def main() -> None:
             fetched_count=len(payload),
             analyzed_count=analyzed,
             matched_count=matched,
+        )
+        _maybe_send_email_report(
+            storage=storage,
+            user_id=user_id,
+            post_search_row=ps_row,
+            run_at=run_at,
+            fetched_count=len(payload),
+            analyzed_count=analyzed,
+            matched_count=matched,
+            analyzed_items=report_analyzed,
+            not_analyzed_items=report_not_analyzed,
+            min_score=args.min_score,
+            target_found=args.target_found,
         )
     except LoginRequiredError:
         log.info("Stored session is expired. Re-login and retry once.")
@@ -750,7 +917,7 @@ def main() -> None:
             cfg=cfg,
             limit=args.limit,
         )
-        analyzed, matched = analyze_and_store_posts(
+        analyzed, matched, report_analyzed, report_not_analyzed = analyze_and_store_posts(
             storage=storage,
             linkedin_account_id=account_id,
             post_search_id=post_search_id,
@@ -768,6 +935,19 @@ def main() -> None:
             fetched_count=len(payload),
             analyzed_count=analyzed,
             matched_count=matched,
+        )
+        _maybe_send_email_report(
+            storage=storage,
+            user_id=user_id,
+            post_search_row=ps_row,
+            run_at=run_at,
+            fetched_count=len(payload),
+            analyzed_count=analyzed,
+            matched_count=matched,
+            analyzed_items=report_analyzed,
+            not_analyzed_items=report_not_analyzed,
+            min_score=args.min_score,
+            target_found=args.target_found,
         )
     except FeedLoadError as e:
         log.error("%s", e)

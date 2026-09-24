@@ -14,6 +14,7 @@ type TariffRow = {
   max_scan_count: number;
   target_found_count: number;
   min_relevance_percent: number;
+  email_reports_enabled: boolean;
   sort_order: number;
   created_at?: string | null;
   updated_at?: string | null;
@@ -40,6 +41,7 @@ export function AdminSearchTariffsPanel() {
   const [draftFound, setDraftFound] = useState("10");
   const [draftMin, setDraftMin] = useState("70");
   const [draftOrder, setDraftOrder] = useState("0");
+  const [draftEmailReportsEnabled, setDraftEmailReportsEnabled] = useState(false);
 
   const canDelete = useMemo(() => rows.length > 1, [rows.length]);
 
@@ -50,7 +52,12 @@ export function AdminSearchTariffsPanel() {
       const resp = await fetch("/api/admin/search-tariffs", { method: "GET", cache: "no-store" });
       const json = (await resp.json().catch(() => null)) as unknown;
       if (!resp.ok || !Array.isArray(json)) throw new Error(t("errors.load"));
-      setRows(json as TariffRow[]);
+      setRows(
+        (json as Record<string, unknown>[]).map((r) => ({
+          ...(r as TariffRow),
+          email_reports_enabled: Boolean((r as { email_reports_enabled?: unknown }).email_reports_enabled),
+        })),
+      );
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : t("errors.load"));
       setRows([]);
@@ -78,6 +85,7 @@ export function AdminSearchTariffsPanel() {
           max_scan_count: row.max_scan_count,
           target_found_count: row.target_found_count,
           min_relevance_percent: row.min_relevance_percent,
+          email_reports_enabled: row.email_reports_enabled,
           sort_order: row.sort_order,
         }),
       });
@@ -113,6 +121,7 @@ export function AdminSearchTariffsPanel() {
         max_scan_count: asInt(draftScan, 25),
         target_found_count: asInt(draftFound, 10),
         min_relevance_percent: asInt(draftMin, 70),
+        email_reports_enabled: draftEmailReportsEnabled,
         sort_order: asInt(draftOrder, 0),
       };
       const resp = await fetch("/api/admin/search-tariffs", {
@@ -124,6 +133,7 @@ export function AdminSearchTariffsPanel() {
       if (!resp.ok || !json || typeof json !== "object") throw new Error(t("errors.create"));
       setCreateOpen(false);
       setDraftTitle("");
+      setDraftEmailReportsEnabled(false);
       await load();
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : t("errors.create"));
@@ -161,6 +171,15 @@ export function AdminSearchTariffsPanel() {
               <div className="space-y-2 sm:col-span-2">
                 <Label>{t("tariffs.fields.title")}</Label>
                 <Input className={fieldClassName} value={draftTitle} onChange={(e) => setDraftTitle(e.target.value)} />
+              </div>
+              <div className="flex items-center gap-3 sm:col-span-2">
+                <input
+                  id="draft_email_reports_enabled"
+                  type="checkbox"
+                  checked={draftEmailReportsEnabled}
+                  onChange={(e) => setDraftEmailReportsEnabled(e.target.checked)}
+                />
+                <Label htmlFor="draft_email_reports_enabled">{t("tariffs.fields.emailReports")}</Label>
               </div>
               <div className="space-y-2">
                 <Label>{t("tariffs.fields.scan")}</Label>
@@ -202,6 +221,19 @@ export function AdminSearchTariffsPanel() {
                   value={r.title}
                   onChange={(e) => setRows((prev) => prev.map((x) => (x.id === r.id ? { ...x, title: e.target.value } : x)))}
                 />
+              </div>
+              <div className="flex items-center gap-3">
+                <input
+                  id={`email_reports_enabled_${r.id}`}
+                  type="checkbox"
+                  checked={Boolean(r.email_reports_enabled)}
+                  onChange={(e) =>
+                    setRows((prev) =>
+                      prev.map((x) => (x.id === r.id ? { ...x, email_reports_enabled: e.target.checked } : x)),
+                    )
+                  }
+                />
+                <Label htmlFor={`email_reports_enabled_${r.id}`}>{t("tariffs.fields.emailReports")}</Label>
               </div>
               <div className="grid gap-4 sm:grid-cols-2">
                 <div className="space-y-2">

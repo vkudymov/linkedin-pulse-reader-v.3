@@ -5,9 +5,9 @@ import { attachSearchTariff, loadSearchTariffs } from "@/lib/searchTariffs";
 
 const MARKER = "<<<JOB_TEXT>>>";
 const SELECT_WITH_FILTERS =
-  "id,title,search_query,location,filter_prompt,status,last_run_at,linkedin_filters,created_at,updated_at,search_tariff_id";
+  "id,title,search_query,location,filter_prompt,status,last_run_at,linkedin_filters,created_at,updated_at,search_tariff_id,email_report_enabled,email_report_format";
 const SELECT_WITHOUT_FILTERS =
-  "id,title,search_query,location,filter_prompt,status,last_run_at,created_at,updated_at,search_tariff_id";
+  "id,title,search_query,location,filter_prompt,status,last_run_at,created_at,updated_at,search_tariff_id,email_report_enabled,email_report_format";
 const SELECT_LEGACY =
   "id,title,search_query,location,filter_prompt,status,last_run_at,created_at,updated_at";
 
