@@ -3,6 +3,7 @@
     "results": "Results",
     "posts": "Posts",
     "jobs": "Jobs",
+    "searches": "Search",
     "prompts": "Prompts",
     "account": "Account",
     "admin": "Admin",
@@ -173,7 +174,7 @@
       "pending": "Pending"
     },
     "empty": {
-      "noSearches": "Create a post search in Prompts first.",
+      "noSearches": "Create a post search first.",
       "noAccount": {
         "title": "No LinkedIn account yet",
         "beforeScript": "Run the post collection via",
@@ -213,6 +214,100 @@
         "sameAsCurrent": "New password should be different from the old password."
       }
     }
+  },
+  "userSearches": {
+    "title": "Search",
+    "empty": "No searches yet.",
+    "createTitle": "New search",
+    "actions": {
+      "refresh": "Refresh",
+      "save": "Save",
+      "saving": "Saving...",
+      "create": "Create",
+      "creating": "Creating...",
+      "expand": "Expand",
+      "collapse": "Collapse",
+      "delete": "Delete",
+      "editPrompt": "Edit prompt"
+    },
+    "fields": {
+      "type": "Type",
+      "title": "Title",
+      "status": "Status",
+      "searchQuery": "Query",
+      "location": "Location",
+      "account": "Account",
+      "filterPrompt": "Filter prompt",
+      "searchPrompt": "Search prompt",
+      "commentPrompt": "Comment prompt",
+      "noPrompt": "Not selected"
+    },
+    "types": { "jobs": "Jobs", "posts": "Posts" },
+    "errors": {
+      "load": "Failed to load searches.",
+      "save": "Failed to save search.",
+      "create": "Failed to create search.",
+      "delete": "Failed to delete search."
+    },
+    "deleteConfirm": "Delete this search?"
+  },
+  "emailReport": {
+    "enabledLabel": "Email report after run",
+    "formatLabel": "Report file format",
+    "formats": {
+      "none": "Do not send",
+      "xlsx": "Excel (.xlsx)",
+      "docx": "Word (.docx)",
+      "txt": "TXT (.txt)",
+      "json": "JSON (.json)",
+      "xml": "XML (.xml)"
+    }
+  },
+  "searchRunner": {
+    "runPosts": "Run post search",
+    "runJobs": "Run job search",
+    "running": "Starting...",
+    "status": "Status",
+    "errors": {
+      "startPosts": "Failed to start post search.",
+      "startJobs": "Failed to start job search.",
+      "runPosts": "Post search failed.",
+      "runJobs": "Job search failed.",
+      "status": "Failed to load run status.",
+      "timeout": "Search is taking too long."
+    }
+  },
+  "userPrompts": {
+    "title": "Prompts",
+    "empty": "No prompts yet.",
+    "createTitle": "New prompt",
+    "actions": {
+      "refresh": "Refresh",
+      "save": "Save",
+      "saving": "Saving...",
+      "create": "Create",
+      "creating": "Creating...",
+      "expand": "Expand",
+      "collapse": "Collapse",
+      "delete": "Delete"
+    },
+    "fields": {
+      "title": "Title",
+      "role": "Role",
+      "body": "Body"
+    },
+    "roles": {
+      "filter": "Filter prompt",
+      "search": "Search prompt",
+      "comment": "Comment prompt"
+    },
+    "errors": {
+      "load": "Failed to load prompts.",
+      "save": "Failed to save prompt.",
+      "create": "Failed to create prompt.",
+      "delete": "Failed to delete prompt."
+    },
+    "deleteConfirm": "Delete this prompt?"
   },
   "prompts": {
     "title": "Prompts",
@@ -294,8 +389,8 @@
         "failed": "Failed to delete job."
       },
       "emptySearches": "Create a job search first.",
-      "goToPrompts": "Go to Prompts",
-      "emptyResults": "No results yet. Run the search from Prompts."
+      "goToPrompts": "Go to searches",
+      "emptyResults": "No results yet. Run the search from Search."
     },
     "prompts": {
       "create": {
@@ -399,13 +494,13 @@
     "tabs": {
       "users": "Users",
       "searchRuns": "Search runs",
-      "searches": "Searches list",
-      "prompts": "Prompts list",
+      "searches": "Searches",
+      "prompts": "Prompts",
       "settings": "Settings"
     }
   },
   "adminSearches": {
-    "title": "Searches list",
+    "title": "Searches",
     "empty": "No searches yet (or no matches for filters).",
     "actions": {
       "refresh": "Refresh",
@@ -417,7 +512,7 @@
     "errors": { "load": "Failed to load searches.", "save": "Failed to save changes." }
   },
   "adminPrompts": {
-    "title": "Prompts list",
+    "title": "Prompts",
     "empty": "No prompts yet (or no matches for filters).",
     "actions": {
       "refresh": "Refresh",

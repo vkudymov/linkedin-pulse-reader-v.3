@@ -1,5 +1,6 @@
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { loadPostSearchRows } from "@/lib/postSearches";
+import { createOwnedPrompt } from "@/lib/promptLibrary";
 import { attachSearchTariff, loadSearchTariffs } from "@/lib/searchTariffs";
 import { getSearchTypeId } from "@/lib/searchTypes";
 
@@ -82,16 +83,45 @@ export async function POST(request: Request) {
   if (created.error) return Response.json({ ok: false, error: created.error.message }, { status: 400 });
   const search = created.data as Record<string, unknown>;
 
-  const promptRows: Array<Record<string, unknown>> = [{ search_id: search.id, role: "search", body: search_prompt }];
-  if (comment_prompt) promptRows.push({ search_id: search.id, role: "comment", body: comment_prompt });
-  const promptResp = await supabase.from("prompts").insert(promptRows);
-  if (promptResp.error) {
+  const searchPromptResp = await createOwnedPrompt(supabase, data.user.id, "search", search_prompt, title);
+  const searchPromptId =
+    searchPromptResp.data && typeof searchPromptResp.data.id === "string" ? searchPromptResp.data.id : "";
+  if (searchPromptResp.error || !searchPromptId) {
     await supabase.from("searches").delete().eq("id", search.id).eq("user_id", data.user.id);
-    return Response.json({ ok: false, error: promptResp.error.message }, { status: 400 });
+    return Response.json({ ok: false, error: searchPromptResp.error?.message || "prompt create failed" }, { status: 400 });
+  }
+  let commentPromptId: string | null = null;
+  if (comment_prompt) {
+    const commentPromptResp = await createOwnedPrompt(supabase, data.user.id, "comment", comment_prompt, title);
+    commentPromptId =
+      commentPromptResp.data && typeof commentPromptResp.data.id === "string" ? commentPromptResp.data.id : null;
+    if (commentPromptResp.error || !commentPromptId) {
+      await supabase.from("searches").delete().eq("id", search.id).eq("user_id", data.user.id);
+      return Response.json({ ok: false, error: commentPromptResp.error?.message || "prompt create failed" }, { status: 400 });
+    }
+  }
+  const link = await supabase
+    .from("searches")
+    .update({ search_prompt_id: searchPromptId, comment_prompt_id: commentPromptId })
+    .eq("id", search.id)
+    .eq("user_id", data.user.id);
+  if (link.error) {
+    await supabase.from("searches").delete().eq("id", search.id).eq("user_id", data.user.id);
+    return Response.json({ ok: false, error: link.error.message }, { status: 400 });
   }
 
   return Response.json(
-    { ok: true, post_search: { ...search, search_prompt, comment_prompt, account_label } },
+    {
+      ok: true,
+      post_search: {
+        ...search,
+        search_prompt_id: searchPromptId,
+        comment_prompt_id: commentPromptId,
+        search_prompt,
+        comment_prompt,
+        account_label,
+      },
+    },
     { status: 200 },
   );
 }

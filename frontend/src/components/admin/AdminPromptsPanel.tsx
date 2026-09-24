@@ -13,14 +13,12 @@ import { cn } from "@/lib/utils";
 
 type PromptRow = {
   id: string;
-  search_id: string;
   role: string;
+  title: string;
   body: string;
   created_at: string | null;
   updated_at: string | null;
   user_id: string;
-  search_title: string;
-  search_type_code: string;
   user_full_name: string | null;
 };
 
@@ -54,7 +52,7 @@ export function AdminPromptsPanel({
   const [total, setTotal] = useState(0);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [draftById, setDraftById] = useState<Record<string, string>>({});
+  const [draftById, setDraftById] = useState<Record<string, { title?: string; body?: string }>>({});
   const [savingById, setSavingById] = useState<Record<string, boolean>>({});
   const [expandedById, setExpandedById] = useState<Record<string, boolean>>({});
 
@@ -113,15 +111,15 @@ export function AdminPromptsPanel({
   }, [load]);
 
   const save = async (row: PromptRow) => {
-    const body = draftById[row.id];
-    if (typeof body !== "string") return;
+    const draft = draftById[row.id];
+    if (!draft) return;
     setSavingById((m) => ({ ...m, [row.id]: true }));
     try {
       const resp = await fetch(`/api/admin/prompts/${encodeURIComponent(row.id)}`, {
         method: "PATCH",
         cache: "no-store",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ body }),
+        body: JSON.stringify(draft),
       });
       const text = await resp.text().catch(() => "");
       if (!resp.ok) throw new Error(text || t("errors.save"));
@@ -211,10 +209,13 @@ export function AdminPromptsPanel({
 
       <div className="space-y-3">
         {rows.map((r) => {
-          const draft = draftById[r.id];
+          const draft = draftById[r.id] || {};
           const saving = Boolean(savingById[r.id]);
-          const body = typeof draft === "string" ? draft : r.body;
-          const dirty = typeof draft === "string" && draft !== r.body;
+          const title = draft.title ?? r.title;
+          const body = draft.body ?? r.body;
+          const dirty =
+            (typeof draft.title === "string" && draft.title !== r.title) ||
+            (typeof draft.body === "string" && draft.body !== r.body);
           const expanded = expandedById[r.id] === true;
           const roleLabel =
             r.role === "filter"
@@ -235,9 +236,9 @@ export function AdminPromptsPanel({
               <div className="flex flex-wrap items-center justify-between gap-2">
                 <div className="min-w-0">
                   <div className="text-sm text-muted-foreground">
-                    {r.user_full_name || r.user_id} · {r.search_type_code}/{r.role} · {r.id}
+                    {r.user_full_name || r.user_id} · {roleLabel} · {r.id}
                   </div>
-                  <div className="mt-1 font-medium">{r.search_title}</div>
+                  <div className="mt-1 font-medium">{r.title}</div>
                   <div className="mt-1 text-xs text-muted-foreground">
                     {locale === "en" ? "Updated" : "Обновлено"}: {fmtDt(r.updated_at, locale)}
                   </div>
@@ -250,12 +251,26 @@ export function AdminPromptsPanel({
               </div>
 
               {expanded ? (
-                <textarea
-                  className="mt-3 w-full rounded-md border border-border bg-background px-3 py-2 font-mono text-xs"
-                  rows={8}
-                  value={body}
-                  onChange={(e) => setDraftById((m) => ({ ...m, [r.id]: e.target.value }))}
-                />
+                <div className="mt-3 space-y-3">
+                  <div>
+                    <Label>{locale === "en" ? "Title" : "Название"}</Label>
+                    <input
+                      className="mt-1 w-full rounded-md border border-border bg-background px-3 py-2 text-sm"
+                      value={title}
+                      onChange={(e) =>
+                        setDraftById((m) => ({ ...m, [r.id]: { ...(m[r.id] || {}), title: e.target.value } }))
+                      }
+                    />
+                  </div>
+                  <textarea
+                    className="w-full rounded-md border border-border bg-background px-3 py-2 font-mono text-xs"
+                    rows={8}
+                    value={body}
+                    onChange={(e) =>
+                      setDraftById((m) => ({ ...m, [r.id]: { ...(m[r.id] || {}), body: e.target.value } }))
+                    }
+                  />
+                </div>
               ) : null}
 
               <div className="mt-3 flex flex-wrap items-center justify-between gap-2">

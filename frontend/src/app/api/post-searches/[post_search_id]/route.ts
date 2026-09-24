@@ -1,4 +1,6 @@
 import { createSupabaseServerClient } from "@/lib/supabase/server";
+import { LINKED_PROMPT_SELECT, attachLinkedPrompts } from "@/lib/linkedPrompts";
+import { createOwnedPrompt, updateOwnedPromptBody } from "@/lib/promptLibrary";
 
 const SEARCH_MARKER = "<<<POST_TEXT>>>";
 const REQUIRED_COMMENT_MARKERS = ["<<<POST_TEXT>>>", "<<<CONTENT_TYPE>>>", "<<<MAIN_TOPICS>>>", "<<<TARGET_LANGUAGE>>>"];
@@ -16,12 +18,20 @@ export async function PATCH(request: Request, ctx: { params: Promise<{ post_sear
   const { post_search_id } = await ctx.params;
   const exists = await supabase
     .from("searches")
-    .select("id,search_types!inner(code)")
+    .select("id,search_prompt_id,comment_prompt_id,search_types!inner(code)")
     .eq("id", post_search_id)
     .eq("user_id", data.user.id)
     .eq("search_types.code", "posts")
     .maybeSingle();
   if (exists.error || !exists.data) return new Response("not found", { status: 404 });
+  const currentSearchPromptId =
+    exists.data && typeof (exists.data as { search_prompt_id?: unknown }).search_prompt_id === "string"
+      ? String((exists.data as { search_prompt_id: string }).search_prompt_id)
+      : "";
+  const currentCommentPromptId =
+    exists.data && typeof (exists.data as { comment_prompt_id?: unknown }).comment_prompt_id === "string"
+      ? String((exists.data as { comment_prompt_id: string }).comment_prompt_id)
+      : "";
 
   let json: unknown = null;
   try {
@@ -109,49 +119,53 @@ export async function PATCH(request: Request, ctx: { params: Promise<{ post_sear
     .eq("id", post_search_id)
     .eq("user_id", data.user.id)
     .select(
-      "id,user_id,title,account_label,status,last_run_at,created_at,updated_at,search_tariff_id,email_report_enabled,email_report_format,prompts(role,body),search_types!inner(code)",
+      "id,user_id,title,account_label,status,last_run_at,created_at,updated_at,search_tariff_id,email_report_enabled,email_report_format," +
+        LINKED_PROMPT_SELECT +
+        ",search_types!inner(code)",
     )
     .maybeSingle();
 
   if (resp.error) return Response.json({ ok: false, error: resp.error.message }, { status: 400 });
 
   if (searchPromptToSave !== null) {
-    const up = await supabase
-      .from("prompts")
-      .upsert({ search_id: post_search_id, role: "search", body: searchPromptToSave }, { onConflict: "search_id,role" });
-    if (up.error) return Response.json({ ok: false, error: up.error.message }, { status: 400 });
+    if (currentSearchPromptId) {
+      const up = await updateOwnedPromptBody(supabase, data.user.id, currentSearchPromptId, searchPromptToSave);
+      if (up.error) return Response.json({ ok: false, error: up.error.message }, { status: 400 });
+    } else {
+      const createdPrompt = await createOwnedPrompt(supabase, data.user.id, "search", searchPromptToSave);
+      const pid = createdPrompt.data && typeof createdPrompt.data.id === "string" ? createdPrompt.data.id : "";
+      if (createdPrompt.error || !pid) {
+        return Response.json({ ok: false, error: createdPrompt.error?.message || "prompt create failed" }, { status: 400 });
+      }
+      await supabase.from("searches").update({ search_prompt_id: pid }).eq("id", post_search_id).eq("user_id", data.user.id);
+    }
   }
   if (commentPromptToSave !== null) {
     if (commentPromptToSave) {
-      const up = await supabase
-        .from("prompts")
-        .upsert({ search_id: post_search_id, role: "comment", body: commentPromptToSave }, { onConflict: "search_id,role" });
-      if (up.error) return Response.json({ ok: false, error: up.error.message }, { status: 400 });
+      if (currentCommentPromptId) {
+        const up = await updateOwnedPromptBody(supabase, data.user.id, currentCommentPromptId, commentPromptToSave);
+        if (up.error) return Response.json({ ok: false, error: up.error.message }, { status: 400 });
+      } else {
+        const createdPrompt = await createOwnedPrompt(supabase, data.user.id, "comment", commentPromptToSave);
+        const pid = createdPrompt.data && typeof createdPrompt.data.id === "string" ? createdPrompt.data.id : "";
+        if (createdPrompt.error || !pid) {
+          return Response.json({ ok: false, error: createdPrompt.error?.message || "prompt create failed" }, { status: 400 });
+        }
+        await supabase.from("searches").update({ comment_prompt_id: pid }).eq("id", post_search_id).eq("user_id", data.user.id);
+      }
     } else {
-      const del = await supabase.from("prompts").delete().eq("search_id", post_search_id).eq("role", "comment");
-      if (del.error) return Response.json({ ok: false, error: del.error.message }, { status: 400 });
+      const unlink = await supabase
+        .from("searches")
+        .update({ comment_prompt_id: null })
+        .eq("id", post_search_id)
+        .eq("user_id", data.user.id);
+      if (unlink.error) return Response.json({ ok: false, error: unlink.error.message }, { status: 400 });
     }
   }
 
-  const row = (resp.data || {}) as Record<string, unknown>;
-  const prompts = Array.isArray((row as { prompts?: unknown }).prompts)
-    ? ((row as { prompts: Array<Record<string, unknown>> }).prompts || [])
-    : [];
-  const search_prompt = prompts.find((p) => p.role === "search" && typeof p.body === "string")?.body;
-  const comment_prompt = prompts.find((p) => p.role === "comment" && typeof p.body === "string")?.body ?? null;
-  delete (row as Record<string, unknown>).prompts;
-  delete (row as Record<string, unknown>).search_types;
-  return Response.json(
-    {
-      ok: true,
-      post_search: {
-        ...row,
-        search_prompt: typeof search_prompt === "string" ? search_prompt : "",
-        comment_prompt: typeof comment_prompt === "string" ? comment_prompt : null,
-      },
-    },
-    { status: 200 },
-  );
+  const row = attachLinkedPrompts((resp.data || {}) as Record<string, unknown>);
+  delete row.search_types;
+  return Response.json({ ok: true, post_search: row }, { status: 200 });
 }
 
 export async function DELETE(_request: Request, ctx: { params: Promise<{ post_search_id: string }> }) {

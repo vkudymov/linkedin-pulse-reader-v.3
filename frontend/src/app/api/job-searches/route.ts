@@ -1,6 +1,7 @@
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { loadJobSearchRows } from "@/lib/jobSearches";
 import { normalizeLinkedInJobFilters } from "@/lib/linkedinJobFilters";
+import { createOwnedPrompt } from "@/lib/promptLibrary";
 import { attachSearchTariff, loadSearchTariffs } from "@/lib/searchTariffs";
 import { getSearchTypeId } from "@/lib/searchTypes";
 
@@ -103,14 +104,18 @@ export async function POST(request: Request) {
   if (created.error) return Response.json({ ok: false, error: created.error.message }, { status: 400 });
   const search = created.data as Record<string, unknown>;
 
-  const promptResp = await supabase
-    .from("prompts")
-    .insert({ search_id: search.id, role: "filter", body: filter_prompt });
-  if (promptResp.error) {
+  const promptResp = await createOwnedPrompt(supabase, data.user.id, "filter", filter_prompt, title);
+  const promptId = promptResp.data && typeof promptResp.data.id === "string" ? promptResp.data.id : "";
+  if (promptResp.error || !promptId) {
     await supabase.from("searches").delete().eq("id", search.id).eq("user_id", data.user.id);
-    return Response.json({ ok: false, error: promptResp.error.message }, { status: 400 });
+    return Response.json({ ok: false, error: promptResp.error?.message || "prompt create failed" }, { status: 400 });
+  }
+  const link = await supabase.from("searches").update({ filter_prompt_id: promptId }).eq("id", search.id).eq("user_id", data.user.id);
+  if (link.error) {
+    await supabase.from("searches").delete().eq("id", search.id).eq("user_id", data.user.id);
+    return Response.json({ ok: false, error: link.error.message }, { status: 400 });
   }
 
-  return Response.json({ ok: true, job_search: { ...search, filter_prompt } }, { status: 200 });
+  return Response.json({ ok: true, job_search: { ...search, filter_prompt_id: promptId, filter_prompt } }, { status: 200 });
 }
 

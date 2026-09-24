@@ -1,5 +1,7 @@
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { normalizeLinkedInJobFilters } from "@/lib/linkedinJobFilters";
+import { LINKED_PROMPT_SELECT, attachLinkedPrompts } from "@/lib/linkedPrompts";
+import { createOwnedPrompt, updateOwnedPromptBody } from "@/lib/promptLibrary";
 
 const MARKER = "<<<JOB_TEXT>>>";
 const EMAIL_FORMATS = new Set(["none", "xlsx", "docx", "txt", "json", "xml"]);
@@ -17,12 +19,16 @@ export async function PATCH(request: Request, ctx: { params: Promise<{ job_searc
   const { job_search_id } = await ctx.params;
   const exists = await supabase
     .from("searches")
-    .select("id,search_types!inner(code)")
+    .select("id,filter_prompt_id,search_types!inner(code)")
     .eq("id", job_search_id)
     .eq("user_id", data.user.id)
     .eq("search_types.code", "jobs")
     .maybeSingle();
   if (exists.error || !exists.data) return new Response("not found", { status: 404 });
+  const currentFilterId =
+    exists.data && typeof (exists.data as { filter_prompt_id?: unknown }).filter_prompt_id === "string"
+      ? String((exists.data as { filter_prompt_id: string }).filter_prompt_id)
+      : "";
 
   let json: unknown = null;
   try {
@@ -98,27 +104,31 @@ export async function PATCH(request: Request, ctx: { params: Promise<{ job_searc
     .eq("id", job_search_id)
     .eq("user_id", data.user.id)
     .select(
-      "id,user_id,title,search_query,location,status,last_run_at,linkedin_filters,created_at,updated_at,search_tariff_id,email_report_enabled,email_report_format,prompts(role,body),search_types!inner(code)",
+      "id,user_id,title,search_query,location,status,last_run_at,linkedin_filters,created_at,updated_at,search_tariff_id,email_report_enabled,email_report_format," +
+        LINKED_PROMPT_SELECT +
+        ",search_types!inner(code)",
     )
     .maybeSingle();
 
   if (updated.error) return Response.json({ ok: false, error: updated.error.message }, { status: 400 });
 
   if (filterPromptToSave !== null) {
-    const up = await supabase
-      .from("prompts")
-      .upsert({ search_id: job_search_id, role: "filter", body: filterPromptToSave }, { onConflict: "search_id,role" });
-    if (up.error) return Response.json({ ok: false, error: up.error.message }, { status: 400 });
+    if (currentFilterId) {
+      const up = await updateOwnedPromptBody(supabase, data.user.id, currentFilterId, filterPromptToSave);
+      if (up.error) return Response.json({ ok: false, error: up.error.message }, { status: 400 });
+    } else {
+      const createdPrompt = await createOwnedPrompt(supabase, data.user.id, "filter", filterPromptToSave);
+      const pid = createdPrompt.data && typeof createdPrompt.data.id === "string" ? createdPrompt.data.id : "";
+      if (createdPrompt.error || !pid) {
+        return Response.json({ ok: false, error: createdPrompt.error?.message || "prompt create failed" }, { status: 400 });
+      }
+      await supabase.from("searches").update({ filter_prompt_id: pid }).eq("id", job_search_id).eq("user_id", data.user.id);
+    }
   }
 
-  const row = (updated.data || {}) as Record<string, unknown>;
-  const prompts = Array.isArray((row as { prompts?: unknown }).prompts)
-    ? ((row as { prompts: Array<Record<string, unknown>> }).prompts || [])
-    : [];
-  const filter_prompt = prompts.find((p) => p.role === "filter" && typeof p.body === "string")?.body;
-  delete (row as Record<string, unknown>).prompts;
-  delete (row as Record<string, unknown>).search_types;
-  return Response.json({ ok: true, job_search: { ...row, filter_prompt: typeof filter_prompt === "string" ? filter_prompt : "" } }, { status: 200 });
+  const row = attachLinkedPrompts((updated.data || {}) as Record<string, unknown>);
+  delete row.search_types;
+  return Response.json({ ok: true, job_search: row }, { status: 200 });
 }
 
 export async function DELETE(_request: Request, ctx: { params: Promise<{ job_search_id: string }> }) {

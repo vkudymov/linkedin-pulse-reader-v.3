@@ -17,8 +17,7 @@ type SearchRunRow = {
   id: string;
   user_id: string;
   kind: "post" | "job" | string;
-  post_search_id: string | null;
-  job_search_id: string | null;
+  search_id: string | null;
   search_title: string;
   limit_count: number;
   account_label: string | null;
@@ -70,8 +69,7 @@ export function AdminSearchRunsPanel({
 
   const userId = searchParams.get("user_id") || "";
   const kind = searchParams.get("kind") || "all";
-  const postSearchId = searchParams.get("post_search_id") || "";
-  const jobSearchId = searchParams.get("job_search_id") || "";
+  const searchId = searchParams.get("search_id") || "";
   const status = searchParams.get("status") || "all";
   const order = searchParams.get("order") || "desc";
 
@@ -83,7 +81,7 @@ export function AdminSearchRunsPanel({
   const [error, setError] = useState<string | null>(null);
   const [openPromptId, setOpenPromptId] = useState<string | null>(null);
 
-  const selectedSearchId = kind === "post" ? postSearchId : kind === "job" ? jobSearchId : "";
+  const selectedSearchId = kind === "post" || kind === "job" ? searchId : "";
 
   const searchOptionsKey =
     userId && (kind === "post" || kind === "job") ? `${userId}:${kind}` : null;
@@ -93,14 +91,13 @@ export function AdminSearchRunsPanel({
     const p = new URLSearchParams();
     if (userId) p.set("user_id", userId);
     if (kind === "post" || kind === "job") p.set("kind", kind);
-    if (kind === "post" && postSearchId) p.set("post_search_id", postSearchId);
-    if (kind === "job" && jobSearchId) p.set("job_search_id", jobSearchId);
+    if ((kind === "post" || kind === "job") && searchId) p.set("search_id", searchId);
     if (status !== "all") p.set("status", status);
     if (order === "asc") p.set("order", "asc");
     p.set("limit", "50");
     p.set("offset", "0");
     return p.toString();
-  }, [userId, kind, postSearchId, jobSearchId, status, order]);
+  }, [userId, kind, searchId, status, order]);
 
   const pushFilters = useCallback(
     (patch: Record<string, string>) => {
@@ -109,11 +106,8 @@ export function AdminSearchRunsPanel({
         if (!v || v === "all") p.delete(k);
         else p.set(k, v);
       }
-      if (patch.kind !== undefined) {
-        p.delete("post_search_id");
-        p.delete("job_search_id");
-      }
-      if (patch.user_id !== undefined) {
+      if (patch.kind !== undefined || patch.user_id !== undefined) {
+        p.delete("search_id");
         p.delete("post_search_id");
         p.delete("job_search_id");
       }
@@ -216,8 +210,7 @@ export function AdminSearchRunsPanel({
               disabled={!userId || kind === "all"}
               onChange={(e) => {
                 const id = e.target.value;
-                if (kind === "post") pushFilters({ post_search_id: id });
-                else if (kind === "job") pushFilters({ job_search_id: id });
+                if (kind === "post" || kind === "job") pushFilters({ search_id: id });
               }}
             >
               <option value="">{t("filters.allSearches")}</option>

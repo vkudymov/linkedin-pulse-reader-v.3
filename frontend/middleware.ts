@@ -53,6 +53,7 @@ export async function middleware(request: NextRequest) {
     path.startsWith("/jobs") ||
     path.startsWith("/account") ||
     path.startsWith("/prompts") ||
+    path.startsWith("/searches") ||
     path.startsWith("/admin");
 
   if (isProtected && !user) {

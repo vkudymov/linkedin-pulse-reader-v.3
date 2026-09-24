@@ -13,25 +13,24 @@ export function AppHeader({
 }: {
   title: string;
   subtitle?: string | null;
-  active?: "posts" | "jobs" | "account" | "prompts" | "admin";
+  active?: "posts" | "jobs" | "account" | "prompts" | "searches" | "admin";
   isAdmin?: boolean;
 }) {
   const t = useTranslations("nav");
   const isResultsActive = active === "posts" || active === "jobs";
-  const isPromptsActive = active === "prompts";
   return (
     <header className="border-b border-border/80 bg-background">
-      <div className="mx-auto flex max-w-3xl items-center justify-between gap-4 px-6 py-4">
-        <div className="min-w-0">
+      <div className="mx-auto flex max-w-5xl items-center justify-between gap-6 px-6 py-4">
+        <div className="min-w-0 shrink">
           <h1 className="truncate text-base font-semibold tracking-tight">{title}</h1>
           {subtitle ? (
-            <p className="text-sm text-muted-foreground">{subtitle}</p>
+            <p className="truncate text-sm text-muted-foreground">{subtitle}</p>
           ) : null}
         </div>
-        <nav className="flex items-center gap-3">
+        <nav className="flex shrink-0 items-center gap-3 whitespace-nowrap">
           <Link
             className={[
-              "text-sm underline-offset-4 hover:text-foreground hover:underline",
+              "whitespace-nowrap text-sm underline-offset-4 hover:text-foreground hover:underline",
               isResultsActive ? "text-foreground" : "text-muted-foreground",
             ].join(" ")}
             href="/posts"
@@ -41,8 +40,17 @@ export function AppHeader({
 
           <Link
             className={[
-              "text-sm underline-offset-4 hover:text-foreground hover:underline",
-              isPromptsActive ? "text-foreground" : "text-muted-foreground",
+              "whitespace-nowrap text-sm underline-offset-4 hover:text-foreground hover:underline",
+              active === "searches" ? "text-foreground" : "text-muted-foreground",
+            ].join(" ")}
+            href="/searches"
+          >
+            {t("searches")}
+          </Link>
+          <Link
+            className={[
+              "whitespace-nowrap text-sm underline-offset-4 hover:text-foreground hover:underline",
+              active === "prompts" ? "text-foreground" : "text-muted-foreground",
             ].join(" ")}
             href="/prompts"
           >
@@ -50,7 +58,7 @@ export function AppHeader({
           </Link>
           <Link
             className={[
-              "text-sm underline-offset-4 hover:text-foreground hover:underline",
+              "whitespace-nowrap text-sm underline-offset-4 hover:text-foreground hover:underline",
               active === "account" ? "text-foreground" : "text-muted-foreground",
             ].join(" ")}
             href="/account"
@@ -60,7 +68,7 @@ export function AppHeader({
           {isAdmin ? (
             <Link
               className={[
-                "text-sm underline-offset-4 hover:text-foreground hover:underline",
+                "whitespace-nowrap text-sm underline-offset-4 hover:text-foreground hover:underline",
                 active === "admin" ? "text-foreground" : "text-muted-foreground",
               ].join(" ")}
               href="/admin"
@@ -70,7 +78,7 @@ export function AppHeader({
           ) : null}
 
           <LocaleSwitcher />
-          <Link className="text-sm text-muted-foreground underline-offset-4 hover:text-foreground hover:underline" href="/logout">
+          <Link className="whitespace-nowrap text-sm text-muted-foreground underline-offset-4 hover:text-foreground hover:underline" href="/logout">
             {t("logout")}
           </Link>
         </nav>

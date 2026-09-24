@@ -6,6 +6,9 @@ import { useSearchParams } from "next/navigation";
 import { useTranslations } from "next-intl";
 
 import { useRouter } from "@/i18n/navigation";
+import { EmailReportFields } from "@/components/searches/EmailReportFields";
+import { PromptPicker, type PromptOption } from "@/components/searches/PromptPicker";
+import { SearchRunButton } from "@/components/searches/SearchRunButton";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import type { AdminUserOption } from "@/lib/admin/users";
@@ -34,6 +37,9 @@ type SearchRow = {
   location: string | null;
   linkedin_filters: unknown;
   account_label: string | null;
+  filter_prompt_id: string | null;
+  search_prompt_id: string | null;
+  comment_prompt_id: string | null;
   filter_prompt: string | null;
   search_prompt: string | null;
   comment_prompt: string | null;
@@ -78,6 +84,8 @@ export function AdminSearchesPanel({
   const [savingById, setSavingById] = useState<Record<string, boolean>>({});
   const [draftById, setDraftById] = useState<Record<string, Partial<SearchRow>>>({});
   const [expandedById, setExpandedById] = useState<Record<string, boolean>>({});
+  const [promptsByUserId, setPromptsByUserId] = useState<Record<string, PromptOption[]>>({});
+  const [promptsLoadingByUserId, setPromptsLoadingByUserId] = useState<Record<string, boolean>>({});
 
   const queryString = useMemo(() => {
     const p = new URLSearchParams();
@@ -138,6 +146,24 @@ export function AdminSearchesPanel({
   const onDraft = (id: string, patch: Partial<SearchRow>) => {
     setDraftById((m) => ({ ...m, [id]: { ...(m[id] || {}), ...patch } }));
   };
+
+  const loadPromptsForUser = useCallback(async (uid: string) => {
+    if (!uid || uid in promptsByUserId || promptsLoadingByUserId[uid]) return;
+    setPromptsLoadingByUserId((m) => ({ ...m, [uid]: true }));
+    try {
+      const resp = await fetch(`/api/admin/prompts?user_id=${encodeURIComponent(uid)}&limit=200`, {
+        cache: "no-store",
+      });
+      const text = await resp.text().catch(() => "");
+      if (!resp.ok) throw new Error(text || t("errors.load"));
+      const json = text ? (JSON.parse(text) as { items?: PromptOption[] }) : null;
+      setPromptsByUserId((m) => ({ ...m, [uid]: Array.isArray(json?.items) ? json!.items : [] }));
+    } catch {
+      setPromptsByUserId((m) => ({ ...m, [uid]: [] }));
+    } finally {
+      setPromptsLoadingByUserId((m) => ({ ...m, [uid]: false }));
+    }
+  }, [promptsByUserId, promptsLoadingByUserId, t]);
 
   const save = async (row: SearchRow) => {
     setSavingById((m) => ({ ...m, [row.id]: true }));
@@ -246,7 +272,15 @@ export function AdminSearchesPanel({
               <div className="flex flex-wrap items-center justify-between gap-2">
                 <div className="min-w-0">
                   <div className="text-sm text-muted-foreground">
-                    {r.user_full_name || r.user_id} · {r.search_type_code} · {r.id}
+                    {r.user_full_name || r.user_id} ·{" "}
+                    {r.search_type_code === "jobs"
+                      ? locale === "en"
+                        ? "Jobs"
+                        : "Вакансии"
+                      : locale === "en"
+                        ? "Posts"
+                        : "Посты"}{" "}
+                    · {r.id}
                   </div>
                   <div className="mt-1 font-medium">{r.title}</div>
                   <div className="mt-1 text-xs text-muted-foreground">
@@ -254,7 +288,14 @@ export function AdminSearchesPanel({
                     {locale === "en" ? "Last run" : "Последний запуск"}: {fmtDt(r.last_run_at, locale)}
                   </div>
                 </div>
-                <div className="flex gap-2">
+                <div className="flex flex-wrap items-start justify-end gap-2">
+                  <SearchRunButton
+                    kind={r.search_type_code === "jobs" ? "jobs" : "posts"}
+                    searchId={r.id}
+                    userId={r.user_id}
+                    disabled={saving}
+                    onDone={() => void load()}
+                  />
                   {expanded || hasDraft ? (
                     <Button onClick={() => save(r)} disabled={!hasDraft || saving}>
                       {saving ? t("actions.saving") : t("actions.save")}
@@ -294,25 +335,12 @@ export function AdminSearchesPanel({
                     placeholder="uuid or empty"
                   />
                 </div>
-                <div>
-                  <Label>{locale === "en" ? "Email reports" : "Email отчёты"}</Label>
-                  <div className="mt-1 flex gap-2">
-                    <label className="flex items-center gap-2 text-sm">
-                      <input
-                        type="checkbox"
-                        checked={Boolean(draft.email_report_enabled ?? r.email_report_enabled)}
-                        onChange={(e) => onDraft(r.id, { email_report_enabled: e.target.checked })}
-                      />
-                      enabled
-                    </label>
-                    <input
-                      className="flex-1 rounded-md border border-border bg-background px-3 py-2 text-sm"
-                      value={(draft.email_report_format ?? r.email_report_format) as string}
-                      onChange={(e) => onDraft(r.id, { email_report_format: e.target.value })}
-                      placeholder="none/xlsx/docx/txt/json/xml"
-                    />
-                  </div>
-                </div>
+                <EmailReportFields
+                  enabled={Boolean(draft.email_report_enabled ?? r.email_report_enabled)}
+                  format={String(draft.email_report_format ?? r.email_report_format ?? "none")}
+                  onEnabledChange={(enabled) => onDraft(r.id, { email_report_enabled: enabled })}
+                  onFormatChange={(format) => onDraft(r.id, { email_report_format: format })}
+                />
 
                 {r.search_type_code === "jobs" ? (
                   <>
@@ -332,15 +360,17 @@ export function AdminSearchesPanel({
                         onChange={(e) => onDraft(r.id, { location: e.target.value || null })}
                       />
                     </div>
-                    <div className="md:col-span-2">
-                      <Label>{locale === "en" ? "Filter prompt" : "Промпт фильтра"}</Label>
-                      <textarea
-                        className="mt-1 w-full rounded-md border border-border bg-background px-3 py-2 font-mono text-xs"
-                        rows={6}
-                        value={((draft.filter_prompt ?? r.filter_prompt) || "") as string}
-                        onChange={(e) => onDraft(r.id, { filter_prompt: e.target.value })}
-                      />
-                    </div>
+                    <PromptPicker
+                      label={locale === "en" ? "Filter prompt" : "Промпт фильтра"}
+                      value={((draft.filter_prompt_id ?? r.filter_prompt_id) || "") as string}
+                      options={(promptsByUserId[r.user_id] || []).filter((p) => p.role === "filter")}
+                      fallbackBody={r.filter_prompt}
+                      emptyLabel={locale === "en" ? "Not selected" : "Не выбран"}
+                      loading={Boolean(promptsLoadingByUserId[r.user_id])}
+                      editLabel={locale === "en" ? "Open in Prompts" : "Открыть в Промптах"}
+                      editHref={{ pathname: "/admin/prompts", query: { user_id: r.user_id } }}
+                      onChange={(id) => onDraft(r.id, { filter_prompt_id: id || null })}
+                    />
                     <div className="md:col-span-2">
                       <Label>{locale === "en" ? "LinkedIn filters (JSON)" : "LinkedIn filters (JSON)"}</Label>
                       <textarea
@@ -367,29 +397,28 @@ export function AdminSearchesPanel({
                         onChange={(e) => onDraft(r.id, { account_label: e.target.value || null })}
                       />
                     </div>
-                    <div className="md:col-span-2">
-                      <Label>{locale === "en" ? "Search prompt" : "Промпт поиска"}</Label>
-                      <textarea
-                        className="mt-1 w-full rounded-md border border-border bg-background px-3 py-2 font-mono text-xs"
-                        rows={6}
-                        value={((draft.search_prompt ?? r.search_prompt) || "") as string}
-                        onChange={(e) => onDraft(r.id, { search_prompt: e.target.value })}
-                      />
-                    </div>
-                    <div className="md:col-span-2">
-                      <Label>{locale === "en" ? "Comment prompt" : "Промпт комментария"}</Label>
-                      <textarea
-                        className="mt-1 w-full rounded-md border border-border bg-background px-3 py-2 font-mono text-xs"
-                        rows={6}
-                        value={((draft.comment_prompt ?? r.comment_prompt) || "") as string}
-                        onChange={(e) => onDraft(r.id, { comment_prompt: e.target.value })}
-                      />
-                      <div className="mt-1 text-xs text-muted-foreground">
-                        {locale === "en"
-                          ? "Set empty to delete comment prompt."
-                          : "Оставьте пустым, чтобы удалить промпт комментария."}
-                      </div>
-                    </div>
+                    <PromptPicker
+                      label={locale === "en" ? "Search prompt" : "Промпт поиска"}
+                      value={((draft.search_prompt_id ?? r.search_prompt_id) || "") as string}
+                      options={(promptsByUserId[r.user_id] || []).filter((p) => p.role === "search")}
+                      fallbackBody={r.search_prompt}
+                      emptyLabel={locale === "en" ? "Not selected" : "Не выбран"}
+                      loading={Boolean(promptsLoadingByUserId[r.user_id])}
+                      editLabel={locale === "en" ? "Open in Prompts" : "Открыть в Промптах"}
+                      editHref={{ pathname: "/admin/prompts", query: { user_id: r.user_id } }}
+                      onChange={(id) => onDraft(r.id, { search_prompt_id: id })}
+                    />
+                    <PromptPicker
+                      label={locale === "en" ? "Comment prompt" : "Промпт комментария"}
+                      value={((draft.comment_prompt_id ?? r.comment_prompt_id) || "") as string}
+                      options={(promptsByUserId[r.user_id] || []).filter((p) => p.role === "comment")}
+                      fallbackBody={r.comment_prompt}
+                      emptyLabel={locale === "en" ? "Not selected" : "Не выбран"}
+                      loading={Boolean(promptsLoadingByUserId[r.user_id])}
+                      editLabel={locale === "en" ? "Open in Prompts" : "Открыть в Промптах"}
+                      editHref={{ pathname: "/admin/prompts", query: { user_id: r.user_id } }}
+                      onChange={(id) => onDraft(r.id, { comment_prompt_id: id || null })}
+                    />
                   </>
                 )}
               </div>
@@ -420,7 +449,11 @@ export function AdminSearchesPanel({
                   variant="outline"
                   size="sm"
                   className="shrink-0"
-                  onClick={() => setExpandedById((m) => ({ ...m, [r.id]: !expanded }))}
+                  onClick={() => {
+                    const next = !expanded;
+                    setExpandedById((m) => ({ ...m, [r.id]: next }));
+                    if (next) void loadPromptsForUser(r.user_id);
+                  }}
                 >
                   <ChevronDown className={cn("size-4 transition-transform", expanded && "rotate-180")} />
                   {expanded ? t("actions.collapse") : t("actions.expand")}

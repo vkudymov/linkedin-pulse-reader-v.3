@@ -240,7 +240,12 @@ export default async function PostsPage({
                     })}
                   </div>
                 ) : (
-                  <div className="text-sm text-muted-foreground">{t("empty.noSearches")}</div>
+                  <div className="text-sm text-muted-foreground">
+                    {t("empty.noSearches")}{" "}
+                    <Link className="underline underline-offset-4 hover:text-foreground" href="/searches">
+                      /searches
+                    </Link>
+                  </div>
                 )}
               </div>
             }

@@ -26,17 +26,14 @@ class JobSearchRepository:
 
     @staticmethod
     def _attach_filter_prompt(row: dict[str, Any]) -> dict[str, Any]:
-        prompts = row.get("prompts")
+        fp = row.get("filter_prompt")
         filter_prompt: str = ""
-        if isinstance(prompts, list):
-            for p in prompts:
-                if isinstance(p, dict) and p.get("role") == "filter":
-                    v = p.get("body")
-                    if isinstance(v, str):
-                        filter_prompt = v
-                        break
+        if isinstance(fp, dict):
+            v = fp.get("body")
+            if isinstance(v, str):
+                filter_prompt = v
         out = dict(row)
-        out.pop("prompts", None)
+        out.pop("filter_prompt", None)
         out.pop("search_type_id", None)
         out["filter_prompt"] = filter_prompt
         return out
@@ -46,7 +43,8 @@ class JobSearchRepository:
             self._client.table("searches")
             .select(
                 "id,user_id,title,status,last_run_at,created_at,updated_at,search_tariff_id,"
-                "email_report_enabled,email_report_format,search_query,location,linkedin_filters,prompts(role,body)"
+                "email_report_enabled,email_report_format,search_query,location,linkedin_filters,"
+                "filter_prompt:prompts!searches_filter_prompt_id_fkey(body)"
             )
             .eq("user_id", user_id)
             .eq("search_type_id", self._jobs_type_id())
@@ -61,7 +59,8 @@ class JobSearchRepository:
             self._client.table("searches")
             .select(
                 "id,user_id,title,status,last_run_at,created_at,updated_at,search_tariff_id,"
-                "email_report_enabled,email_report_format,search_query,location,linkedin_filters,search_type_id,prompts(role,body)"
+                "email_report_enabled,email_report_format,search_query,location,linkedin_filters,search_type_id,"
+                "filter_prompt_id,filter_prompt:prompts!searches_filter_prompt_id_fkey(id,body)"
             )
             .eq("id", job_search_id)
             .maybe_single()
@@ -101,20 +100,26 @@ class JobSearchRepository:
         resp = self._client.table("searches").insert(payload).select("*").maybe_single().execute()
         created = expect_single(resp)  # type: ignore[assignment]
         try:
-            self._client.table("prompts").insert(
-                {
-                    "search_id": created["id"],
-                    "role": "filter",
-                    "body": filter_prompt,
-                }
-            ).execute()
+            p = (
+                self._client.table("prompts")
+                .insert({"user_id": user_id, "role": "filter", "title": title, "body": filter_prompt})
+                .select("id,body")
+                .maybe_single()
+                .execute()
+            )
+            prow = getattr(p, "data", None)
+            pid = str(prow.get("id") or "") if isinstance(prow, dict) else ""
+            if not pid:
+                raise RuntimeError("prompt insert failed")
+            self._client.table("searches").update({"filter_prompt_id": pid}).eq("id", created["id"]).execute()
+            created["filter_prompt_id"] = pid
+            created["filter_prompt"] = {"id": pid, "body": filter_prompt}
         except Exception:
             try:
                 self._client.table("searches").delete().eq("id", created["id"]).execute()
             except Exception:
                 pass
             raise
-        created["prompts"] = [{"role": "filter", "body": filter_prompt}]
         return self._attach_filter_prompt(created)  # type: ignore[return-value]
 
     def update(
@@ -160,14 +165,25 @@ class JobSearchRepository:
         updated = expect_single(resp)  # type: ignore[assignment]
 
         if filter_prompt is not None:
-            self._client.table("prompts").upsert(
-                [{"search_id": job_search_id, "role": "filter", "body": filter_prompt}],
-                on_conflict="search_id,role",
-            ).execute()
-
-        p_resp = self._client.table("prompts").select("role,body").eq("search_id", job_search_id).execute()
-        p_rows = expect_list(p_resp)
-        updated["prompts"] = p_rows
+            # Update existing prompt if present, else create a new one and link it.
+            sid = str(updated.get("user_id") or "")
+            cur_pid = str(updated.get("filter_prompt_id") or "")
+            if cur_pid:
+                self._client.table("prompts").update({"body": filter_prompt}).eq("id", cur_pid).eq("user_id", sid).execute()
+            else:
+                p = (
+                    self._client.table("prompts")
+                    .insert({"user_id": sid, "role": "filter", "title": str(updated.get("title") or "Filter prompt"), "body": filter_prompt})
+                    .select("id")
+                    .maybe_single()
+                    .execute()
+                )
+                prow = getattr(p, "data", None)
+                pid = str(prow.get("id") or "") if isinstance(prow, dict) else ""
+                if pid:
+                    self._client.table("searches").update({"filter_prompt_id": pid}).eq("id", job_search_id).execute()
+                    updated["filter_prompt_id"] = pid
+            updated["filter_prompt"] = {"body": filter_prompt}
         return self._attach_filter_prompt(updated)  # type: ignore[return-value]
 
     def delete(self, *, job_search_id: str) -> None:

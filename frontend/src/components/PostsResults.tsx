@@ -137,8 +137,8 @@ export function PostsResults({
               {filter === "all" ? (
                 <>
                   {t("empty.noPosts.runScript")}{" "}
-                  <Link className="underline underline-offset-4 hover:text-foreground" href="/prompts">
-                    /prompts
+                  <Link className="underline underline-offset-4 hover:text-foreground" href="/searches">
+                    /searches
                   </Link>{" "}
                   {t("empty.noPosts.thenRefresh")}
                 </>

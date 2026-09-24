@@ -152,8 +152,7 @@ class AdminSearchRunRow(BaseModel):
     id: str
     user_id: str
     kind: str
-    post_search_id: str | None = None
-    job_search_id: str | None = None
+    search_id: str | None = None
     search_title: str
     limit_count: int
     account_label: str | None = None
@@ -186,8 +185,8 @@ class AdminSearchRunsListResponse(BaseModel):
 
 class AdminSearchPromptRow(BaseModel):
     id: str
-    search_id: str
     role: str
+    title: str | None = None
     body: str
     created_at: datetime | None = None
     updated_at: datetime | None = None
@@ -216,6 +215,9 @@ class AdminSearchRow(BaseModel):
     linkedin_filters: dict[str, Any] | None = None
     account_label: str | None = None
 
+    filter_prompt_id: str | None = None
+    search_prompt_id: str | None = None
+    comment_prompt_id: str | None = None
     filter_prompt: str | None = None
     search_prompt: str | None = None
     comment_prompt: str | None = None
@@ -248,7 +250,9 @@ class AdminSearchUpdate(BaseModel):
     linkedin_filters: dict[str, Any] | None = None
     account_label: str | None = None
 
-    # prompts (stored in prompts table)
+    filter_prompt_id: str | None = None
+    search_prompt_id: str | None = None
+    comment_prompt_id: str | None = None
     filter_prompt: str | None = None
     search_prompt: str | None = None
     comment_prompt: str | None = None
@@ -256,16 +260,14 @@ class AdminSearchUpdate(BaseModel):
 
 class AdminPromptRow(BaseModel):
     id: str
-    search_id: str
     role: str
+    title: str
     body: str
     created_at: datetime | None = None
     updated_at: datetime | None = None
 
     # context
     user_id: str
-    search_title: str
-    search_type_code: str
     user_full_name: str | None = None
     user_email: str | None = None
 
@@ -278,5 +280,7 @@ class AdminPromptsListResponse(BaseModel):
 
 
 class AdminPromptUpdate(BaseModel):
-    body: str
+    title: str | None = None
+    role: str | None = None
+    body: str | None = None
 

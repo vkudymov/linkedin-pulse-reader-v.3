@@ -3,17 +3,17 @@ import { redirect } from "next/navigation";
 import { getTranslations } from "next-intl/server";
 
 import { AppHeader } from "@/components/AppHeader";
-import { UserPromptsPanel } from "@/components/prompts/UserPromptsPanel";
+import { UserSearchesPanel } from "@/components/searches/UserSearchesPanel";
 import { requireNotBlocked } from "@/lib/auth/blocked";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 
-export default async function PromptsPage({
+export default async function SearchesPage({
   params,
 }: {
   params: Promise<{ locale: string }>;
 }) {
   const { locale } = await params;
-  const t = await getTranslations("userPrompts");
+  const t = await getTranslations("userSearches");
 
   const supabase = await createSupabaseServerClient();
   const { data } = await supabase.auth.getUser();
@@ -23,11 +23,11 @@ export default async function PromptsPage({
 
   return (
     <div className="min-h-screen bg-background text-foreground">
-      <AppHeader title={t("title")} subtitle={data.user.email ?? null} active="prompts" isAdmin={isAdmin} />
+      <AppHeader title={t("title")} subtitle={data.user.email ?? null} active="searches" isAdmin={isAdmin} />
 
       <main className="mx-auto max-w-5xl px-6 py-6">
         <Suspense>
-          <UserPromptsPanel locale={loc} />
+          <UserSearchesPanel locale={loc} />
         </Suspense>
       </main>
     </div>

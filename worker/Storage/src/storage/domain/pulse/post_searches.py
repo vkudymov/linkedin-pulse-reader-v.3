@@ -26,23 +26,17 @@ class PostSearchRepository:
 
     @staticmethod
     def _attach_post_prompts(row: dict[str, Any]) -> dict[str, Any]:
-        prompts = row.get("prompts")
         search_prompt: str = ""
         comment_prompt: str | None = None
-        if isinstance(prompts, list):
-            for p in prompts:
-                if not isinstance(p, dict):
-                    continue
-                role = p.get("role")
-                body = p.get("body")
-                if not isinstance(body, str):
-                    continue
-                if role == "search":
-                    search_prompt = body
-                elif role == "comment":
-                    comment_prompt = body
+        sp = row.get("search_prompt")
+        cp = row.get("comment_prompt")
+        if isinstance(sp, dict) and isinstance(sp.get("body"), str):
+            search_prompt = str(sp.get("body") or "")
+        if isinstance(cp, dict) and isinstance(cp.get("body"), str):
+            comment_prompt = str(cp.get("body") or "") or None
         out = dict(row)
-        out.pop("prompts", None)
+        out.pop("search_prompt", None)
+        out.pop("comment_prompt", None)
         out.pop("search_type_id", None)
         out["search_prompt"] = search_prompt
         out["comment_prompt"] = comment_prompt
@@ -53,7 +47,9 @@ class PostSearchRepository:
             self._client.table("searches")
             .select(
                 "id,user_id,title,status,last_run_at,created_at,updated_at,search_tariff_id,"
-                "email_report_enabled,email_report_format,account_label,prompts(role,body)"
+                "email_report_enabled,email_report_format,account_label,"
+                "search_prompt:prompts!searches_search_prompt_id_fkey(body),"
+                "comment_prompt:prompts!searches_comment_prompt_id_fkey(body)"
             )
             .eq("user_id", user_id)
             .eq("search_type_id", self._posts_type_id())
@@ -68,7 +64,10 @@ class PostSearchRepository:
             self._client.table("searches")
             .select(
                 "id,user_id,title,status,last_run_at,created_at,updated_at,search_tariff_id,"
-                "email_report_enabled,email_report_format,account_label,search_type_id,prompts(role,body)"
+                "email_report_enabled,email_report_format,account_label,search_type_id,"
+                "search_prompt_id,comment_prompt_id,"
+                "search_prompt:prompts!searches_search_prompt_id_fkey(id,body),"
+                "comment_prompt:prompts!searches_comment_prompt_id_fkey(id,body)"
             )
             .eq("id", post_search_id)
             .maybe_single()
@@ -104,20 +103,41 @@ class PostSearchRepository:
         resp = self._client.table("searches").insert(payload).select("*").maybe_single().execute()
         created = expect_single(resp)  # type: ignore[assignment]
         try:
-            rows: list[dict[str, Any]] = [{"search_id": created["id"], "role": "search", "body": search_prompt}]
+            sp = (
+                self._client.table("prompts")
+                .insert({"user_id": user_id, "role": "search", "title": title, "body": search_prompt})
+                .select("id,body")
+                .maybe_single()
+                .execute()
+            )
+            sp_row = getattr(sp, "data", None)
+            sp_id = str(sp_row.get("id") or "") if isinstance(sp_row, dict) else ""
+            if not sp_id:
+                raise RuntimeError("search prompt insert failed")
+
+            cp_id: str | None = None
             if isinstance(comment_prompt, str) and comment_prompt:
-                rows.append({"search_id": created["id"], "role": "comment", "body": comment_prompt})
-            self._client.table("prompts").insert(rows).execute()
+                cp = (
+                    self._client.table("prompts")
+                    .insert({"user_id": user_id, "role": "comment", "title": title, "body": comment_prompt})
+                    .select("id,body")
+                    .maybe_single()
+                    .execute()
+                )
+                cp_row = getattr(cp, "data", None)
+                cp_id = str(cp_row.get("id") or "") if isinstance(cp_row, dict) else None
+
+            self._client.table("searches").update({"search_prompt_id": sp_id, "comment_prompt_id": cp_id}).eq("id", created["id"]).execute()
+            created["search_prompt_id"] = sp_id
+            created["comment_prompt_id"] = cp_id
+            created["search_prompt"] = {"id": sp_id, "body": search_prompt}
+            created["comment_prompt"] = {"id": cp_id, "body": comment_prompt} if cp_id else None
         except Exception:
             try:
                 self._client.table("searches").delete().eq("id", created["id"]).execute()
             except Exception:
                 pass
             raise
-
-        created["prompts"] = [{"role": "search", "body": search_prompt}] + (
-            [{"role": "comment", "body": comment_prompt}] if comment_prompt else []
-        )
         return self._attach_post_prompts(created)  # type: ignore[return-value]
 
     def update(
@@ -157,23 +177,49 @@ class PostSearchRepository:
         updated = expect_single(resp)  # type: ignore[assignment]
 
         if search_prompt is not None:
-            self._client.table("prompts").upsert(
-                [{"search_id": post_search_id, "role": "search", "body": search_prompt}],
-                on_conflict="search_id,role",
-            ).execute()
-        if comment_prompt is not None:
-            if comment_prompt:
-                self._client.table("prompts").upsert(
-                    [{"search_id": post_search_id, "role": "comment", "body": comment_prompt}],
-                    on_conflict="search_id,role",
-                ).execute()
+            sid = str(updated.get("user_id") or "")
+            cur_pid = str(updated.get("search_prompt_id") or "")
+            if cur_pid:
+                self._client.table("prompts").update({"body": search_prompt}).eq("id", cur_pid).eq("user_id", sid).execute()
             else:
-                # empty string -> delete optional prompt
-                self._client.table("prompts").delete().eq("search_id", post_search_id).eq("role", "comment").execute()
-
-        p_resp = self._client.table("prompts").select("role,body").eq("search_id", post_search_id).execute()
-        p_rows = expect_list(p_resp)
-        updated["prompts"] = p_rows
+                p = (
+                    self._client.table("prompts")
+                    .insert({"user_id": sid, "role": "search", "title": str(updated.get("title") or "Search prompt"), "body": search_prompt})
+                    .select("id")
+                    .maybe_single()
+                    .execute()
+                )
+                prow = getattr(p, "data", None)
+                pid = str(prow.get("id") or "") if isinstance(prow, dict) else ""
+                if pid:
+                    self._client.table("searches").update({"search_prompt_id": pid}).eq("id", post_search_id).execute()
+                    updated["search_prompt_id"] = pid
+            updated["search_prompt"] = {"body": search_prompt}
+        if comment_prompt is not None:
+            sid = str(updated.get("user_id") or "")
+            cur_pid = str(updated.get("comment_prompt_id") or "")
+            if comment_prompt:
+                if cur_pid:
+                    self._client.table("prompts").update({"body": comment_prompt}).eq("id", cur_pid).eq("user_id", sid).execute()
+                else:
+                    p = (
+                        self._client.table("prompts")
+                        .insert({"user_id": sid, "role": "comment", "title": str(updated.get("title") or "Comment prompt"), "body": comment_prompt})
+                        .select("id")
+                        .maybe_single()
+                        .execute()
+                    )
+                    prow = getattr(p, "data", None)
+                    pid = str(prow.get("id") or "") if isinstance(prow, dict) else ""
+                    if pid:
+                        self._client.table("searches").update({"comment_prompt_id": pid}).eq("id", post_search_id).execute()
+                        updated["comment_prompt_id"] = pid
+                updated["comment_prompt"] = {"body": comment_prompt}
+            else:
+                # empty string -> unlink optional prompt (do not delete library prompt)
+                self._client.table("searches").update({"comment_prompt_id": None}).eq("id", post_search_id).execute()
+                updated["comment_prompt_id"] = None
+                updated["comment_prompt"] = None
         return self._attach_post_prompts(updated)  # type: ignore[return-value]
 
     def delete(self, *, post_search_id: str) -> None:

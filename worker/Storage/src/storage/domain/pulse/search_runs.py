@@ -20,8 +20,7 @@ class SearchRunRepository:
         kind: RunKind,
         search_title: str,
         limit_count: int,
-        post_search_id: str | None = None,
-        job_search_id: str | None = None,
+        search_id: str | None = None,
         account_label: str | None = None,
         search_query: str | None = None,
         location: str | None = None,
@@ -53,10 +52,8 @@ class SearchRunRepository:
             "admin_actor_id": admin_actor_id,
             "updated_at": now,
         }
-        if post_search_id:
-            payload["post_search_id"] = post_search_id
-        if job_search_id:
-            payload["job_search_id"] = job_search_id
+        if search_id:
+            payload["search_id"] = search_id
         resp = self._client.table("search_runs").insert(payload).execute()
         return expect_single(resp)  # type: ignore[return-value]
 
@@ -116,8 +113,7 @@ class SearchRunRepository:
         *,
         user_id: str | None = None,
         kind: RunKind | None = None,
-        post_search_id: str | None = None,
-        job_search_id: str | None = None,
+        search_id: str | None = None,
         status: RunStatus | None = None,
         date_from: str | None = None,
         date_to: str | None = None,
@@ -133,10 +129,8 @@ class SearchRunRepository:
             q = q.eq("user_id", user_id)
         if kind:
             q = q.eq("kind", kind)
-        if post_search_id:
-            q = q.eq("post_search_id", post_search_id)
-        if job_search_id:
-            q = q.eq("job_search_id", job_search_id)
+        if search_id:
+            q = q.eq("search_id", search_id)
         if status:
             q = q.eq("status", status)
         if date_from:

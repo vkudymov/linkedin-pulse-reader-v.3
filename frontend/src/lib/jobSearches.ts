@@ -1,16 +1,11 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 
-const SELECT =
-  "id,title,search_query,location,status,last_run_at,linkedin_filters,created_at,updated_at,search_tariff_id,email_report_enabled,email_report_format,prompts(role,body),search_types!inner(code)";
+import { LINKED_PROMPT_SELECT, attachLinkedPrompts } from "@/lib/linkedPrompts";
 
-function attachFilterPrompt(row: Record<string, unknown>): Record<string, unknown> {
-  const prompts = Array.isArray(row.prompts) ? (row.prompts as Array<Record<string, unknown>>) : [];
-  const filterPrompt = prompts.find((p) => p && p.role === "filter" && typeof p.body === "string")?.body;
-  const out = { ...row, filter_prompt: typeof filterPrompt === "string" ? filterPrompt : "" };
-  delete (out as Record<string, unknown>).prompts;
-  delete (out as Record<string, unknown>).search_types;
-  return out;
-}
+const SELECT =
+  "id,title,search_query,location,status,last_run_at,linkedin_filters,created_at,updated_at,search_tariff_id,email_report_enabled,email_report_format," +
+  LINKED_PROMPT_SELECT +
+  ",search_types!inner(code)";
 
 export async function loadJobSearchRows(
   supabase: SupabaseClient,
@@ -27,6 +22,6 @@ export async function loadJobSearchRows(
     .order("created_at", { ascending: true });
 
   if (resp.error) return { rows: [], error: resp.error };
-  const rows = (Array.isArray(resp.data) ? resp.data : []) as Record<string, unknown>[];
-  return { rows: rows.map(attachFilterPrompt), error: null };
+  const rows = (Array.isArray(resp.data) ? resp.data : []) as unknown as Record<string, unknown>[];
+  return { rows: rows.map(attachLinkedPrompts), error: null };
 }
