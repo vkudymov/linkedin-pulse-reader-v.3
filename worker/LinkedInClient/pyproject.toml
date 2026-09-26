@@ -20,6 +20,9 @@ classifiers = [
   "Typing :: Typed",
 ]
 dependencies = [
+  "linkedin-search-core>=0.1.0",
+  "linkedin-search-jobs>=0.1.0",
+  "linkedin-search-posts>=0.1.0",
   "playwright>=1.49.0",
 ]
 

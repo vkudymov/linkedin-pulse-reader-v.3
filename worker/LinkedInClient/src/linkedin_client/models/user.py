@@ -1,17 +1,7 @@
-from __future__ import annotations
+"""Compatibility re-export. Implementation lives in the linkedin-search packages."""
 
-from dataclasses import dataclass
+from linkedin_search_core.models.user import (
+    UserIdentity,
+)
 
-
-@dataclass(frozen=True, slots=True)
-class UserIdentity:
-    """
-    Minimal representation of a LinkedIn identity.
-
-    This library is intentionally light on user management; the calling application owns
-    credential storage and account/user lifecycle.
-    """
-
-    profile_url: str | None = None
-    urn: str | None = None
-
+__all__ = ['UserIdentity']

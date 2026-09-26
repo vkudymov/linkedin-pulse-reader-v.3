@@ -1,37 +1,7 @@
-from __future__ import annotations
+"""Compatibility re-export. Implementation lives in the linkedin-search packages."""
 
-from dataclasses import dataclass
+from linkedin_search_core.browser.config import (
+    BrowserConfig,
+)
 
-
-@dataclass(frozen=True, slots=True)
-class BrowserConfig:
-    """
-    RU: Настройки runtime-окружения браузера (platform policy).
-        Держим их отдельно от фич-логики, чтобы управление запуском Chromium было централизованным.
-
-    EN: Browser runtime settings (platform policy).
-        Kept separate from feature logic so Chromium startup policy is centralized.
-    """
-    headless: bool = True
-    timeout_ms: int = 30_000
-
-    locale: str | None = "en-US"
-    timezone_id: str | None = None
-    user_agent: str | None = None
-
-    viewport_width: int = 1365
-    viewport_height: int = 768
-
-    slow_mo_ms: int | None = None
-
-    # Prefer real Chrome for social auth (Google/Apple) where Chromium automation can be blocked.
-    # Example: "chrome", "msedge". When not available, the library falls back to default chromium.
-    channel: str | None = None
-
-    # Extra launch args passed to Playwright. Keep optional to avoid breaking defaults.
-    launch_args: list[str] | None = None
-
-    # When set, Playwright will use a persistent browser profile (user-data-dir).
-    # This is important for Google OAuth flows that block automated ephemeral contexts.
-    user_data_dir: str | None = None
-
+__all__ = ['BrowserConfig']

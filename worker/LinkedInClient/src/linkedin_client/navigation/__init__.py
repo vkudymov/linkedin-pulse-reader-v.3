@@ -1,13 +1,6 @@
-"""
-RU: Feature navigation layer.
-    Минимальные роутеры к ключевым страницам + сигнализация auth-редиректов.
+"""Compatibility re-export of navigators."""
 
-EN: Feature navigation layer.
-    Minimal routers to key pages + explicit auth-redirect signaling.
-"""
-
-from .feed import FeedNavigator
-from .jobs import JobsNavigator
+from linkedin_search_jobs.navigation.jobs import JobsNavigator
+from linkedin_search_posts.navigation.feed import FeedNavigator
 
 __all__ = ["FeedNavigator", "JobsNavigator"]
-

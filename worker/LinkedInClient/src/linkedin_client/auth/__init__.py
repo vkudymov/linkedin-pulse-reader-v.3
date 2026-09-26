@@ -1,13 +1,7 @@
-"""
-RU: Auth boundary.
-    В этом пакете собраны механизмы восстановления сессии через session_snapshot и manual login.
-    Хранение сессии — ответственность внешнего приложения.
+"""Compatibility re-export. Implementation lives in the linkedin-search packages."""
 
-EN: Auth boundary.
-    This package contains session restoration via session_snapshot and manual login.
-    Persistence belongs to the calling application.
-"""
+from linkedin_search_core.auth import (
+    LoginMethod,
+)
 
-from .methods import LoginMethod
-
-__all__ = ["LoginMethod"]
+__all__ = ['LoginMethod']

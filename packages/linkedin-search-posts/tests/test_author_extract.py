@@ -1,4 +1,4 @@
-from linkedin_client.parsing.author_extract import (
+from linkedin_search_posts.parsing.author_extract import (
     _clean_author_name,
     _looks_like_author_name,
     _normalize_avatar_src,

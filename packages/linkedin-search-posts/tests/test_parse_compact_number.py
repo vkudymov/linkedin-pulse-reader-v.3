@@ -1,4 +1,4 @@
-from linkedin_client.parsing.post_parser import parse_compact_number
+from linkedin_search_posts.parsing.post_parser import parse_compact_number
 
 
 def test_parse_compact_number_plain_int() -> None:

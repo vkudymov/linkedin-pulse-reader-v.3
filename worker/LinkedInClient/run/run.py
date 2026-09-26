@@ -153,7 +153,7 @@ def main() -> int:
                 try:
                     posts = client.fetch_posts(limit=args.limit)
                     print(f"Fetched {len(posts)} posts.")
-                    # posts.json/cookies.json persistence is handled by ../../run_post_search.py.
+                    # Session persist and results snapshots are handled by ../../run_post_search.py.
                 except Exception:
                     if args.screenshot_on_error:
                         artifacts_dir_default.mkdir(parents=True, exist_ok=True)
@@ -174,7 +174,7 @@ def main() -> int:
             with LinkedInClient(cookies=cookies, config=cfg) as client:
                 posts = client.fetch_posts(limit=args.limit)
                 print(f"Fetched {len(posts)} posts.")
-                # posts.json/cookies.json persistence is handled by ../../run_post_search.py.
+                # Session persist and results snapshots are handled by ../../run_post_search.py.
             return 0
 
     raise SystemExit(f"Unknown command: {cmd}")

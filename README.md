@@ -1,9 +1,10 @@
 # LinkedIn Pulse Reader (Monorepo)
 
-Репозиторий разделён на две части:
+Репозиторий разделён на три части:
 
 - `frontend/` — Next.js UI (регистрация/вход, просмотр найденных постов)
 - `worker/` — Python worker (сбор постов, запись в Supabase, анализ через LLM)
+- `packages/` — три библиотеки поиска: `linkedin-search-core`, `linkedin-search-jobs`, `linkedin-search-posts` (см. `packages/README.md`)
 
 ## Быстрый старт
 
@@ -20,7 +21,7 @@ npm run dev
 
 ```bash
 cd worker
-python3 -m pip install -e LinkedInClient -e PostAnalyzer -e Storage -e api -e SearchReportMailer
+python3 -m pip install -e ../packages/linkedin-search-core -e ../packages/linkedin-search-jobs -e ../packages/linkedin-search-posts -e LinkedInClient -e PostAnalyzer -e Storage -e api -e SearchReportMailer
 python run_post_search.py --limit 10
 ```
 

@@ -1,13 +1,8 @@
-"""
-RU: Platform/browser layer.
-    Инкапсулирует lifecycle Playwright/Chromium и runtime-настройки браузера.
+"""Compatibility re-export. Implementation lives in the linkedin-search packages."""
 
-EN: Platform/browser layer.
-    Encapsulates Playwright/Chromium lifecycle and browser runtime configuration.
-"""
+from linkedin_search_core.browser import (
+    BrowserConfig,
+    BrowserManager,
+)
 
-from .config import BrowserConfig
-from .manager import BrowserManager
-
-__all__ = ["BrowserConfig", "BrowserManager"]
-
+__all__ = ['BrowserConfig', 'BrowserManager']

@@ -1,7 +1,7 @@
 import pytest
 
-from linkedin_client.loading.scroller import HumanScroller, ScrollConfig
-from linkedin_client.loading import scroller as scroller_mod
+from linkedin_search_core.loading.scroller import HumanScroller, ScrollConfig
+from linkedin_search_core.loading import scroller as scroller_mod
 
 
 class _FakePage:

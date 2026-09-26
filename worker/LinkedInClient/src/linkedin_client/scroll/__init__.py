@@ -1,14 +1,7 @@
-"""
-RU: Scroll utilities.
-    Небольшие утилиты, которые имитируют пользовательские действия (например, прокрутку) и
-    могут переиспользоваться разными фичами (feed, search, profiles) без зависимости от парсинга.
+"""Compatibility re-export. Implementation lives in the linkedin-search packages."""
 
-EN: Scroll utilities.
-    Small utilities that simulate user actions (e.g., scrolling) and can be reused by multiple features
-    (feed, search, profiles) without coupling to parsing logic.
-"""
+from linkedin_search_core.scroll import (
+    human_scroll,
+)
 
-from .human_scroll import human_scroll
-
-__all__ = ["human_scroll"]
-
+__all__ = ['human_scroll']

@@ -1,4 +1,4 @@
-from linkedin_client.navigation.jobs import normalize_location_text
+from linkedin_search_jobs.navigation.jobs import normalize_location_text
 
 
 def test_normalize_location_text_strips_and_handles_empty() -> None:

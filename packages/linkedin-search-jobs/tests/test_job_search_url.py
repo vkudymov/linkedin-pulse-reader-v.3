@@ -1,4 +1,4 @@
-from linkedin_client.navigation.job_search_url import (
+from linkedin_search_jobs.navigation.job_search_url import (
     build_jobs_search_query,
     compose_job_keywords,
     resolve_job_filters,

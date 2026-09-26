@@ -1,10 +1,7 @@
-from __future__ import annotations
+"""Compatibility re-export. Implementation lives in the linkedin-search packages."""
 
-from enum import StrEnum
+from linkedin_search_core.auth.methods import (
+    LoginMethod,
+)
 
-
-class LoginMethod(StrEnum):
-    email = "email"
-    google = "google"
-    apple = "apple"
-
+__all__ = ['LoginMethod']

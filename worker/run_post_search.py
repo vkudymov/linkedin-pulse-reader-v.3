@@ -4,7 +4,6 @@
 from __future__ import annotations
 
 import argparse
-import json
 import logging
 import os
 import re
@@ -19,7 +18,6 @@ POST_ANALYZER_SRC = ROOT / "PostAnalyzer" / "src"
 STORAGE_SRC = ROOT / "Storage" / "src"
 JOB_SEARCH_SRC = ROOT / "JobSearch" / "src"
 SESSION_SNAPSHOT_SRC = ROOT / "session_snapshot" / "src"
-POSTS_PATH = ROOT / "posts.json"
 ENV_PATH = ROOT / ".env"
 
 
@@ -62,6 +60,7 @@ from session_snapshot import (  # noqa: E402
     should_save_back,
 )
 
+from search_results import write_pre_ai_results
 from post_analyzer import LLMPostSelector, PostAnalyzerConfig  # type: ignore[import-not-found]  # noqa: E402
 from post_analyzer.config import (  # type: ignore[import-not-found]  # noqa: E402
     LLMProviderSettings,
@@ -148,14 +147,6 @@ def log_supabase_target() -> None:
 
 def make_run_timestamp() -> str:
     return datetime.now().astimezone().isoformat()
-
-
-def write_run_snapshot(path: Path, *, run_at: str, posts: list[dict[str, Any]]) -> None:
-    payload: dict[str, Any] = {"run_at": run_at, "count": len(posts), "posts": posts}
-    path.write_text(
-        json.dumps(payload, ensure_ascii=False, indent=2),
-        encoding="utf-8",
-    )
 
 
 def _required_env(name: str) -> str:
@@ -424,6 +415,8 @@ def fetch_and_store_posts(
     snapshot: dict[str, Any],
     cfg: LinkedInClientConfig,
     limit: int,
+    user_id: str,
+    search_title: str,
 ) -> tuple[str, list[dict[str, Any]]]:
     from storage import compute_source_key  # type: ignore[import-not-found]
 
@@ -482,10 +475,14 @@ def fetch_and_store_posts(
     except Exception as e:
         log.warning("Post media persistence failed (ignored): %s", e)
     try:
-        write_run_snapshot(POSTS_PATH, run_at=run_at, posts=payload)
-        log.info("Wrote %s (%s posts)", POSTS_PATH, len(payload))
+        write_pre_ai_results(
+            user_id=user_id,
+            kind="posts",
+            search_title=search_title,
+            items=payload,
+        )
     except Exception as e:
-        log.warning("Failed to write %s: %s", POSTS_PATH, e)
+        log.warning("Failed to write pre-AI results snapshot: %s", e)
     return run_at, payload
 
 
@@ -867,6 +864,8 @@ def main() -> None:
             snapshot=snapshot,
             cfg=cfg,
             limit=args.limit,
+            user_id=user_id,
+            search_title=str(ps_row.get("title") or "posts"),
         )
         analyzed, matched, report_analyzed, report_not_analyzed = analyze_and_store_posts(
             storage=storage,
@@ -916,6 +915,8 @@ def main() -> None:
             snapshot=snapshot,
             cfg=cfg,
             limit=args.limit,
+            user_id=user_id,
+            search_title=str(ps_row.get("title") or "posts"),
         )
         analyzed, matched, report_analyzed, report_not_analyzed = analyze_and_store_posts(
             storage=storage,

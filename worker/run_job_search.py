@@ -3,8 +3,10 @@ from __future__ import annotations
 import argparse
 import logging
 import os
-from dataclasses import replace
+from dataclasses import asdict, replace
 from datetime import UTC, datetime
+
+from search_results import write_pre_ai_results
 
 from job_search import JobSearchService, JobSearchSpec  # type: ignore[import-not-found]
 from job_search.adapters.linkedin_collector import LinkedInJobCollector  # type: ignore[import-not-found]
@@ -73,6 +75,26 @@ def ensure_llm_connected() -> None:
     except Exception as e:
         log.error("LLM not connected: %s", e)
         raise SystemExit(LLM_CONNECT_FAILED_EXIT_CODE) from None
+
+
+class _PreAiJobCollector:
+    def __init__(self, *, inner: LinkedInJobCollector, user_id: str, search_title: str) -> None:
+        self._inner = inner
+        self._user_id = user_id
+        self._search_title = search_title
+
+    def collect(self, *, spec: JobSearchSpec) -> list:
+        jobs = list(self._inner.collect(spec=spec))
+        try:
+            write_pre_ai_results(
+                user_id=self._user_id,
+                kind="jobs",
+                search_title=self._search_title,
+                items=[asdict(job) for job in jobs],
+            )
+        except Exception as e:
+            log.warning("Failed to write pre-AI results snapshot: %s", e)
+        return jobs
 
 
 def _required_env(name: str) -> str:
@@ -162,7 +184,11 @@ def main() -> None:
 
     try:
         with LinkedInClient(config=cfg, session_snapshot=snapshot) as client:
-            collector = LinkedInJobCollector(client=client)
+            collector = _PreAiJobCollector(
+                inner=LinkedInJobCollector(client=client),
+                user_id=user_id,
+                search_title=title,
+            )
             repo = StorageJobRepository(
                 storage=storage,
                 user_id=user_id,

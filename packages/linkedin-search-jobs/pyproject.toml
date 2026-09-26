@@ -1,0 +1,36 @@
+[build-system]
+requires = ["hatchling>=1.21.0"]
+build-backend = "hatchling.build"
+
+[project]
+name = "linkedin-search-jobs"
+version = "0.1.0"
+description = "LinkedIn job search built on linkedin-search-core."
+readme = "README.md"
+requires-python = ">=3.11"
+license = { text = "Proprietary" }
+authors = [{ name = "LinkedIn Pulse Reader" }]
+keywords = ["linkedin", "jobs", "playwright"]
+classifiers = [
+  "Development Status :: 3 - Alpha",
+  "Programming Language :: Python :: 3",
+  "Programming Language :: Python :: 3.11",
+  "Programming Language :: Python :: 3.12",
+  "Programming Language :: Python :: 3.13",
+  "Typing :: Typed",
+]
+dependencies = [
+  "linkedin-search-core>=0.1.0",
+  "playwright>=1.49.0",
+]
+
+[project.optional-dependencies]
+dev = [
+  "pytest>=8.0.0",
+]
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/linkedin_search_jobs"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

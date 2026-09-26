@@ -1,10 +1,12 @@
 cookies.json
 posts.json
 selected_posts.json
+worker/results/*.json
 .env
 .venv/
 __pycache__/
 *.pyc
+dist/
 .pytest_cache/
 
 # Cursor debug session logs

@@ -16,7 +16,7 @@
 
 ```bash
 cd worker
-python3 -m pip install -e LinkedInClient -e PostAnalyzer -e Storage -e api -e SearchReportMailer
+python3 -m pip install -e ../packages/linkedin-search-core -e ../packages/linkedin-search-jobs -e ../packages/linkedin-search-posts -e LinkedInClient -e PostAnalyzer -e Storage -e api -e SearchReportMailer
 ```
 
 ## Переменные окружения

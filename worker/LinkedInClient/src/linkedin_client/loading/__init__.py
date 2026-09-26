@@ -1,14 +1,7 @@
-"""
-RU: Loading layer (waiting + scrolling).
-    Компоненты, которые обеспечивают “контент присутствует и стабилен” перед парсингом.
+"""Compatibility re-export of loading helpers."""
 
-EN: Loading layer (waiting + scrolling).
-    Components that ensure “content is present and stable” before parsing.
-"""
-
-from .jobs_waiter import JobsWaiter
-from .scroller import HumanScroller, ScrollConfig
-from .waiter import FeedWaiter
+from linkedin_search_core.loading.scroller import HumanScroller, ScrollConfig
+from linkedin_search_jobs.loading.jobs_waiter import JobsWaiter
+from linkedin_search_posts.loading.waiter import FeedWaiter
 
 __all__ = ["FeedWaiter", "HumanScroller", "JobsWaiter", "ScrollConfig"]
-

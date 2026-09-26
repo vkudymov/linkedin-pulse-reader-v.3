@@ -1,4 +1,4 @@
-from linkedin_client.parsing.job_insights import classify_job_insights, normalize_insight_key
+from linkedin_search_jobs.parsing.job_insights import classify_job_insights, normalize_insight_key
 
 
 def test_classifies_russian_pills() -> None:

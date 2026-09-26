@@ -94,13 +94,13 @@ class _FakeContext:
 
 
 def test_email_password_flow_fills_and_submits(monkeypatch: pytest.MonkeyPatch) -> None:
-    from linkedin_client.auth.email_password import (
+    from linkedin_search_core.auth.email_password import (
         EmailPasswordLoginFlow,
         EmailPasswordLoginParams,
     )
 
     monkeypatch.setattr(
-        "linkedin_client.auth.email_password.wait_for_session", lambda *_a, **_kw: None
+        "linkedin_search_core.auth.email_password.wait_for_session", lambda *_a, **_kw: None
     )
 
     page = _FakePage()
@@ -120,13 +120,13 @@ def test_email_password_flow_fills_and_submits(monkeypatch: pytest.MonkeyPatch) 
 def test_email_password_flow_does_not_fill_without_params(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    from linkedin_client.auth.email_password import (
+    from linkedin_search_core.auth.email_password import (
         EmailPasswordLoginFlow,
         EmailPasswordLoginParams,
     )
 
     monkeypatch.setattr(
-        "linkedin_client.auth.email_password.wait_for_session", lambda *_a, **_kw: None
+        "linkedin_search_core.auth.email_password.wait_for_session", lambda *_a, **_kw: None
     )
 
     page = _FakePage()
@@ -142,8 +142,8 @@ def test_email_password_flow_does_not_fill_without_params(
 
 
 def test_wait_for_session_checkpoint_raises() -> None:
-    from linkedin_client.auth.wait import SessionWaitConfig, wait_for_session
-    from linkedin_client.exceptions import LoginCheckpointError
+    from linkedin_search_core.auth.wait import SessionWaitConfig, wait_for_session
+    from linkedin_search_core.exceptions import LoginCheckpointError
 
     page = _FakePage()
     page.url = "https://www.linkedin.com/checkpoint/challenge"
@@ -156,8 +156,8 @@ def test_wait_for_session_checkpoint_raises() -> None:
 
 
 def test_wait_for_session_timeout_raises() -> None:
-    from linkedin_client.auth.wait import SessionWaitConfig, wait_for_session
-    from linkedin_client.exceptions import LoginTimeoutError
+    from linkedin_search_core.auth.wait import SessionWaitConfig, wait_for_session
+    from linkedin_search_core.exceptions import LoginTimeoutError
 
     page = _FakePage()
     page.url = "https://www.linkedin.com/login"
@@ -167,19 +167,19 @@ def test_wait_for_session_timeout_raises() -> None:
 
 
 def test_client_login_uses_email_flow(monkeypatch: pytest.MonkeyPatch) -> None:
-    from linkedin_client import LinkedInClient, LinkedInClientConfig
-    from linkedin_client.auth.methods import LoginMethod
-    from linkedin_client.browser import BrowserConfig
+    from linkedin_search_core import LinkedInClientConfig, LinkedInSession
+    from linkedin_search_core.auth.methods import LoginMethod
+    from linkedin_search_core.browser import BrowserConfig
 
     calls: list[tuple[str, object | None]] = []
 
     def _email_run(self, page, context) -> None:  # type: ignore[no-untyped-def]
         calls.append(("email", getattr(self, "_params", None)))
 
-    monkeypatch.setattr("linkedin_client.client.EmailPasswordLoginFlow.run", _email_run)
+    monkeypatch.setattr("linkedin_search_core.session.EmailPasswordLoginFlow.run", _email_run)
 
     cfg = LinkedInClientConfig(browser=BrowserConfig(headless=True, timeout_ms=1000))
-    client = LinkedInClient(config=cfg)
+    client = LinkedInSession(config=cfg)
 
     class _Handle:
         def __init__(self) -> None:
@@ -200,19 +200,19 @@ def test_client_login_uses_email_flow(monkeypatch: pytest.MonkeyPatch) -> None:
 
 
 def test_client_login_uses_social_flow(monkeypatch: pytest.MonkeyPatch) -> None:
-    from linkedin_client import LinkedInClient, LinkedInClientConfig
-    from linkedin_client.auth.methods import LoginMethod
-    from linkedin_client.browser import BrowserConfig
+    from linkedin_search_core import LinkedInClientConfig, LinkedInSession
+    from linkedin_search_core.auth.methods import LoginMethod
+    from linkedin_search_core.browser import BrowserConfig
 
     calls: list[str] = []
 
     def _social_run(self, page, context) -> None:  # type: ignore[no-untyped-def]
         calls.append("social")
 
-    monkeypatch.setattr("linkedin_client.client.SocialLoginFlow.run", _social_run)
+    monkeypatch.setattr("linkedin_search_core.session.SocialLoginFlow.run", _social_run)
 
     cfg = LinkedInClientConfig(browser=BrowserConfig(headless=True, timeout_ms=1000))
-    client = LinkedInClient(config=cfg)
+    client = LinkedInSession(config=cfg)
 
     class _Handle:
         def __init__(self) -> None:
