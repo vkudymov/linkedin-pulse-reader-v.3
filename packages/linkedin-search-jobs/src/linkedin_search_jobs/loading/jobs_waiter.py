@@ -27,7 +27,13 @@ class JobsWaiter:
         "body",
     )
 
-    job_card_anchor_selector: str = "a[href*='/jobs/view/']"
+    job_card_anchor_selector: str = (
+        "li[data-occludable-job-id], div[data-job-id], "
+        "li.scaffold-layout__list-item, "
+        "div[componentkey^='job-card-component-ref-'], "
+        "div[role='button'][componentkey^='job-card'], "
+        "a[href*='/jobs/view/']"
+    )
 
     def wait_for_jobs_ready(self, page: Page) -> None:
         deadline = time.time() + (self.timeout_ms / 1000.0)

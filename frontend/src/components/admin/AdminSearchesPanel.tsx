@@ -6,12 +6,14 @@ import { useSearchParams } from "next/navigation";
 import { useTranslations } from "next-intl";
 
 import { useRouter } from "@/i18n/navigation";
+import { SearchTariffSummary } from "@/components/SearchTariffSummary";
 import { EmailReportFields } from "@/components/searches/EmailReportFields";
 import { PromptPicker, type PromptOption } from "@/components/searches/PromptPicker";
 import { SearchRunButton } from "@/components/searches/SearchRunButton";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import type { AdminUserOption } from "@/lib/admin/users";
+import { isSearchTariffInfo, pickSearchTariff, type SearchTariffInfo } from "@/lib/searchTariffs";
 import { cn } from "@/lib/utils";
 
 type PromptRow = {
@@ -65,6 +67,7 @@ export function AdminSearchesPanel({
   initialUsers?: AdminUserOption[];
 }) {
   const t = useTranslations("adminSearches");
+  const tTariff = useTranslations("searchTariff");
   const router = useRouter();
   const searchParams = useSearchParams();
 
@@ -86,6 +89,7 @@ export function AdminSearchesPanel({
   const [expandedById, setExpandedById] = useState<Record<string, boolean>>({});
   const [promptsByUserId, setPromptsByUserId] = useState<Record<string, PromptOption[]>>({});
   const [promptsLoadingByUserId, setPromptsLoadingByUserId] = useState<Record<string, boolean>>({});
+  const [tariffs, setTariffs] = useState<SearchTariffInfo[]>([]);
 
   const queryString = useMemo(() => {
     const p = new URLSearchParams();
@@ -117,11 +121,23 @@ export function AdminSearchesPanel({
     [router, searchParams],
   );
 
+  const loadTariffs = useCallback(async () => {
+    const resp = await fetch("/api/admin/search-tariffs", { cache: "no-store" });
+    const text = await resp.text().catch(() => "");
+    if (!resp.ok) return;
+    const json = text ? (JSON.parse(text) as unknown) : null;
+    const items = Array.isArray(json) ? json.filter(isSearchTariffInfo) : [];
+    setTariffs(items);
+  }, []);
+
   const load = useCallback(async () => {
     setLoading(true);
     setError(null);
     try {
-      const resp = await fetch(`/api/admin/searches?${queryString}`, { cache: "no-store" });
+      const [resp] = await Promise.all([
+        fetch(`/api/admin/searches?${queryString}`, { cache: "no-store" }),
+        loadTariffs(),
+      ]);
       const text = await resp.text().catch(() => "");
       if (!resp.ok) throw new Error(text || t("errors.load"));
       const json = (text ? (JSON.parse(text) as ListResponse) : null) as ListResponse | null;
@@ -134,7 +150,7 @@ export function AdminSearchesPanel({
     } finally {
       setLoading(false);
     }
-  }, [queryString, t]);
+  }, [loadTariffs, queryString, t]);
 
   useEffect(() => {
     const handle = window.setTimeout(() => {
@@ -267,6 +283,8 @@ export function AdminSearchesPanel({
           const saving = Boolean(savingById[r.id]);
           const hasDraft = Object.keys(draft).length > 0;
           const expanded = expandedById[r.id] === true;
+          const tariffId = ((draft.search_tariff_id ?? r.search_tariff_id) || null) as string | null;
+          const tariff = pickSearchTariff(tariffId, tariffs);
           return (
             <div key={r.id} className="rounded-lg border border-border bg-card p-4">
               <div className="flex flex-wrap items-center justify-between gap-2">
@@ -287,6 +305,11 @@ export function AdminSearchesPanel({
                     {locale === "en" ? "Created" : "Создан"}: {fmtDt(r.created_at, locale)} ·{" "}
                     {locale === "en" ? "Last run" : "Последний запуск"}: {fmtDt(r.last_run_at, locale)}
                   </div>
+                  <SearchTariffSummary
+                    tariff={tariff}
+                    kind={r.search_type_code === "jobs" ? "job" : "post"}
+                    className="mt-2"
+                  />
                 </div>
                 <div className="flex flex-wrap items-start justify-end gap-2">
                   <SearchRunButton
@@ -327,13 +350,23 @@ export function AdminSearchesPanel({
                 </div>
 
                 <div>
-                  <Label>{locale === "en" ? "Tariff id" : "Tariff id"}</Label>
-                  <input
+                  <Label>{tTariff("label")}</Label>
+                  <select
                     className="mt-1 w-full rounded-md border border-border bg-background px-3 py-2 text-sm"
-                    value={((draft.search_tariff_id ?? r.search_tariff_id) || "") as string}
+                    value={tariffId || ""}
                     onChange={(e) => onDraft(r.id, { search_tariff_id: e.target.value || null })}
-                    placeholder="uuid or empty"
-                  />
+                  >
+                    <option value="">{tTariff("default")}</option>
+                    {tariffs.map((tariffOption) => (
+                      <option key={tariffOption.id} value={tariffOption.id}>
+                        {tariffOption.title} · {tTariff("option", {
+                          scan: tariffOption.max_scan_count,
+                          found: tariffOption.target_found_count,
+                          min: tariffOption.min_relevance_percent,
+                        })}
+                      </option>
+                    ))}
+                  </select>
                 </div>
                 <EmailReportFields
                   enabled={Boolean(draft.email_report_enabled ?? r.email_report_enabled)}

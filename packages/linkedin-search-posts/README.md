@@ -1,18 +1,22 @@
-# linkedin-search-posts
+# linkedin-pulse-search-posts
+
+PyPI package for LinkedIn feed post search. Python import: `linkedin_search_posts`.
+
+## Description
 
 LinkedIn feed post search. Depends on `linkedin-search-core` and does not import the jobs library.
 
 Requires Python 3.11+.
 
-## Install
+## Installation
 
 ```bash
-pip install linkedin-search-posts
+pip install linkedin-pulse-search-posts
 ```
 
 That also installs `linkedin-search-core`.
 
-Local editable install (core first):
+Local editable install from this monorepo (core first):
 
 ```bash
 pip install -e packages/linkedin-search-core
@@ -24,7 +28,7 @@ pip install -e packages/linkedin-search-posts
 - `linkedin-search-core>=0.1.0`
 - `playwright>=1.49.0`
 
-## Example
+## Usage
 
 ```python
 from linkedin_search_core import LinkedInSession

@@ -1,10 +1,12 @@
 # linkedin-search-jobs
 
+## Description
+
 LinkedIn job search. Depends on `linkedin-search-core` and does not import the posts library.
 
 Requires Python 3.11+.
 
-## Install
+## Installation
 
 ```bash
 pip install linkedin-search-jobs
@@ -24,7 +26,7 @@ pip install -e packages/linkedin-search-jobs
 - `linkedin-search-core>=0.1.0`
 - `playwright>=1.49.0`
 
-## Example
+## Usage
 
 ```python
 from linkedin_search_core import LinkedInSession

@@ -19,6 +19,8 @@ cd worker
 python3 -m pip install -e ../packages/linkedin-search-core -e ../packages/linkedin-search-jobs -e ../packages/linkedin-search-posts -e LinkedInClient -e PostAnalyzer -e Storage -e api -e SearchReportMailer
 ```
 
+Пакет постов на PyPI: `linkedin-pulse-search-posts` (каталог в репозитории — `packages/linkedin-search-posts`).
+
 ## Переменные окружения
 
 Создайте `worker/.env` (не коммитится). Минимальный набор для Supabase worker:

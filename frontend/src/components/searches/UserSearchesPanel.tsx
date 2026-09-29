@@ -6,11 +6,13 @@ import { useSearchParams } from "next/navigation";
 import { useTranslations } from "next-intl";
 
 import { Link, useRouter } from "@/i18n/navigation";
+import { SearchTariffSummary } from "@/components/SearchTariffSummary";
 import { EmailReportFields } from "@/components/searches/EmailReportFields";
 import { PromptPicker, type PromptOption } from "@/components/searches/PromptPicker";
 import { SearchRunButton } from "@/components/searches/SearchRunButton";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
+import type { SearchTariffInfo } from "@/lib/searchTariffs";
 import { cn } from "@/lib/utils";
 
 type SearchRow = {
@@ -31,6 +33,8 @@ type SearchRow = {
   comment_prompt: string | null;
   email_report_enabled?: boolean;
   email_report_format?: string | null;
+  search_tariff_id?: string | null;
+  search_tariff?: SearchTariffInfo | null;
   created_at: string | null;
   updated_at: string | null;
 };
@@ -444,6 +448,11 @@ export function UserSearchesPanel({ locale }: { locale: "ru" | "en" }) {
                     {locale === "en" ? "Created" : "Создан"}: {fmtDt(r.created_at, locale)} ·{" "}
                     {locale === "en" ? "Last run" : "Последний запуск"}: {fmtDt(r.last_run_at, locale)}
                   </div>
+                  <SearchTariffSummary
+                    tariff={r.search_tariff ?? null}
+                    kind={r.search_type_code === "jobs" ? "job" : "post"}
+                    className="mt-2"
+                  />
                 </div>
                 <div className="flex flex-wrap items-start justify-end gap-2">
                   <SearchRunButton

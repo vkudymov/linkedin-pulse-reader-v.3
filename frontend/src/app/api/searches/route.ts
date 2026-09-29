@@ -1,6 +1,7 @@
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { LINKED_PROMPT_SELECT, attachLinkedPrompts } from "@/lib/linkedPrompts";
 import { requireOwnedPrompt } from "@/lib/promptLibrary";
+import { attachSearchTariff, loadSearchTariffs } from "@/lib/searchTariffs";
 import { getSearchTypeId } from "@/lib/searchTypes";
 
 function mapSearch(row: Record<string, unknown>) {
@@ -37,8 +38,9 @@ export async function GET(request: Request) {
   if (q) req = req.ilike("title", `%${q}%`);
   const resp = await req.order("created_at", { ascending: false }).range(offset, offset + limit - 1);
   if (resp.error) return Response.json({ ok: false, error: resp.error.message }, { status: 400 });
+  const tariffs = await loadSearchTariffs(supabase);
   const items = (Array.isArray(resp.data) ? resp.data : []).map((r) =>
-    mapSearch(r as unknown as Record<string, unknown>),
+    attachSearchTariff(mapSearch(r as unknown as Record<string, unknown>), tariffs),
   );
   return Response.json({ items, total: resp.count ?? items.length, limit, offset });
 }
@@ -110,5 +112,9 @@ export async function POST(request: Request) {
   if (created.error || !created.data) {
     return Response.json({ ok: false, error: created.error?.message || "create failed" }, { status: 400 });
   }
-  return Response.json({ ok: true, search: mapSearch(created.data as unknown as Record<string, unknown>) }, { status: 200 });
+  const tariffs = await loadSearchTariffs(supabase);
+  return Response.json(
+    { ok: true, search: attachSearchTariff(mapSearch(created.data as unknown as Record<string, unknown>), tariffs) },
+    { status: 200 },
+  );
 }

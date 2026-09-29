@@ -7,6 +7,7 @@ from typing import Any
 from linkedin_search_core.exceptions import BrowserLifecycleError, FeedLoadError
 from linkedin_search_core.session import LinkedInSession
 from linkedin_search_core.loading.scroller import HumanScroller
+from linkedin_search_jobs.loading.guest_jobs import fetch_guest_jobs
 from linkedin_search_jobs.loading.jobs_waiter import JobsWaiter
 from linkedin_search_jobs.models.job import Job
 from linkedin_search_jobs.navigation.jobs import JobsNavigator
@@ -60,8 +61,7 @@ class JobSearch:
                 navigator.goto_search(
                     session.page,
                     keywords=keywords.strip(),
-                    # Do not rely on URL `location=` guessing; we set it via UI below.
-                    location=None,
+                    location=location_text,
                     filters=filters,
                 )
                 waiter.wait_for_jobs_ready(session.page)
@@ -93,7 +93,7 @@ class JobSearch:
                         navigator.goto_search(
                             session.page,
                             keywords=keywords.strip(),
-                            location=None,
+                            location=location_text,
                             filters=filters,
                         )
                         waiter.wait_for_jobs_ready(session.page)
@@ -137,6 +137,17 @@ class JobSearch:
                         if no_progress >= session._client_cfg.scroll.max_no_progress_scrolls:
                             break
 
+                if len(results) < limit:
+                    ui_count = len(results)
+                    extra = fetch_guest_jobs(
+                        session.page,
+                        keywords=keywords.strip(),
+                        location=location_text,
+                        filters=filters,
+                        limit=limit - ui_count,
+                        skip_ids=seen_job_ids,
+                    )
+                    merge(extra)
                 return results[:limit]
             except FeedLoadError:
                 if attempt == 0:

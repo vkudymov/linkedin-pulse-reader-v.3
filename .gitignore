@@ -1,12 +1,28 @@
 cookies.json
+cookies*.json
+storage_state.json
+session_snapshot.json
+*.session
+linkedin-session*
+credentials.json
+secrets.json
+.secrets
 posts.json
 selected_posts.json
 worker/results/*.json
 .env
 .venv/
+venv/
 __pycache__/
 *.pyc
+*.pyo
+*.egg-info/
+*.egg
 dist/
+build/
+**/dist/
+**/build/
+**/*.egg-info/
 .pytest_cache/
 
 # Cursor debug session logs

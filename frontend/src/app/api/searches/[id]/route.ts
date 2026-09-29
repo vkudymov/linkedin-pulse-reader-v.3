@@ -1,6 +1,7 @@
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { LINKED_PROMPT_SELECT, attachLinkedPrompts } from "@/lib/linkedPrompts";
 import { requireOwnedPrompt } from "@/lib/promptLibrary";
+import { attachSearchTariff, loadSearchTariffs } from "@/lib/searchTariffs";
 
 function mapSearch(row: Record<string, unknown>) {
   const attached = attachLinkedPrompts(row);
@@ -38,8 +39,6 @@ export async function PATCH(request: Request, ctx: { params: Promise<{ id: strin
   const payload: Record<string, unknown> = { updated_at: new Date().toISOString() };
   if (typeof body.title === "string") payload.title = body.title.trim();
   if (body.status === "active" || body.status === "paused") payload.status = body.status;
-  if (typeof body.search_tariff_id === "string") payload.search_tariff_id = body.search_tariff_id.trim() || null;
-  if (body.search_tariff_id === null) payload.search_tariff_id = null;
   if (typeof body.email_report_enabled === "boolean") payload.email_report_enabled = body.email_report_enabled;
   if (typeof body.email_report_format === "string") payload.email_report_format = body.email_report_format;
 
@@ -87,7 +86,8 @@ export async function PATCH(request: Request, ctx: { params: Promise<{ id: strin
   if (updated.error || !updated.data) {
     return Response.json({ ok: false, error: updated.error?.message || "update failed" }, { status: 400 });
   }
-  return Response.json(mapSearch(updated.data as unknown as Record<string, unknown>));
+  const tariffs = await loadSearchTariffs(supabase);
+  return Response.json(attachSearchTariff(mapSearch(updated.data as unknown as Record<string, unknown>), tariffs));
 }
 
 export async function DELETE(_request: Request, ctx: { params: Promise<{ id: string }> }) {

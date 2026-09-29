@@ -4,7 +4,7 @@
 
 - `frontend/` — Next.js UI (регистрация/вход, просмотр найденных постов)
 - `worker/` — Python worker (сбор постов, запись в Supabase, анализ через LLM)
-- `packages/` — три библиотеки поиска: `linkedin-search-core`, `linkedin-search-jobs`, `linkedin-search-posts` (см. `packages/README.md`)
+- `packages/` — три библиотеки поиска: `linkedin-search-core`, `linkedin-search-jobs`, `linkedin-pulse-search-posts` (код в `packages/linkedin-search-posts`; см. `packages/README.md`)
 
 ## Быстрый старт
 

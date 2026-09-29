@@ -10,9 +10,13 @@ readme = "README.md"
 requires-python = ">=3.11"
 license = { text = "Proprietary" }
 authors = [{ name = "LinkedIn Pulse Reader" }]
+maintainers = [{ name = "LinkedIn Pulse Reader" }]
 keywords = ["linkedin", "jobs", "playwright"]
 classifiers = [
   "Development Status :: 3 - Alpha",
+  "Intended Audience :: Developers",
+  "License :: Other/Proprietary License",
+  "Operating System :: OS Independent",
   "Programming Language :: Python :: 3",
   "Programming Language :: Python :: 3.11",
   "Programming Language :: Python :: 3.12",
@@ -24,9 +28,21 @@ dependencies = [
   "playwright>=1.49.0",
 ]
 
+[project.urls]
+Homepage = "https://github.com/vkudymov/linkedin-pulse-reader-v.3"
+Repository = "https://github.com/vkudymov/linkedin-pulse-reader-v.3"
+Issues = "https://github.com/vkudymov/linkedin-pulse-reader-v.3/issues"
+
 [project.optional-dependencies]
 dev = [
   "pytest>=8.0.0",
+]
+
+[tool.hatch.build.targets.sdist]
+include = [
+  "/src",
+  "/README.md",
+  "/LICENSE",
 ]
 
 [tool.hatch.build.targets.wheel]
