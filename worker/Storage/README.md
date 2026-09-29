@@ -61,6 +61,28 @@ Then pass the user's JWT to `create_supabase_client(user_jwt=...)`.
 
 Local Supabase URLs are rejected by default. Use `SUPABASE_ALLOW_LOCAL_URL=1` only for explicit local debugging.
 
+## LinkedIn session encryption
+
+`linkedin_accounts.cookies_json` and `linkedin_accounts.session_snapshot` are encrypted on write with Fernet. The key is `LINKEDIN_COOKIES_ENCRYPTION_KEY` (never commit it). After decrypt, callers still receive the Playwright cookie list and the snapshot dict.
+
+Generate a key:
+
+```bash
+python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"
+```
+
+Set `LINKEDIN_COOKIES_ENCRYPTION_KEY` in the worker environment before deploying this code, then encrypt rows that are still plaintext:
+
+```bash
+cd worker
+python scripts/encrypt_linkedin_accounts.py --dry-run
+python scripts/encrypt_linkedin_accounts.py
+```
+
+The script is idempotent and prints only counts. Reads of not-yet-encrypted rows still return the original JSON until the script runs. New writes fail if the key is missing.
+
+Apply `../supabase/migrations/20260930120000_session_encryption_quota_and_lost_runs.sql` for the atomic post-search counter and the `lost` search-run status. That migration does not encrypt existing rows.
+
 ## Install
 
 From the repository root:

@@ -4,6 +4,7 @@ from fastapi import APIRouter, Depends, HTTPException, status
 
 from ..deps.auth import _get_supabase_admin_client, require_user_id
 from ..search_runs.helpers import start_job_search_session
+from ..search_runs.status import poll_search_run
 from .schemas import JobSearchRunResponse, JobSearchStartRequest
 from .sessions import JobSearchSessionManager
 
@@ -72,8 +73,16 @@ def get_status(
     session_id: str,
     user_id: str = Depends(require_user_id),
 ) -> JobSearchRunResponse:
-    sess = _sessions.get(user_id=user_id, session_id=session_id)
-    if sess is None:
+    polled = poll_search_run(
+        user_id=user_id,
+        session_id=session_id,
+        executor_alive=_sessions.owns(user_id=user_id, session_id=session_id),
+    )
+    if polled is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Session not found.")
-    return JobSearchRunResponse(session_id=sess.session_id, status=sess.status, message=sess.message)
+    return JobSearchRunResponse(
+        session_id=polled["session_id"],
+        status=polled["status"],  # type: ignore[arg-type]
+        message=polled["message"],
+    )
 

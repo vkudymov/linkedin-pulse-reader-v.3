@@ -8,10 +8,11 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from ..deps.auth import require_user_id
 from ..job_search.schemas import JobSearchRunResponse, JobSearchStartRequest
 from ..job_search.sessions import JobSearchSessionManager
-from ..post_search.routes import _ensure_not_blocked_and_increment_counter  # type: ignore
 from ..post_search.schemas import PostSearchRunResponse
 from ..post_search.sessions import PostSearchSessionManager
+from ..search_quota import SearchQuotaError, charge_post_search_quota_after_start, raise_for_quota
 from ..search_runs.helpers import start_job_search_session, start_post_search_session
+from ..search_runs.status import poll_search_run
 from ..settings import get_settings
 from .schemas import (
     AdminJobSearchRow,
@@ -936,16 +937,23 @@ def admin_start_post_search_run(
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Post search not found.")
         post_search_id = str(row.get("id"))
 
-    _ensure_not_blocked_and_increment_counter(user_id=target_user_id)
-    sess = start_post_search_session(
-        sessions=_admin_sessions,
-        user_id=target_user_id,
-        post_search_id=post_search_id,
-        limit=req.limit,
-        account_label=req.account_label,
-        initiated_by="admin",
-        admin_actor_id=admin_user_id,
-    )
+    _ensure_not_blocked(user_id=target_user_id)
+    try:
+        sess = charge_post_search_quota_after_start(
+            client=client,
+            user_id=target_user_id,
+            start=lambda: start_post_search_session(
+                sessions=_admin_sessions,
+                user_id=target_user_id,
+                post_search_id=post_search_id,
+                limit=req.limit,
+                account_label=req.account_label,
+                initiated_by="admin",
+                admin_actor_id=admin_user_id,
+            ),
+        )
+    except SearchQuotaError as exc:
+        raise_for_quota(exc)
     return PostSearchRunResponse(session_id=sess.session_id, status=sess.status, message=sess.message)
 
 
@@ -955,10 +963,18 @@ def admin_get_post_search_status(
     session_id: str,
     _: str = Depends(require_admin_user_id),
 ) -> PostSearchRunResponse:
-    sess = _admin_sessions.get(user_id=target_user_id, session_id=session_id)
-    if sess is None:
+    polled = poll_search_run(
+        user_id=target_user_id,
+        session_id=session_id,
+        executor_alive=_admin_sessions.owns(user_id=target_user_id, session_id=session_id),
+    )
+    if polled is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Session not found.")
-    return PostSearchRunResponse(session_id=sess.session_id, status=sess.status, message=sess.message)
+    return PostSearchRunResponse(
+        session_id=polled["session_id"],
+        status=polled["status"],
+        message=polled["message"],
+    )
 
 
 @router.post("/users/{target_user_id}/job-search/run", response_model=JobSearchRunResponse)
@@ -1135,7 +1151,7 @@ def list_search_runs(
     from storage.domain.pulse.search_runs import SearchRunRepository  # type: ignore[import-not-found]
 
     kind_val = kind if kind in ("post", "job") else None
-    status_val = status if status in ("running", "done", "error") else None
+    status_val = status if status in ("running", "done", "error", "lost") else None
     order_val = "asc" if order == "asc" else "desc"
 
     repo = SearchRunRepository(_get_service_client())
@@ -1596,10 +1612,18 @@ def admin_get_job_search_status(
     session_id: str,
     _: str = Depends(require_admin_user_id),
 ) -> JobSearchRunResponse:
-    sess = _admin_job_sessions.get(user_id=target_user_id, session_id=session_id)
-    if sess is None:
+    polled = poll_search_run(
+        user_id=target_user_id,
+        session_id=session_id,
+        executor_alive=_admin_job_sessions.owns(user_id=target_user_id, session_id=session_id),
+    )
+    if polled is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Session not found.")
-    return JobSearchRunResponse(session_id=sess.session_id, status=sess.status, message=sess.message)
+    return JobSearchRunResponse(
+        session_id=polled["session_id"],
+        status=polled["status"],  # type: ignore[arg-type]
+        message=polled["message"],
+    )
 
 
 def _set_blocked(*, user_id: str, blocked: bool) -> None:

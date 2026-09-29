@@ -86,7 +86,7 @@ export function PostSearchRunner({
           }
           return;
         }
-        if (stJson.status === "error") {
+        if (stJson.status === "error" || stJson.status === "lost") {
           throw new Error(stJson.message || t("errors.runFailed"));
         }
       }

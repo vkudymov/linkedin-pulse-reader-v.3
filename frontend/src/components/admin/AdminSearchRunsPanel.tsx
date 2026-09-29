@@ -232,6 +232,7 @@ export function AdminSearchRunsPanel({
               <option value="running">{t("status.running")}</option>
               <option value="done">{t("status.done")}</option>
               <option value="error">{t("status.error")}</option>
+              <option value="lost">{t("status.lost")}</option>
             </select>
           </div>
           <div className="grid gap-2">
@@ -281,7 +282,7 @@ export function AdminSearchRunsPanel({
                     <span
                       className={cn(
                         "rounded-full px-2 py-0.5 text-xs",
-                        row.status === "error"
+                        row.status === "error" || row.status === "lost"
                           ? "bg-destructive/15 text-destructive"
                           : row.status === "done"
                             ? "bg-emerald-500/15 text-emerald-700 dark:text-emerald-300"
@@ -290,9 +291,13 @@ export function AdminSearchRunsPanel({
                     >
                       {row.status === "running"
                         ? t("status.running")
-                        : row.status === "error"
-                          ? t("status.error")
-                          : t("status.done")}
+                        : row.status === "done"
+                          ? t("status.done")
+                          : row.status === "lost"
+                            ? t("status.lost")
+                            : row.status === "error"
+                              ? t("status.error")
+                              : row.status}
                     </span>
                     {row.initiated_by === "admin" ? (
                       <span className="text-xs text-muted-foreground">{t("initiatedByAdmin")}</span>
