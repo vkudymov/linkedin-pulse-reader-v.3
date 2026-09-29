@@ -5,7 +5,7 @@ from typing import Any, Literal
 
 from storage.core.response import expect_single
 
-RunStatus = Literal["running", "done", "error"]
+RunStatus = Literal["running", "done", "error", "lost"]
 RunKind = Literal["post", "job"]
 
 
@@ -86,8 +86,50 @@ class SearchRunRepository:
         if matched_count is not None:
             payload["matched_count"] = matched_count
         if error is not None:
-            payload["error"] = error[:4000] if error else None
+            payload["error"] = (error[:240] or None) if error else None
         self._client.table("search_runs").update(payload).eq("id", run_id).execute()
+
+    def get_by_session_id(self, *, user_id: str, session_id: str) -> dict[str, Any] | None:
+        resp = (
+            self._client.table("search_runs")
+            .select("id,user_id,session_id,status,error,kind")
+            .eq("user_id", user_id)
+            .eq("session_id", session_id)
+            .limit(1)
+            .execute()
+        )
+        data = getattr(resp, "data", None)
+        if isinstance(data, list):
+            row = next((item for item in data if isinstance(item, dict)), None)
+            return row
+        if isinstance(data, dict):
+            return data
+        return None
+
+    def mark_lost_if_running(self, *, run_id: str, error: str) -> dict[str, Any] | None:
+        now = datetime.now(UTC).isoformat()
+        resp = (
+            self._client.table("search_runs")
+            .update(
+                {
+                    "status": "lost",
+                    "error": error[:240] if error else None,
+                    "finished_at": now,
+                    "updated_at": now,
+                }
+            )
+            .eq("id", run_id)
+            .eq("status", "running")
+            .select("id,user_id,session_id,status,error,kind")
+            .execute()
+        )
+        data = getattr(resp, "data", None)
+        if isinstance(data, list):
+            row = next((item for item in data if isinstance(item, dict)), None)
+            return row
+        if isinstance(data, dict):
+            return data
+        return None
 
     def finalize_if_running(
         self,

@@ -281,7 +281,7 @@ function PostSearchCard({
           await onSaved();
           return;
         }
-        if (stJson.status === "error") throw new Error(stJson.message || t("errors.runFailed"));
+        if (stJson.status === "error" || stJson.status === "lost") throw new Error(stJson.message || t("errors.runFailed"));
       }
       throw new Error(t("errors.runTimeout"));
     } catch (e: unknown) {

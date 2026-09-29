@@ -31,6 +31,15 @@ SUPABASE_SERVICE_ROLE_KEY="<service-role>"
 STORAGE_USER_ID="<auth.users.id>"
 STORAGE_ACCOUNT_LABEL="default"
 SEARCH_REPORT_FUNCTION_SECRET="<shared-secret-for-edge-function>"
+LINKEDIN_COOKIES_ENCRYPTION_KEY="<fernet-key>"
+```
+
+`LINKEDIN_COOKIES_ENCRYPTION_KEY` — ключ Fernet для `cookies_json` и `session_snapshot`. Сгенерировать: `python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"`. Ключ не коммитить. Уже сохранённые открытые сессии шифруются один раз:
+
+```bash
+cd worker
+python scripts/encrypt_linkedin_accounts.py --dry-run
+python scripts/encrypt_linkedin_accounts.py
 ```
 
 Важно: `STORAGE_USER_ID` должен совпадать с `auth.users.id`, который вы создали через фронтенд (`/register`). Тогда записи будут принадлежать этому пользователю и будут видны ему в UI.

@@ -389,7 +389,7 @@ export function AdminUsersTable({
           router.refresh();
           return;
         }
-        if (stJson.status === "error") {
+        if (stJson.status === "error" || stJson.status === "lost") {
           throw new Error(stJson.message || tPostSearch("errors.runFailed"));
         }
       }
@@ -442,7 +442,7 @@ export function AdminUsersTable({
           await refreshJobSearches(userId);
           return;
         }
-        if (stJson.status === "error") {
+        if (stJson.status === "error" || stJson.status === "lost") {
           throw new Error(stJson.message || tJobRunner("errors.runFailed"));
         }
       }
@@ -788,7 +788,7 @@ export function AdminUsersTable({
           router.refresh();
           return;
         }
-        if (stJson.status === "error") {
+        if (stJson.status === "error" || stJson.status === "lost") {
           throw new Error(stJson.message || tPostSearch("errors.runFailed"));
         }
       }
