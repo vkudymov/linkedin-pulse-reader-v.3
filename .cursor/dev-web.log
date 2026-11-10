@@ -25,3 +25,4 @@ Frontend → npm run dev (обычно http://localhost:3000)  (Ctrl+C — ос�
  GET /api/searches?limit=50 200 in 251ms (next.js: 3ms, application-code: 248ms)
  GET /ru/prompts 200 in 185ms (next.js: 8ms, application-code: 178ms)
  GET /api/prompts?limit=50 200 in 194ms (next.js: 1966µs, application-code: 192ms)
+[?25h

@@ -7,7 +7,11 @@ import { useTranslations } from "next-intl";
 
 import { useRouter } from "@/i18n/navigation";
 import { Button } from "@/components/ui/button";
-import { Label } from "@/components/ui/label";
+import {
+  LinkedInFilterRow,
+  LinkedInFilterSelect,
+  linkedinSelectFiltered,
+} from "@/components/ui/linkedin-filter-chip";
 import type { AdminUserOption } from "@/lib/admin/users";
 import { cn } from "@/lib/utils";
 
@@ -174,79 +178,69 @@ export function AdminSearchRunsPanel({
   return (
     <div className="space-y-6">
       <div className="rounded-2xl border border-border bg-card p-6">
-        <div className="grid gap-4 sm:grid-cols-2">
-          <div className="grid gap-2">
-            <Label>{t("filters.user")}</Label>
-            <select
-              className="h-11 rounded-full border border-border bg-secondary px-4 text-sm"
-              value={userId}
-              onChange={(e) => pushFilters({ user_id: e.target.value })}
-            >
-              <option value="">{t("filters.allUsers")}</option>
-              {users.map((u) => (
-                <option key={u.id} value={u.id}>
-                  {u.full_name || u.email || u.id}
-                </option>
-              ))}
-            </select>
-          </div>
-          <div className="grid gap-2">
-            <Label>{t("filters.kind")}</Label>
-            <select
-              className="h-11 rounded-full border border-border bg-secondary px-4 text-sm"
-              value={kind}
-              onChange={(e) => pushFilters({ kind: e.target.value })}
-            >
-              <option value="all">{t("filters.allKinds")}</option>
-              <option value="post">{t("filters.posts")}</option>
-              <option value="job">{t("filters.jobs")}</option>
-            </select>
-          </div>
-          <div className="grid gap-2">
-            <Label>{t("filters.search")}</Label>
-            <select
-              className="h-11 rounded-full border border-border bg-secondary px-4 text-sm disabled:opacity-50"
-              value={selectedSearchId}
-              disabled={!userId || kind === "all"}
-              onChange={(e) => {
-                const id = e.target.value;
-                if (kind === "post" || kind === "job") pushFilters({ search_id: id });
-              }}
-            >
-              <option value="">{t("filters.allSearches")}</option>
-              {searchOptions.map((s) => (
-                <option key={s.id} value={s.id}>
-                  {s.title}
-                </option>
-              ))}
-            </select>
-          </div>
-          <div className="grid gap-2">
-            <Label>{t("filters.status")}</Label>
-            <select
-              className="h-11 rounded-full border border-border bg-secondary px-4 text-sm"
-              value={status}
-              onChange={(e) => pushFilters({ status: e.target.value })}
-            >
-              <option value="all">{t("filters.allStatuses")}</option>
-              <option value="running">{t("status.running")}</option>
-              <option value="done">{t("status.done")}</option>
-              <option value="error">{t("status.error")}</option>
-              <option value="lost">{t("status.lost")}</option>
-            </select>
-          </div>
-          <div className="grid gap-2">
-            <Label>{t("filters.sort")}</Label>
-            <select
-              className="h-11 rounded-full border border-border bg-secondary px-4 text-sm"
-              value={order}
-              onChange={(e) => pushFilters({ order: e.target.value })}
-            >
-              <option value="desc">{t("filters.newest")}</option>
-              <option value="asc">{t("filters.oldest")}</option>
-            </select>
-          </div>
-        </div>
+        <LinkedInFilterRow>
+          <LinkedInFilterSelect
+            aria-label={t("filters.user")}
+            active={linkedinSelectFiltered(userId, [""])}
+            value={userId}
+            onChange={(e) => pushFilters({ user_id: e.target.value })}
+          >
+            <option value="">{t("filters.allUsers")}</option>
+            {users.map((u) => (
+              <option key={u.id} value={u.id}>
+                {u.full_name || u.email || u.id}
+              </option>
+            ))}
+          </LinkedInFilterSelect>
+          <LinkedInFilterSelect
+            aria-label={t("filters.kind")}
+            active={linkedinSelectFiltered(kind)}
+            value={kind}
+            onChange={(e) => pushFilters({ kind: e.target.value })}
+          >
+            <option value="all">{t("filters.allKinds")}</option>
+            <option value="post">{t("filters.posts")}</option>
+            <option value="job">{t("filters.jobs")}</option>
+          </LinkedInFilterSelect>
+          <LinkedInFilterSelect
+            aria-label={t("filters.search")}
+            active={linkedinSelectFiltered(selectedSearchId, [""])}
+            value={selectedSearchId}
+            disabled={!userId || kind === "all"}
+            onChange={(e) => {
+              const id = e.target.value;
+              if (kind === "post" || kind === "job") pushFilters({ search_id: id });
+            }}
+          >
+            <option value="">{t("filters.allSearches")}</option>
+            {searchOptions.map((s) => (
+              <option key={s.id} value={s.id}>
+                {s.title}
+              </option>
+            ))}
+          </LinkedInFilterSelect>
+          <LinkedInFilterSelect
+            aria-label={t("filters.status")}
+            active={linkedinSelectFiltered(status)}
+            value={status}
+            onChange={(e) => pushFilters({ status: e.target.value })}
+          >
+            <option value="all">{t("filters.allStatuses")}</option>
+            <option value="running">{t("status.running")}</option>
+            <option value="done">{t("status.done")}</option>
+            <option value="error">{t("status.error")}</option>
+            <option value="lost">{t("status.lost")}</option>
+          </LinkedInFilterSelect>
+          <LinkedInFilterSelect
+            aria-label={t("filters.sort")}
+            active={order !== "desc"}
+            value={order}
+            onChange={(e) => pushFilters({ order: e.target.value })}
+          >
+            <option value="desc">{t("filters.newest")}</option>
+            <option value="asc">{t("filters.oldest")}</option>
+          </LinkedInFilterSelect>
+        </LinkedInFilterRow>
         <div className="mt-4 flex items-center gap-2">
           <Button type="button" variant="outline" className="rounded-full" onClick={() => void loadRuns()} disabled={loading}>
             {loading ? <RefreshCw className="mr-2 size-4 animate-spin" /> : null}

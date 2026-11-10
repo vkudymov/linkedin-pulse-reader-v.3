@@ -7,6 +7,12 @@ import { useTranslations } from "next-intl";
 
 import { useRouter } from "@/i18n/navigation";
 import { Button } from "@/components/ui/button";
+import {
+  LinkedInFilterInput,
+  LinkedInFilterRow,
+  LinkedInFilterSelect,
+  linkedinSelectFiltered,
+} from "@/components/ui/linkedin-filter-chip";
 import { Label } from "@/components/ui/label";
 import { DEFAULT_COMMENT_PROMPT, DEFAULT_SEARCH_PROMPT } from "@/lib/defaultPrompts";
 import { cn } from "@/lib/utils";
@@ -232,38 +238,32 @@ export function UserPromptsPanel({ locale }: { locale: "ru" | "en" }) {
 
   return (
     <div className="space-y-4">
-      <div className="flex flex-wrap items-end gap-3">
-        <div className="min-w-[160px]">
-          <Label>{t("fields.role")}</Label>
-          <select
-            className="mt-1 w-full rounded-md border border-border bg-background px-3 py-2 text-sm"
-            value={role}
-            onChange={(e) => pushFilters({ role: e.target.value })}
-          >
-            <option value="all">{locale === "en" ? "All" : "Все"}</option>
-            <option value="filter">{t("roles.filter")}</option>
-            <option value="search">{t("roles.search")}</option>
-            <option value="comment">{t("roles.comment")}</option>
-          </select>
-        </div>
-
-        <div className="min-w-[220px] flex-1">
-          <Label>{t("fields.title")}</Label>
-          <input
-            className="mt-1 w-full rounded-md border border-border bg-background px-3 py-2 text-sm"
-            value={q}
-            onChange={(e) => pushFilters({ q: e.target.value })}
-            placeholder={locale === "en" ? "Text..." : "Текст..."}
-          />
-        </div>
-
-        <Button variant="outline" onClick={load} disabled={loading}>
+      <LinkedInFilterRow>
+        <LinkedInFilterSelect
+          aria-label={t("fields.role")}
+          active={linkedinSelectFiltered(role)}
+          value={role}
+          onChange={(e) => pushFilters({ role: e.target.value })}
+        >
+          <option value="all">{locale === "en" ? "All" : "Все"}</option>
+          <option value="filter">{t("roles.filter")}</option>
+          <option value="search">{t("roles.search")}</option>
+          <option value="comment">{t("roles.comment")}</option>
+        </LinkedInFilterSelect>
+        <LinkedInFilterInput
+          aria-label={t("fields.title")}
+          className="min-w-[10rem] flex-1 sm:max-w-xs"
+          value={q}
+          onChange={(e) => pushFilters({ q: e.target.value })}
+          placeholder={locale === "en" ? "Text..." : "Текст..."}
+        />
+        <Button variant="outline" className="h-8 rounded-full px-4 text-sm font-semibold" onClick={load} disabled={loading}>
           {t("actions.refresh")}
         </Button>
-        <Button type="button" onClick={() => setCreateOpen((v) => !v)}>
+        <Button type="button" className="h-8 rounded-full px-4 text-sm font-semibold" onClick={() => setCreateOpen((v) => !v)}>
           {t("createTitle")}
         </Button>
-      </div>
+      </LinkedInFilterRow>
 
       {createOpen ? (
         <div className="rounded-lg border border-border bg-card p-4">

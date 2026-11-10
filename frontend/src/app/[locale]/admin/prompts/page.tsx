@@ -2,7 +2,6 @@ import { redirect } from "next/navigation";
 import { getTranslations } from "next-intl/server";
 
 import { AppHeader } from "@/components/AppHeader";
-import { AdminSectionTabs } from "@/components/admin/AdminSectionTabs";
 import { AdminPromptsPanel } from "@/components/admin/AdminPromptsPanel";
 import { loadAdminUserOptions } from "@/lib/admin/users";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
@@ -35,10 +34,9 @@ export default async function AdminPromptsPage({
 
   return (
     <div className="min-h-screen bg-background text-foreground">
-      <AppHeader title={tAdmin("title")} subtitle={data.user.email ?? null} active="admin" isAdmin />
+      <AppHeader title={tAdmin("title")} subtitle={data.user.email ?? null} isAdmin />
 
       <main className="mx-auto max-w-5xl px-6 py-6">
-        <AdminSectionTabs active="prompts" />
         <AdminPromptsPanel locale={loc} initialUsers={userOptions} />
       </main>
     </div>

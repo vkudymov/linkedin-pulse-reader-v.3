@@ -2,6 +2,12 @@
 
 import { useTranslations } from "next-intl";
 
+import {
+  LinkedInFilterButton,
+  LinkedInFilterRow,
+  LinkedInFilterSelect,
+  linkedinFilterChipClass,
+} from "@/components/ui/linkedin-filter-chip";
 import { cn } from "@/lib/utils";
 import {
   type DatePostedFilter,
@@ -9,20 +15,6 @@ import {
   type ExperienceFilter,
   type LinkedInJobFilters,
 } from "@/lib/linkedinJobFilters";
-
-function pillClass(active: boolean, disabled?: boolean) {
-  return cn(
-    "inline-flex h-9 items-center rounded-full border px-3 text-sm",
-    active
-      ? "border-foreground bg-foreground text-background"
-      : "border-border bg-background text-foreground",
-    disabled ? "cursor-default opacity-80" : "cursor-pointer",
-  );
-}
-
-function selectClass(active: boolean, disabled?: boolean) {
-  return cn(pillClass(active, disabled), disabled && "pointer-events-none");
-}
 
 export function LinkedInJobFiltersBar({
   value,
@@ -41,10 +33,9 @@ export function LinkedInJobFiltersBar({
 
   return (
     <div className="grid gap-2">
-      <div className="text-sm font-medium">{t("title")}</div>
-      <div className="flex flex-wrap gap-2">
-        <select
-          className={selectClass(value.date_posted !== "any", disabled)}
+      <LinkedInFilterRow>
+        <LinkedInFilterSelect
+          active={value.date_posted !== "any"}
           value={value.date_posted}
           disabled={disabled}
           onChange={(e) =>
@@ -55,28 +46,26 @@ export function LinkedInJobFiltersBar({
           <option value="day">{t("datePosted.day")}</option>
           <option value="week">{t("datePosted.week")}</option>
           <option value="month">{t("datePosted.month")}</option>
-        </select>
+        </LinkedInFilterSelect>
 
-        <button
-          type="button"
-          className={pillClass(value.remote, disabled)}
+        <LinkedInFilterButton
+          active={value.remote}
           disabled={disabled}
           onClick={() => toggle("remote")}
         >
           {t("remote")}
-        </button>
+        </LinkedInFilterButton>
 
-        <button
-          type="button"
-          className={pillClass(value.easy_apply, disabled)}
+        <LinkedInFilterButton
+          active={value.easy_apply}
           disabled={disabled}
           onClick={() => toggle("easy_apply")}
         >
           {t("easyApply")}
-        </button>
+        </LinkedInFilterButton>
 
-        <select
-          className={selectClass(value.experience !== "any", disabled)}
+        <LinkedInFilterSelect
+          active={value.experience !== "any"}
           value={value.experience}
           disabled={disabled}
           onChange={(e) =>
@@ -90,10 +79,10 @@ export function LinkedInJobFiltersBar({
           <option value="mid_senior">{t("experience.midSenior")}</option>
           <option value="director">{t("experience.director")}</option>
           <option value="executive">{t("experience.executive")}</option>
-        </select>
+        </LinkedInFilterSelect>
 
-        <select
-          className={selectClass(value.employment !== "any", disabled)}
+        <LinkedInFilterSelect
+          active={value.employment !== "any"}
           value={value.employment}
           disabled={disabled}
           onChange={(e) =>
@@ -106,19 +95,20 @@ export function LinkedInJobFiltersBar({
           <option value="contract">{t("employment.contract")}</option>
           <option value="temporary">{t("employment.temporary")}</option>
           <option value="internship">{t("employment.internship")}</option>
-        </select>
+        </LinkedInFilterSelect>
 
         <input
           className={cn(
-            pillClass(Boolean(value.company.trim()), disabled),
-            "w-40 min-w-32 outline-none",
+            linkedinFilterChipClass(Boolean(value.company.trim()), disabled),
+            "w-36 min-w-[8rem] outline-none placeholder:font-normal placeholder:text-muted-foreground",
+            value.company.trim() ? "placeholder:text-white/70" : "",
           )}
           value={value.company}
           disabled={disabled}
           placeholder={t("company")}
           onChange={(e) => onChange({ ...value, company: e.target.value })}
         />
-      </div>
+      </LinkedInFilterRow>
       <p className="text-xs text-muted-foreground">{t("hint")}</p>
     </div>
   );

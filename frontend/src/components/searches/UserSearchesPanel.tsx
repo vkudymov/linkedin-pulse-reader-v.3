@@ -11,6 +11,12 @@ import { EmailReportFields } from "@/components/searches/EmailReportFields";
 import { PromptPicker, type PromptOption } from "@/components/searches/PromptPicker";
 import { SearchRunButton } from "@/components/searches/SearchRunButton";
 import { Button } from "@/components/ui/button";
+import {
+  LinkedInFilterInput,
+  LinkedInFilterRow,
+  LinkedInFilterSelect,
+  linkedinSelectFiltered,
+} from "@/components/ui/linkedin-filter-chip";
 import { Label } from "@/components/ui/label";
 import type { SearchTariffInfo } from "@/lib/searchTariffs";
 import { cn } from "@/lib/utils";
@@ -274,50 +280,41 @@ export function UserSearchesPanel({ locale }: { locale: "ru" | "en" }) {
 
   return (
     <div className="space-y-4">
-      <div className="flex flex-wrap items-end gap-3">
-        <div className="min-w-[160px]">
-          <Label>{t("fields.type")}</Label>
-          <select
-            className="mt-1 w-full rounded-md border border-border bg-background px-3 py-2 text-sm"
-            value={type}
-            onChange={(e) => pushFilters({ type: e.target.value })}
-          >
-            <option value="all">{locale === "en" ? "All" : "Все"}</option>
-            <option value="jobs">{t("types.jobs")}</option>
-            <option value="posts">{t("types.posts")}</option>
-          </select>
-        </div>
-
-        <div className="min-w-[160px]">
-          <Label>{t("fields.status")}</Label>
-          <select
-            className="mt-1 w-full rounded-md border border-border bg-background px-3 py-2 text-sm"
-            value={status}
-            onChange={(e) => pushFilters({ status: e.target.value })}
-          >
-            <option value="all">{locale === "en" ? "All" : "Все"}</option>
-            <option value="active">{locale === "en" ? "Active" : "Активен"}</option>
-            <option value="paused">{locale === "en" ? "Paused" : "Пауза"}</option>
-          </select>
-        </div>
-
-        <div className="min-w-[220px] flex-1">
-          <Label>{t("fields.title")}</Label>
-          <input
-            className="mt-1 w-full rounded-md border border-border bg-background px-3 py-2 text-sm"
-            value={q}
-            onChange={(e) => pushFilters({ q: e.target.value })}
-            placeholder={locale === "en" ? "Text..." : "Текст..."}
-          />
-        </div>
-
-        <Button variant="outline" onClick={load} disabled={loading}>
+      <LinkedInFilterRow>
+        <LinkedInFilterSelect
+          aria-label={t("fields.type")}
+          active={linkedinSelectFiltered(type)}
+          value={type}
+          onChange={(e) => pushFilters({ type: e.target.value })}
+        >
+          <option value="all">{locale === "en" ? "All" : "Все"}</option>
+          <option value="jobs">{t("types.jobs")}</option>
+          <option value="posts">{t("types.posts")}</option>
+        </LinkedInFilterSelect>
+        <LinkedInFilterSelect
+          aria-label={t("fields.status")}
+          active={linkedinSelectFiltered(status)}
+          value={status}
+          onChange={(e) => pushFilters({ status: e.target.value })}
+        >
+          <option value="all">{locale === "en" ? "All" : "Все"}</option>
+          <option value="active">{locale === "en" ? "Active" : "Активен"}</option>
+          <option value="paused">{locale === "en" ? "Paused" : "Пауза"}</option>
+        </LinkedInFilterSelect>
+        <LinkedInFilterInput
+          aria-label={t("fields.title")}
+          className="min-w-[10rem] flex-1 sm:max-w-xs"
+          value={q}
+          onChange={(e) => pushFilters({ q: e.target.value })}
+          placeholder={locale === "en" ? "Text..." : "Текст..."}
+        />
+        <Button variant="outline" className="h-8 rounded-full px-4 text-sm font-semibold" onClick={load} disabled={loading}>
           {t("actions.refresh")}
         </Button>
-        <Button type="button" onClick={() => setCreateOpen((v) => !v)}>
+        <Button type="button" className="h-8 rounded-full px-4 text-sm font-semibold" onClick={() => setCreateOpen((v) => !v)}>
           {t("createTitle")}
         </Button>
-      </div>
+      </LinkedInFilterRow>
 
       {createOpen ? (
         <div className="rounded-lg border border-border bg-card p-4">

@@ -11,6 +11,12 @@ import { EmailReportFields } from "@/components/searches/EmailReportFields";
 import { PromptPicker, type PromptOption } from "@/components/searches/PromptPicker";
 import { SearchRunButton } from "@/components/searches/SearchRunButton";
 import { Button } from "@/components/ui/button";
+import {
+  LinkedInFilterInput,
+  LinkedInFilterRow,
+  LinkedInFilterSelect,
+  linkedinSelectFiltered,
+} from "@/components/ui/linkedin-filter-chip";
 import { Label } from "@/components/ui/label";
 import type { AdminUserOption } from "@/lib/admin/users";
 import { isSearchTariffInfo, pickSearchTariff, type SearchTariffInfo } from "@/lib/searchTariffs";
@@ -211,63 +217,51 @@ export function AdminSearchesPanel({
 
   return (
     <div className="space-y-4">
-      <div className="flex flex-wrap items-end gap-3">
-        <div className="min-w-[220px]">
-          <Label>{locale === "en" ? "User" : "Пользователь"}</Label>
-          <select
-            className="mt-1 w-full rounded-md border border-border bg-background px-3 py-2 text-sm"
-            value={userId || "all"}
-            onChange={(e) => pushFilters({ user_id: e.target.value === "all" ? "" : e.target.value })}
-          >
-            <option value="all">{locale === "en" ? "All users" : "Все пользователи"}</option>
-            {users.map((u) => (
-              <option key={u.id} value={u.id}>
-                {(u.full_name || u.email || u.id).slice(0, 80)}
-              </option>
-            ))}
-          </select>
-        </div>
-
-        <div className="min-w-[160px]">
-          <Label>{locale === "en" ? "Type" : "Тип"}</Label>
-          <select
-            className="mt-1 w-full rounded-md border border-border bg-background px-3 py-2 text-sm"
-            value={type}
-            onChange={(e) => pushFilters({ type: e.target.value })}
-          >
-            <option value="all">{locale === "en" ? "All" : "Все"}</option>
-            <option value="jobs">{locale === "en" ? "Jobs" : "Вакансии"}</option>
-            <option value="posts">{locale === "en" ? "Posts" : "Посты"}</option>
-          </select>
-        </div>
-
-        <div className="min-w-[160px]">
-          <Label>{locale === "en" ? "Status" : "Статус"}</Label>
-          <select
-            className="mt-1 w-full rounded-md border border-border bg-background px-3 py-2 text-sm"
-            value={status}
-            onChange={(e) => pushFilters({ status: e.target.value })}
-          >
-            <option value="all">{locale === "en" ? "All" : "Все"}</option>
-            <option value="active">{locale === "en" ? "Active" : "Активен"}</option>
-            <option value="paused">{locale === "en" ? "Paused" : "Пауза"}</option>
-          </select>
-        </div>
-
-        <div className="min-w-[220px] flex-1">
-          <Label>{locale === "en" ? "Title contains" : "Title содержит"}</Label>
-          <input
-            className="mt-1 w-full rounded-md border border-border bg-background px-3 py-2 text-sm"
-            value={q}
-            onChange={(e) => pushFilters({ q: e.target.value })}
-            placeholder={locale === "en" ? "Text..." : "Текст..."}
-          />
-        </div>
-
-        <Button variant="outline" onClick={load} disabled={loading}>
+      <LinkedInFilterRow>
+        <LinkedInFilterSelect
+          aria-label={locale === "en" ? "User" : "Пользователь"}
+          active={linkedinSelectFiltered(userId || "", [""])}
+          value={userId || "all"}
+          onChange={(e) => pushFilters({ user_id: e.target.value === "all" ? "" : e.target.value })}
+        >
+          <option value="all">{locale === "en" ? "All users" : "Все пользователи"}</option>
+          {users.map((u) => (
+            <option key={u.id} value={u.id}>
+              {(u.full_name || u.email || u.id).slice(0, 80)}
+            </option>
+          ))}
+        </LinkedInFilterSelect>
+        <LinkedInFilterSelect
+          aria-label={locale === "en" ? "Type" : "Тип"}
+          active={linkedinSelectFiltered(type)}
+          value={type}
+          onChange={(e) => pushFilters({ type: e.target.value })}
+        >
+          <option value="all">{locale === "en" ? "All" : "Все"}</option>
+          <option value="jobs">{locale === "en" ? "Jobs" : "Вакансии"}</option>
+          <option value="posts">{locale === "en" ? "Posts" : "Посты"}</option>
+        </LinkedInFilterSelect>
+        <LinkedInFilterSelect
+          aria-label={locale === "en" ? "Status" : "Статус"}
+          active={linkedinSelectFiltered(status)}
+          value={status}
+          onChange={(e) => pushFilters({ status: e.target.value })}
+        >
+          <option value="all">{locale === "en" ? "All" : "Все"}</option>
+          <option value="active">{locale === "en" ? "Active" : "Активен"}</option>
+          <option value="paused">{locale === "en" ? "Paused" : "Пауза"}</option>
+        </LinkedInFilterSelect>
+        <LinkedInFilterInput
+          aria-label={locale === "en" ? "Title contains" : "Title содержит"}
+          className="min-w-[10rem] flex-1 sm:max-w-xs"
+          value={q}
+          onChange={(e) => pushFilters({ q: e.target.value })}
+          placeholder={locale === "en" ? "Text..." : "Текст..."}
+        />
+        <Button variant="outline" className="h-8 rounded-full px-4 text-sm font-semibold" onClick={load} disabled={loading}>
           {t("actions.refresh")}
         </Button>
-      </div>
+      </LinkedInFilterRow>
 
       {error ? <div className="rounded-md border border-destructive/40 bg-destructive/5 p-3 text-sm">{error}</div> : null}
 

@@ -2,7 +2,10 @@
 
 import { ArrowDownWideNarrow, ArrowUpWideNarrow, Search } from "lucide-react";
 
-import { Input } from "@/components/ui/input";
+import {
+  LinkedInFilterSelect,
+  linkedinFilterChipClass,
+} from "@/components/ui/linkedin-filter-chip";
 import { cn } from "@/lib/utils";
 
 export type ListSortField = "posted" | "searched" | "score";
@@ -35,35 +38,38 @@ export function ListSearchSortBar({
   onSortDirChange: (value: ListSortDir) => void;
   labels: ListSearchSortLabels;
 }) {
+  const sortActive = sortField !== "searched" || sortDir !== "desc";
+
   return (
-    <div className="flex min-w-0 items-center gap-2 sm:max-w-md">
-      <label className="relative min-w-0 flex-1 sm:w-44">
+    <div className="flex min-w-0 flex-wrap items-center gap-2 sm:max-w-md">
+      <label className="relative min-w-[10rem] flex-1 sm:w-44">
         <span className="sr-only">{labels.placeholder}</span>
         <Search
           className="pointer-events-none absolute top-1/2 left-3 size-3.5 -translate-y-1/2 text-muted-foreground"
           aria-hidden
         />
-        <Input
+        <input
           value={query}
           onChange={(e) => onQueryChange(e.target.value)}
           placeholder={labels.placeholder}
-          className="h-9 rounded-full border-border bg-background pr-3 pl-9 dark:bg-background"
+          className={cn(
+            linkedinFilterChipClass(Boolean(query.trim())),
+            "h-8 w-full min-w-0 pl-9 font-normal outline-none placeholder:font-normal",
+            query.trim() ? "placeholder:text-white/70" : "placeholder:text-muted-foreground",
+          )}
         />
       </label>
 
-      <select
+      <LinkedInFilterSelect
         value={sortField}
+        active={sortActive}
         onChange={(e) => onSortFieldChange(e.target.value as ListSortField)}
         aria-label={labels.sortLabel}
-        className={cn(
-          "h-9 shrink-0 rounded-full border border-border bg-background px-3 text-sm text-foreground",
-          "outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50",
-        )}
       >
         <option value="posted">{labels.posted}</option>
         <option value="searched">{labels.searched}</option>
         <option value="score">{labels.score}</option>
-      </select>
+      </LinkedInFilterSelect>
 
       <button
         type="button"
@@ -71,8 +77,8 @@ export function ListSearchSortBar({
         aria-label={sortDir === "desc" ? labels.desc : labels.asc}
         title={sortDir === "desc" ? labels.desc : labels.asc}
         className={cn(
-          "inline-flex size-9 shrink-0 items-center justify-center rounded-full border border-border bg-background text-foreground",
-          "outline-none hover:bg-muted focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50",
+          linkedinFilterChipClass(sortDir === "asc"),
+          "size-8 justify-center px-0",
         )}
       >
         {sortDir === "desc" ? (

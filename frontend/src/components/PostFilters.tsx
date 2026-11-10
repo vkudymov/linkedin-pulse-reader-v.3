@@ -2,10 +2,10 @@
 
 import { useTranslations } from "next-intl";
 
-import { Link } from "@/i18n/navigation";
-
-import { buttonVariants } from "@/components/ui/button";
-import { cn } from "@/lib/utils";
+import {
+  LinkedInFilterLink,
+  LinkedInFilterRow,
+} from "@/components/ui/linkedin-filter-chip";
 
 export type PostFilter = "all" | "relevant" | "rejected";
 
@@ -36,39 +36,22 @@ export function PostFilters({
 }) {
   const t = useTranslations("posts.filters");
   return (
-    <div className="inline-flex flex-wrap gap-2">
+    <LinkedInFilterRow>
       {FILTERS.map((item) => {
         const active = filter === item.value;
         const count = counts?.[item.countKey];
 
         return (
-          <Link
+          <LinkedInFilterLink
             key={item.value}
             href={item.href}
-            className={cn(
-              buttonVariants({
-                variant: active ? "default" : "outline",
-                size: "sm",
-              }),
-              "h-9 gap-2 rounded-full px-4",
-            )}
+            active={active}
+            count={typeof count === "number" ? count : undefined}
           >
             {t(item.labelKey)}
-            {typeof count === "number" ? (
-              <span
-                className={cn(
-                  "inline-flex min-w-5 items-center justify-center rounded-full px-1.5 text-xs tabular-nums",
-                  active
-                    ? "bg-primary-foreground/15 text-primary-foreground"
-                    : "bg-muted text-muted-foreground",
-                )}
-              >
-                {count}
-              </span>
-            ) : null}
-          </Link>
+          </LinkedInFilterLink>
         );
       })}
-    </div>
+    </LinkedInFilterRow>
   );
 }
