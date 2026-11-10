@@ -1,0 +1,47 @@
+{
+  "version": "2.0.0",
+  "tasks": [
+    {
+      "label": "dev: worker API",
+      "type": "shell",
+      "command": "${command:python.interpreterPath} dev.py api",
+      "options": {
+        "cwd": "${workspaceFolder}",
+        "env": {
+          "PYTHONUNBUFFERED": "1"
+        }
+      },
+      "isBackground": true,
+      "presentation": {
+        "reveal": "always",
+        "panel": "dedicated",
+        "group": "dev-api"
+      },
+      "problemMatcher": []
+    },
+    {
+      "label": "dev: frontend",
+      "type": "shell",
+      "command": "${command:python.interpreterPath} dev.py web",
+      "options": {
+        "cwd": "${workspaceFolder}",
+        "env": {
+          "PYTHONUNBUFFERED": "1"
+        }
+      },
+      "isBackground": true,
+      "presentation": {
+        "reveal": "always",
+        "panel": "dedicated",
+        "group": "dev-web"
+      },
+      "problemMatcher": []
+    },
+    {
+      "label": "dev: UI + API",
+      "dependsOn": ["dev: worker API", "dev: frontend"],
+      "dependsOrder": "parallel",
+      "problemMatcher": []
+    }
+  ]
+}

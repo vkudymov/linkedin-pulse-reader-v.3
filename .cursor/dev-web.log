@@ -1,0 +1,27 @@
+Frontend → npm run dev (обычно http://localhost:3000)  (Ctrl+C — остановить)
+
+> frontend@0.1.0 dev
+> next dev
+
+▲ Next.js 16.2.9 (Turbopack)
+- Local:         http://localhost:3000
+- Network:       http://127.255.234.119:3000
+- Environments: .env.local
+✓ Ready in 499ms
+[INFO] env startup NEXT_PUBLIC_SUPABASE_URL=ok cwd=/Users/vladimirkudymov/Work/linkedin-pulse-reader-v.3/frontend
+
+ GET /ru/posts 200 in 2.7s (next.js: 593ms, application-code: 2.1s)
+ GET /ru/posts 200 in 1815ms (next.js: 15ms, application-code: 1800ms)
+ GET /ru/searches 200 in 724ms (next.js: 449ms, application-code: 275ms)
+ GET /api/prompts?limit=200 200 in 430ms (next.js: 90ms, application-code: 340ms)
+ GET /api/searches?limit=50 200 in 442ms (next.js: 60ms, application-code: 382ms)
+ GET /ru/prompts 200 in 601ms (next.js: 437ms, application-code: 163ms)
+ GET /api/prompts?limit=50 200 in 146ms (next.js: 4ms, application-code: 142ms)
+ GET /ru/account 200 in 909ms (next.js: 432ms, application-code: 477ms)
+ GET /ru/posts 200 in 952ms (next.js: 18ms, application-code: 934ms)
+ GET /ru/posts?post_search_id=2c5e01a4-319a-4e6b-bec4-e5dfe1760487 200 in 680ms (next.js: 19ms, application-code: 661ms)
+ GET /ru/searches 200 in 191ms (next.js: 13ms, application-code: 178ms)
+ GET /api/prompts?limit=200 200 in 186ms (next.js: 4ms, application-code: 182ms)
+ GET /api/searches?limit=50 200 in 251ms (next.js: 3ms, application-code: 248ms)
+ GET /ru/prompts 200 in 185ms (next.js: 8ms, application-code: 178ms)
+ GET /api/prompts?limit=50 200 in 194ms (next.js: 1966µs, application-code: 192ms)
