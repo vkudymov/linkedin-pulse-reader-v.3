@@ -6,6 +6,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from .admin.routes import router as admin_router
 from .job_search.routes import router as job_search_router
 from .linkedin.routes import router as linkedin_router
+from .people_search.routes import router as people_search_router
 from .post_search.routes import router as post_search_router
 from .settings import get_settings
 
@@ -26,6 +27,7 @@ def create_app() -> FastAPI:
     app.include_router(linkedin_router)
     app.include_router(post_search_router)
     app.include_router(job_search_router)
+    app.include_router(people_search_router)
     return app
 
 

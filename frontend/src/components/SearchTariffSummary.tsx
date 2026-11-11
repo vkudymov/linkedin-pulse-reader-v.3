@@ -14,11 +14,11 @@ export function SearchTariffSummary({
   className,
 }: {
   tariff: SearchTariffInfo | null;
-  kind?: "post" | "job";
+  kind?: "post" | "job" | "people";
   className?: string;
 }) {
   const t = useTranslations("searchTariff");
-  const fallback = kind === "job" ? FALLBACK_JOB : FALLBACK_POST;
+  const fallback = kind === "job" || kind === "people" ? FALLBACK_JOB : FALLBACK_POST;
   const scan = tariff?.max_scan_count ?? fallback.max_scan_count;
   const found = tariff?.target_found_count ?? fallback.target_found_count;
   const min = tariff?.min_relevance_percent ?? fallback.min_relevance_percent;

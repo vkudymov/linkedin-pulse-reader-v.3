@@ -3,6 +3,7 @@
     "results": "Результаты",
     "posts": "Посты",
     "jobs": "Вакансии",
+    "people": "Люди",
     "searches": "Поиск",
     "prompts": "Промпты",
     "profile": "Профиль",
@@ -243,9 +244,10 @@
       "filterPrompt": "Промпт фильтра",
       "searchPrompt": "Промпт поиска",
       "commentPrompt": "Промпт комментария",
+      "peoplePrompt": "Промпт людей",
       "noPrompt": "Не выбран"
     },
-    "types": { "jobs": "Вакансии", "posts": "Посты" },
+    "types": { "jobs": "Вакансии", "posts": "Посты", "people": "Люди" },
     "errors": {
       "load": "Не удалось загрузить поиски.",
       "save": "Не удалось сохранить поиск.",
@@ -269,13 +271,16 @@
   "searchRunner": {
     "runPosts": "Запустить поиск постов",
     "runJobs": "Запустить поиск вакансий",
+    "runPeople": "Запустить поиск людей",
     "running": "Запускаем...",
     "status": "Статус",
     "errors": {
       "startPosts": "Не удалось запустить поиск постов.",
       "startJobs": "Не удалось запустить поиск вакансий.",
+      "startPeople": "Не удалось запустить поиск людей.",
       "runPosts": "Поиск постов завершился ошибкой.",
       "runJobs": "Поиск вакансий завершился ошибкой.",
+      "runPeople": "Поиск людей завершился ошибкой.",
       "status": "Не удалось получить статус.",
       "timeout": "Поиск выполняется слишком долго."
     }
@@ -302,7 +307,8 @@
     "roles": {
       "filter": "Промпт фильтра",
       "search": "Промпт поиска",
-      "comment": "Промпт комментария"
+      "comment": "Промпт комментария",
+      "people": "Промпт людей"
     },
     "errors": {
       "load": "Не удалось загрузить промпты.",
@@ -492,6 +498,141 @@
       }
     }
   },
+  "people": {
+    "page": {
+      "title": "Люди",
+      "emptySearches": "Сначала создай поиск людей.",
+      "goToSearches": "Перейти к поискам",
+      "unnamed": "Без имени",
+      "filters": {
+        "all": "Все",
+        "match": "Подходящие",
+        "noMatch": "Не подходят"
+      },
+      "search": {
+        "placeholder": "Поиск людей",
+        "empty": "Нет людей по этому запросу."
+      },
+      "sort": {
+        "label": "Сортировка",
+        "searched": "Дата поиска",
+        "score": "Совпадение %",
+        "name": "Имя",
+        "desc": "По убыванию",
+        "asc": "По возрастанию"
+      },
+      "reason": "Причина",
+      "matched": "Совпало",
+      "missing": "Не хватает",
+      "redFlags": "Риски",
+      "contentUnavailable": "Описание профиля недоступно",
+      "status": {
+        "accepted": "принято",
+        "rejected": "отклонено"
+      },
+      "meta": {
+        "analyzed": "Анализ",
+        "company": "Компания",
+        "location": "Место",
+        "connection": "Контакт"
+      },
+      "actions": {
+        "details": "Подробнее",
+        "collapse": "Свернуть",
+        "openLinkedIn": "Открыть в LinkedIn",
+        "delete": "Удалить"
+      },
+      "delete": {
+        "confirm": "Удалить этого человека? Это удалит его из списка и из базы.",
+        "failed": "Не удалось удалить профиль."
+      },
+      "emptyResults": "Пока нет результатов. Запусти поиск на странице «Поиск»."
+    },
+    "prompts": {
+      "create": {
+        "title": "Создать поиск людей",
+        "description": "Булев запрос LinkedIn, фильтры и AI-промпт для оценки профилей.",
+        "submit": "Создать",
+        "pending": "Создаём..."
+      },
+      "list": {
+        "title": "Поиски людей",
+        "empty": "Пока нет поисков людей.",
+        "newMatches": "{count} новых подходящих профилей",
+        "targetFound": "Нужно найти: {count}"
+      },
+      "status": {
+        "active": "Активен",
+        "paused": "Пауза"
+      },
+      "edit": {
+        "toggle": "Редактировать",
+        "collapse": "Свернуть",
+        "save": "Сохранить",
+        "saving": "Сохраняем...",
+        "saved": "Сохранено",
+        "delete": "Удалить",
+        "deleteConfirm": "Удалить этот поиск людей? Это действие нельзя отменить."
+      },
+      "fields": {
+        "title": "Название",
+        "searchQuery": "Булев запрос",
+        "searchQueryPlaceholder": "ABAP AND (\"S/4HANA\" OR HANA)",
+        "allFilters": "Все фильтры",
+        "peoplePrompt": "Промпт оценки профиля",
+        "promptEmpty": "Новый промпт",
+        "editPrompt": "Открыть в Промптах",
+        "markerHint": "Должен содержать маркер: {marker}"
+      },
+      "errors": {
+        "loadFailed": "Не удалось загрузить поиски людей.",
+        "saveFailed": "Не удалось сохранить поиск людей.",
+        "deleteFailed": "Не удалось удалить поиск людей."
+      }
+    },
+    "boolean": {
+      "hint": "AND / OR / NOT, кавычки \"...\" и скобки (...). Операторы вне кавычек приводятся к верхнему регистру.",
+      "plusMinus": "LinkedIn не поддерживает + и -. Используйте AND / NOT.",
+      "unbalancedQuotes": "Несбалансированные кавычки.",
+      "unbalancedParens": "Несбалансированные скобки.",
+      "startsWithOp": "Запрос не может начинаться с AND/OR.",
+      "endsWithOp": "Запрос не может заканчиваться на AND/OR/NOT."
+    },
+    "filters": {
+      "title": "Все фильтры",
+      "description": "Фильтры LinkedIn People Search. Имена компаний и школ без числового ID попадут в ключевые слова в кавычках.",
+      "network": "Уровень контакта",
+      "network1": "1-й",
+      "network2": "2-й",
+      "network3": "3-й+",
+      "locations": "Регионы",
+      "locationsPlaceholder": "Berlin, Germany",
+      "currentCompany": "Текущая компания",
+      "pastCompany": "Прежняя компания",
+      "companyPlaceholder": "SAP",
+      "school": "Учебное заведение",
+      "schoolPlaceholder": "Stanford",
+      "industry": "Отрасль",
+      "industryPlaceholder": "Выберите отрасль",
+      "language": "Язык профиля",
+      "languageAny": "Любой",
+      "keywords": "Дополнительные ключевые слова",
+      "keywordsPlaceholder": "ABAP OR RAP",
+      "cancel": "Отмена",
+      "apply": "Применить"
+    },
+    "runner": {
+      "idle": "Запустить",
+      "pending": "Запускаем...",
+      "statusLabel": "Статус:",
+      "errors": {
+        "startFailed": "Не удалось запустить поиск людей.",
+        "statusFailed": "Не удалось получить статус.",
+        "runFailed": "Поиск людей завершился ошибкой.",
+        "timeout": "Поиск людей выполняется слишком долго."
+      }
+    }
+  },
   "admin": {
     "title": "Администратор",
     "tabs": {
@@ -533,7 +674,8 @@
     "initiatedByAdmin": "Запуск от админа",
     "kind": {
       "post": "Посты",
-      "job": "Вакансии"
+      "job": "Вакансии",
+      "people": "Люди"
     },
     "status": {
       "running": "В процессе",
@@ -548,6 +690,7 @@
       "allKinds": "Все типы",
       "posts": "Посты",
       "jobs": "Вакансии",
+      "people": "Люди",
       "search": "Поиск",
       "allSearches": "Все поиски",
       "status": "Статус",

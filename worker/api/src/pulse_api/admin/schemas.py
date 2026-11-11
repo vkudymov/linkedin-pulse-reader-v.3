@@ -218,9 +218,11 @@ class AdminSearchRow(BaseModel):
     filter_prompt_id: str | None = None
     search_prompt_id: str | None = None
     comment_prompt_id: str | None = None
+    people_prompt_id: str | None = None
     filter_prompt: str | None = None
     search_prompt: str | None = None
     comment_prompt: str | None = None
+    people_prompt: str | None = None
     prompts: list[AdminSearchPromptRow] = []
 
     user_full_name: str | None = None
@@ -253,9 +255,11 @@ class AdminSearchUpdate(BaseModel):
     filter_prompt_id: str | None = None
     search_prompt_id: str | None = None
     comment_prompt_id: str | None = None
+    people_prompt_id: str | None = None
     filter_prompt: str | None = None
     search_prompt: str | None = None
     comment_prompt: str | None = None
+    people_prompt: str | None = None
 
 
 class AdminPromptRow(BaseModel):

@@ -11,6 +11,7 @@ import {
   Search,
   Settings,
   User,
+  UserSearch,
   Users,
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
@@ -19,7 +20,7 @@ import { Link, usePathname } from "@/i18n/navigation";
 import { LocaleMenuButtons } from "@/components/LocaleSwitcher";
 import { cn } from "@/lib/utils";
 
-type NavActive = "posts" | "jobs" | "account" | "prompts" | "searches" | "admin";
+type NavActive = "posts" | "jobs" | "people" | "account" | "prompts" | "searches" | "admin";
 
 type AdminSection = "users" | "searchRuns" | "searches" | "prompts" | "settings";
 
@@ -66,18 +67,28 @@ function adminSectionFromPath(pathname: string): AdminSection | null {
 function mainNavActive(
   pathname: string,
   active?: NavActive,
-): { posts: boolean; jobs: boolean; prompts: boolean } {
-  if (active === "posts" || active === "jobs" || active === "prompts") {
+): { posts: boolean; jobs: boolean; people: boolean; prompts: boolean; searches: boolean } {
+  if (
+    active === "posts" ||
+    active === "jobs" ||
+    active === "people" ||
+    active === "prompts" ||
+    active === "searches"
+  ) {
     return {
       posts: active === "posts",
       jobs: active === "jobs",
+      people: active === "people",
       prompts: active === "prompts",
+      searches: active === "searches",
     };
   }
   return {
     posts: pathname.startsWith("/posts"),
     jobs: pathname.startsWith("/jobs"),
+    people: pathname.startsWith("/people"),
     prompts: pathname === "/prompts" || pathname.startsWith("/prompts/"),
+    searches: pathname === "/searches" || pathname.startsWith("/searches/"),
   };
 }
 
@@ -210,6 +221,14 @@ function ProfileMenu({
             >
               {t("account")}
             </Link>
+            <Link
+              role="menuitem"
+              href="/searches"
+              className="block px-4 py-2.5 text-sm hover:bg-muted"
+              onClick={() => setOpen(false)}
+            >
+              {t("searches")}
+            </Link>
             {isAdmin ? (
               <Link
                 role="menuitem"
@@ -238,6 +257,100 @@ function ProfileMenu({
   );
 }
 
+function AdminHeaderNav({ pathname }: { pathname: string }) {
+  const t = useTranslations("nav");
+  const tAdmin = useTranslations("admin.tabs");
+  const adminSection = adminSectionFromPath(pathname);
+  const rootRef = useRef<HTMLDivElement>(null);
+  const [open, setOpen] = useState(() => pathname.startsWith("/admin"));
+
+  useEffect(() => {
+    if (pathname.startsWith("/admin")) setOpen(true);
+  }, [pathname]);
+
+  useEffect(() => {
+    if (!open) return;
+    function onPointerDown(e: MouseEvent) {
+      if (!rootRef.current?.contains(e.target as Node)) setOpen(false);
+    }
+    function onKey(e: KeyboardEvent) {
+      if (e.key === "Escape") setOpen(false);
+    }
+    document.addEventListener("mousedown", onPointerDown);
+    document.addEventListener("keydown", onKey);
+    return () => {
+      document.removeEventListener("mousedown", onPointerDown);
+      document.removeEventListener("keydown", onKey);
+    };
+  }, [open]);
+
+  const adminActive = adminSection !== null;
+
+  return (
+    <div
+      ref={rootRef}
+      className="flex shrink-0 items-stretch gap-1 border-l border-border/90 pl-2 sm:gap-1.5 sm:pl-3"
+    >
+      <button
+        type="button"
+        aria-expanded={open}
+        aria-controls="admin-header-tools"
+        onClick={() => setOpen((v) => !v)}
+        className={cn(
+          "flex min-w-[3.25rem] shrink-0 flex-col items-center justify-center gap-0.5 px-1 py-1 text-[0.65rem] font-medium leading-tight sm:min-w-[3.75rem] sm:text-xs",
+          open || adminActive ? "text-foreground" : "text-muted-foreground hover:text-foreground",
+        )}
+      >
+        <Settings
+          className={cn("size-5 sm:size-6", (open || adminActive) && "stroke-[2.25]")}
+          strokeWidth={open || adminActive ? 2.25 : 1.75}
+          aria-hidden
+        />
+        <span className="flex items-center gap-0.5">
+          <span className="max-w-full truncate">{t("admin")}</span>
+          <ChevronDown
+            className={cn("size-3 shrink-0 transition-transform duration-200", open && "rotate-180")}
+            strokeWidth={2.5}
+            aria-hidden
+          />
+        </span>
+        <span
+          className={cn(
+            "mt-0.5 h-0.5 w-full max-w-[3.25rem] rounded-full",
+            adminActive ? "bg-foreground" : "bg-transparent",
+          )}
+          aria-hidden
+        />
+      </button>
+
+      <div
+        id="admin-header-tools"
+        aria-hidden={!open}
+        className={cn(
+          "overflow-hidden transition-[max-width,opacity,margin] duration-300 ease-out",
+          open ? "ml-1 max-w-[28rem] opacity-100 sm:ml-1.5" : "max-w-0 opacity-0",
+        )}
+      >
+        <nav
+          className="flex w-max items-stretch rounded-lg border border-border/70 bg-muted/40 px-0.5 shadow-sm"
+          aria-label={t("adminMenu")}
+        >
+          {ADMIN_NAV.map((item) => (
+            <NavItem
+              key={item.section}
+              href={item.href}
+              label={tAdmin(item.section)}
+              icon={item.icon}
+              active={adminSection === item.section}
+              compact
+            />
+          ))}
+        </nav>
+      </div>
+    </div>
+  );
+}
+
 export function AppHeader({
   title: _title,
   subtitle,
@@ -250,9 +363,7 @@ export function AppHeader({
   isAdmin?: boolean;
 }) {
   const t = useTranslations("nav");
-  const tAdmin = useTranslations("admin.tabs");
   const pathname = usePathname();
-  const adminSection = isAdmin ? adminSectionFromPath(pathname) : null;
   const mainActive = mainNavActive(pathname, active);
 
   return (
@@ -272,47 +383,23 @@ export function AppHeader({
             </span>
           </Link>
 
-          <nav
-            className="flex min-w-0 flex-1 items-stretch justify-start gap-0 overflow-x-auto overscroll-x-contain [-ms-overflow-style:none] [scrollbar-width:none] sm:justify-center sm:gap-0.5 [&::-webkit-scrollbar]:hidden"
-            aria-label={isAdmin ? `${t("mainMenu")}, ${t("adminMenu")}` : t("mainMenu")}
+          <div
+            className="flex min-w-0 flex-1 items-stretch justify-start gap-2 overflow-x-auto overscroll-x-contain [-ms-overflow-style:none] [scrollbar-width:none] sm:justify-center sm:gap-3 [&::-webkit-scrollbar]:hidden"
           >
-            <NavItem
-              href="/posts"
-              label={t("posts")}
-              icon={Newspaper}
-              active={mainActive.posts}
-              compact={isAdmin}
-            />
-            <NavItem
-              href="/jobs"
-              label={t("jobs")}
-              icon={BriefcaseBusiness}
-              active={mainActive.jobs}
-              compact={isAdmin}
-            />
-            <NavItem
-              href="/prompts"
-              label={t("prompts")}
-              icon={FileText}
-              active={mainActive.prompts}
-              compact={isAdmin}
-            />
-            {isAdmin ? (
-              <>
-                <span className="mx-0.5 w-px shrink-0 self-center bg-border" aria-hidden />
-                {ADMIN_NAV.map((item) => (
-                  <NavItem
-                    key={item.section}
-                    href={item.href}
-                    label={tAdmin(item.section)}
-                    icon={item.icon}
-                    active={adminSection === item.section}
-                    compact
-                  />
-                ))}
-              </>
-            ) : null}
-          </nav>
+            <nav
+              className="flex shrink-0 items-stretch gap-0 sm:gap-0.5"
+              aria-label={t("mainMenu")}
+            >
+              <NavItem href="/posts" label={t("posts")} icon={Newspaper} active={mainActive.posts} />
+              <NavItem href="/jobs" label={t("jobs")} icon={BriefcaseBusiness} active={mainActive.jobs} />
+              <NavItem href="/people" label={t("people")} icon={UserSearch} active={mainActive.people} />
+              <NavItem href="/prompts" label={t("prompts")} icon={FileText} active={mainActive.prompts} />
+              <NavItem href="/searches" label={t("searches")} icon={Search} active={mainActive.searches} />
+            </nav>
+
+          </div>
+
+          {isAdmin ? <AdminHeaderNav pathname={pathname} /> : null}
 
           <ProfileMenu isAdmin={isAdmin} active={active} subtitle={subtitle} />
         </div>

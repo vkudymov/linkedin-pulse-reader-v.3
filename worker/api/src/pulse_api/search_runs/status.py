@@ -10,9 +10,17 @@ FAILED_MESSAGE = "Search failed."
 
 def public_status_message(*, kind: str, status: str, error: str | None) -> str:
     if status == "running":
-        return "Job search is running." if kind == "job" else "Post search is running."
+        if kind == "job":
+            return "Job search is running."
+        if kind == "people":
+            return "People search is running."
+        return "Post search is running."
     if status == "done":
-        return "Job search completed." if kind == "job" else "Post search completed."
+        if kind == "job":
+            return "Job search completed."
+        if kind == "people":
+            return "People search completed."
+        return "Post search completed."
     if status == "lost":
         return LOST_MESSAGE
     return short_stored_error(error, fallback=FAILED_MESSAGE)

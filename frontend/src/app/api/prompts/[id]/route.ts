@@ -2,12 +2,14 @@ import { createSupabaseServerClient } from "@/lib/supabase/server";
 
 const JOB_MARKER = "<<<JOB_TEXT>>>";
 const SEARCH_MARKER = "<<<POST_TEXT>>>";
+const PEOPLE_MARKER = "<<<PROFILE_TEXT>>>";
 const COMMENT_MARKERS = ["<<<POST_TEXT>>>", "<<<CONTENT_TYPE>>>", "<<<MAIN_TOPICS>>>", "<<<TARGET_LANGUAGE>>>"];
 
 function validatePrompt(role: string, body: string): string | null {
   if (!body.trim()) return "body is required";
   if (role === "filter" && !body.includes(JOB_MARKER)) return `body must contain ${JOB_MARKER}`;
   if (role === "search" && !body.includes(SEARCH_MARKER)) return `body must contain ${SEARCH_MARKER}`;
+  if (role === "people" && !body.includes(PEOPLE_MARKER)) return `body must contain ${PEOPLE_MARKER}`;
   if (role === "comment") {
     const missing = COMMENT_MARKERS.filter((m) => !body.includes(m));
     if (missing.length) return `body must contain markers: ${missing.join(", ")}`;

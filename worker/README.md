@@ -16,7 +16,7 @@
 
 ```bash
 cd worker
-python3 -m pip install -e ../packages/linkedin-search-core -e ../packages/linkedin-search-jobs -e ../packages/linkedin-search-posts -e LinkedInClient -e PostAnalyzer -e Storage -e api -e SearchReportMailer
+python3 -m pip install -e ../packages/linkedin-search-core -e ../packages/linkedin-search-jobs -e ../packages/linkedin-search-posts -e ../packages/linkedin-search-people -e LinkedInClient -e PostAnalyzer -e Storage -e JobSearch -e PeopleSearch -e api -e SearchReportMailer
 ```
 
 Пакет постов на PyPI: `linkedin-pulse-search-posts` (каталог в репозитории — `packages/linkedin-search-posts`).

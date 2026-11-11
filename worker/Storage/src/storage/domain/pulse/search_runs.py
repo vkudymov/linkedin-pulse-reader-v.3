@@ -6,7 +6,7 @@ from typing import Any, Literal
 from storage.core.response import expect_single
 
 RunStatus = Literal["running", "done", "error", "lost"]
-RunKind = Literal["post", "job"]
+RunKind = Literal["post", "job", "people"]
 
 
 class SearchRunRepository:

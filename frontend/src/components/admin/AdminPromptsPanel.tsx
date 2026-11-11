@@ -170,6 +170,7 @@ export function AdminPromptsPanel({
           <option value="all">{locale === "en" ? "All" : "Все"}</option>
           <option value="jobs">{locale === "en" ? "Jobs" : "Вакансии"}</option>
           <option value="posts">{locale === "en" ? "Posts" : "Посты"}</option>
+          <option value="people">{locale === "en" ? "People" : "Люди"}</option>
         </LinkedInFilterSelect>
         <LinkedInFilterSelect
           aria-label={locale === "en" ? "Role" : "Роль"}
@@ -181,6 +182,7 @@ export function AdminPromptsPanel({
           <option value="filter">filter</option>
           <option value="search">search</option>
           <option value="comment">comment</option>
+          <option value="people">people</option>
         </LinkedInFilterSelect>
         <LinkedInFilterInput
           aria-label={locale === "en" ? "Body contains" : "Body содержит"}
@@ -224,7 +226,11 @@ export function AdminPromptsPanel({
                   ? locale === "en"
                     ? "Comment prompt"
                     : "Промпт комментария"
-                  : r.role;
+                  : r.role === "people"
+                    ? locale === "en"
+                      ? "People prompt"
+                      : "Промпт людей"
+                    : r.role;
           return (
             <div key={r.id} className="rounded-lg border border-border bg-card p-4">
               <div className="flex flex-wrap items-center justify-between gap-2">

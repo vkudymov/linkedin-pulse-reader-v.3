@@ -3,6 +3,7 @@
     "results": "Results",
     "posts": "Posts",
     "jobs": "Jobs",
+    "people": "People",
     "searches": "Search",
     "prompts": "Prompts",
     "profile": "Profile",
@@ -243,9 +244,10 @@
       "filterPrompt": "Filter prompt",
       "searchPrompt": "Search prompt",
       "commentPrompt": "Comment prompt",
+      "peoplePrompt": "People prompt",
       "noPrompt": "Not selected"
     },
-    "types": { "jobs": "Jobs", "posts": "Posts" },
+    "types": { "jobs": "Jobs", "posts": "Posts", "people": "People" },
     "errors": {
       "load": "Failed to load searches.",
       "save": "Failed to save search.",
@@ -269,13 +271,16 @@
   "searchRunner": {
     "runPosts": "Run post search",
     "runJobs": "Run job search",
+    "runPeople": "Run people search",
     "running": "Starting...",
     "status": "Status",
     "errors": {
       "startPosts": "Failed to start post search.",
       "startJobs": "Failed to start job search.",
+      "startPeople": "Failed to start people search.",
       "runPosts": "Post search failed.",
       "runJobs": "Job search failed.",
+      "runPeople": "People search failed.",
       "status": "Failed to load run status.",
       "timeout": "Search is taking too long."
     }
@@ -302,7 +307,8 @@
     "roles": {
       "filter": "Filter prompt",
       "search": "Search prompt",
-      "comment": "Comment prompt"
+      "comment": "Comment prompt",
+      "people": "People prompt"
     },
     "errors": {
       "load": "Failed to load prompts.",
@@ -492,6 +498,141 @@
       }
     }
   },
+  "people": {
+    "page": {
+      "title": "People",
+      "emptySearches": "Create a people search first.",
+      "goToSearches": "Go to searches",
+      "unnamed": "Unnamed",
+      "filters": {
+        "all": "All",
+        "match": "Matching",
+        "noMatch": "Rejected"
+      },
+      "search": {
+        "placeholder": "Search people",
+        "empty": "No people match this search."
+      },
+      "sort": {
+        "label": "Sort by",
+        "searched": "Search date",
+        "score": "Match %",
+        "name": "Name",
+        "desc": "Sort descending",
+        "asc": "Sort ascending"
+      },
+      "reason": "Reason",
+      "matched": "Matched",
+      "missing": "Missing",
+      "redFlags": "Red flags",
+      "contentUnavailable": "Profile details are unavailable",
+      "status": {
+        "accepted": "accepted",
+        "rejected": "rejected"
+      },
+      "meta": {
+        "analyzed": "Analyzed",
+        "company": "Company",
+        "location": "Location",
+        "connection": "Connection"
+      },
+      "actions": {
+        "details": "Details",
+        "collapse": "Collapse",
+        "openLinkedIn": "Open on LinkedIn",
+        "delete": "Delete"
+      },
+      "delete": {
+        "confirm": "Delete this person? This will remove them from the list and the database.",
+        "failed": "Failed to delete person."
+      },
+      "emptyResults": "No results yet. Run the search from the Searches page."
+    },
+    "prompts": {
+      "create": {
+        "title": "Create people search",
+        "description": "LinkedIn boolean query, filters, and an AI prompt to score profiles.",
+        "submit": "Create",
+        "pending": "Creating..."
+      },
+      "list": {
+        "title": "People searches",
+        "empty": "No people searches yet.",
+        "newMatches": "{count} new matching profiles",
+        "targetFound": "Need to find: {count}"
+      },
+      "status": {
+        "active": "Active",
+        "paused": "Paused"
+      },
+      "edit": {
+        "toggle": "Edit",
+        "collapse": "Collapse",
+        "save": "Save",
+        "saving": "Saving...",
+        "saved": "Saved",
+        "delete": "Delete",
+        "deleteConfirm": "Delete this people search? This cannot be undone."
+      },
+      "fields": {
+        "title": "Title",
+        "searchQuery": "Boolean query",
+        "searchQueryPlaceholder": "ABAP AND (\"S/4HANA\" OR HANA)",
+        "allFilters": "All filters",
+        "peoplePrompt": "Profile scoring prompt",
+        "promptEmpty": "New prompt",
+        "editPrompt": "Open in Prompts",
+        "markerHint": "Must include marker: {marker}"
+      },
+      "errors": {
+        "loadFailed": "Failed to load people searches.",
+        "saveFailed": "Failed to save people search.",
+        "deleteFailed": "Failed to delete people search."
+      }
+    },
+    "boolean": {
+      "hint": "AND / OR / NOT, quotes \"...\", and parentheses (...). Operators outside quotes are uppercased.",
+      "plusMinus": "LinkedIn does not support + or -. Use AND / NOT instead.",
+      "unbalancedQuotes": "Unbalanced quotes.",
+      "unbalancedParens": "Unbalanced parentheses.",
+      "startsWithOp": "Query cannot start with AND/OR.",
+      "endsWithOp": "Query cannot end with AND/OR/NOT."
+    },
+    "filters": {
+      "title": "All filters",
+      "description": "LinkedIn People Search filters. Company and school names without numeric IDs are added to keywords in quotes.",
+      "network": "Connection",
+      "network1": "1st",
+      "network2": "2nd",
+      "network3": "3rd+",
+      "locations": "Locations",
+      "locationsPlaceholder": "Berlin, Germany",
+      "currentCompany": "Current company",
+      "pastCompany": "Past company",
+      "companyPlaceholder": "SAP",
+      "school": "School",
+      "schoolPlaceholder": "Stanford",
+      "industry": "Industry",
+      "industryPlaceholder": "Select industry",
+      "language": "Profile language",
+      "languageAny": "Any",
+      "keywords": "Extra keywords",
+      "keywordsPlaceholder": "ABAP OR RAP",
+      "cancel": "Cancel",
+      "apply": "Apply"
+    },
+    "runner": {
+      "idle": "Run",
+      "pending": "Running...",
+      "statusLabel": "Status:",
+      "errors": {
+        "startFailed": "Failed to start people search.",
+        "statusFailed": "Failed to get status.",
+        "runFailed": "People search failed.",
+        "timeout": "People search is taking too long."
+      }
+    }
+  },
   "admin": {
     "title": "Admin",
     "tabs": {
@@ -533,7 +674,8 @@
     "initiatedByAdmin": "Started by admin",
     "kind": {
       "post": "Posts",
-      "job": "Jobs"
+      "job": "Jobs",
+      "people": "People"
     },
     "status": {
       "running": "Running",
@@ -548,6 +690,7 @@
       "allKinds": "All types",
       "posts": "Posts",
       "jobs": "Jobs",
+      "people": "People",
       "search": "Search",
       "allSearches": "All searches",
       "status": "Status",

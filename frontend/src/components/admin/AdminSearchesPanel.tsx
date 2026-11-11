@@ -48,9 +48,11 @@ type SearchRow = {
   filter_prompt_id: string | null;
   search_prompt_id: string | null;
   comment_prompt_id: string | null;
+  people_prompt_id: string | null;
   filter_prompt: string | null;
   search_prompt: string | null;
   comment_prompt: string | null;
+  people_prompt: string | null;
   prompts: PromptRow[];
   user_full_name: string | null;
   created_at: string | null;
@@ -240,6 +242,7 @@ export function AdminSearchesPanel({
           <option value="all">{locale === "en" ? "All" : "Все"}</option>
           <option value="jobs">{locale === "en" ? "Jobs" : "Вакансии"}</option>
           <option value="posts">{locale === "en" ? "Posts" : "Посты"}</option>
+          <option value="people">{locale === "en" ? "People" : "Люди"}</option>
         </LinkedInFilterSelect>
         <LinkedInFilterSelect
           aria-label={locale === "en" ? "Status" : "Статус"}
@@ -289,9 +292,13 @@ export function AdminSearchesPanel({
                       ? locale === "en"
                         ? "Jobs"
                         : "Вакансии"
-                      : locale === "en"
-                        ? "Posts"
-                        : "Посты"}{" "}
+                      : r.search_type_code === "people"
+                        ? locale === "en"
+                          ? "People"
+                          : "Люди"
+                        : locale === "en"
+                          ? "Posts"
+                          : "Посты"}{" "}
                     · {r.id}
                   </div>
                   <div className="mt-1 font-medium">{r.title}</div>
@@ -301,13 +308,13 @@ export function AdminSearchesPanel({
                   </div>
                   <SearchTariffSummary
                     tariff={tariff}
-                    kind={r.search_type_code === "jobs" ? "job" : "post"}
+                    kind={r.search_type_code === "jobs" ? "job" : r.search_type_code === "people" ? "people" : "post"}
                     className="mt-2"
                   />
                 </div>
                 <div className="flex flex-wrap items-start justify-end gap-2">
                   <SearchRunButton
-                    kind={r.search_type_code === "jobs" ? "jobs" : "posts"}
+                    kind={r.search_type_code === "jobs" ? "jobs" : r.search_type_code === "people" ? "people" : "posts"}
                     searchId={r.id}
                     userId={r.user_id}
                     disabled={saving}
@@ -369,7 +376,7 @@ export function AdminSearchesPanel({
                   onFormatChange={(format) => onDraft(r.id, { email_report_format: format })}
                 />
 
-                {r.search_type_code === "jobs" ? (
+                {r.search_type_code === "jobs" || r.search_type_code === "people" ? (
                   <>
                     <div>
                       <Label>{locale === "en" ? "Search query" : "Search query"}</Label>
@@ -379,25 +386,41 @@ export function AdminSearchesPanel({
                         onChange={(e) => onDraft(r.id, { search_query: e.target.value })}
                       />
                     </div>
-                    <div>
-                      <Label>{locale === "en" ? "Location" : "Локация"}</Label>
-                      <input
-                        className="mt-1 w-full rounded-md border border-border bg-background px-3 py-2 text-sm"
-                        value={((draft.location ?? r.location) || "") as string}
-                        onChange={(e) => onDraft(r.id, { location: e.target.value || null })}
+                    {r.search_type_code === "jobs" ? (
+                      <div>
+                        <Label>{locale === "en" ? "Location" : "Локация"}</Label>
+                        <input
+                          className="mt-1 w-full rounded-md border border-border bg-background px-3 py-2 text-sm"
+                          value={((draft.location ?? r.location) || "") as string}
+                          onChange={(e) => onDraft(r.id, { location: e.target.value || null })}
+                        />
+                      </div>
+                    ) : null}
+                    {r.search_type_code === "jobs" ? (
+                      <PromptPicker
+                        label={locale === "en" ? "Filter prompt" : "Промпт фильтра"}
+                        value={((draft.filter_prompt_id ?? r.filter_prompt_id) || "") as string}
+                        options={(promptsByUserId[r.user_id] || []).filter((p) => p.role === "filter")}
+                        fallbackBody={r.filter_prompt}
+                        emptyLabel={locale === "en" ? "Not selected" : "Не выбран"}
+                        loading={Boolean(promptsLoadingByUserId[r.user_id])}
+                        editLabel={locale === "en" ? "Open in Prompts" : "Открыть в Промптах"}
+                        editHref={{ pathname: "/admin/prompts", query: { user_id: r.user_id } }}
+                        onChange={(id) => onDraft(r.id, { filter_prompt_id: id || null })}
                       />
-                    </div>
-                    <PromptPicker
-                      label={locale === "en" ? "Filter prompt" : "Промпт фильтра"}
-                      value={((draft.filter_prompt_id ?? r.filter_prompt_id) || "") as string}
-                      options={(promptsByUserId[r.user_id] || []).filter((p) => p.role === "filter")}
-                      fallbackBody={r.filter_prompt}
-                      emptyLabel={locale === "en" ? "Not selected" : "Не выбран"}
-                      loading={Boolean(promptsLoadingByUserId[r.user_id])}
-                      editLabel={locale === "en" ? "Open in Prompts" : "Открыть в Промптах"}
-                      editHref={{ pathname: "/admin/prompts", query: { user_id: r.user_id } }}
-                      onChange={(id) => onDraft(r.id, { filter_prompt_id: id || null })}
-                    />
+                    ) : (
+                      <PromptPicker
+                        label={locale === "en" ? "People prompt" : "Промпт людей"}
+                        value={((draft.people_prompt_id ?? r.people_prompt_id) || "") as string}
+                        options={(promptsByUserId[r.user_id] || []).filter((p) => p.role === "people")}
+                        fallbackBody={r.people_prompt}
+                        emptyLabel={locale === "en" ? "Not selected" : "Не выбран"}
+                        loading={Boolean(promptsLoadingByUserId[r.user_id])}
+                        editLabel={locale === "en" ? "Open in Prompts" : "Открыть в Промптах"}
+                        editHref={{ pathname: "/admin/prompts", query: { user_id: r.user_id } }}
+                        onChange={(id) => onDraft(r.id, { people_prompt_id: id || null })}
+                      />
+                    )}
                     <div className="md:col-span-2">
                       <Label>{locale === "en" ? "LinkedIn filters (JSON)" : "LinkedIn filters (JSON)"}</Label>
                       <textarea
@@ -464,9 +487,13 @@ export function AdminSearchesPanel({
                         ? locale === "en"
                           ? "Job search"
                           : "Поиск вакансий"
-                        : locale === "en"
-                          ? "Post search"
-                          : "Поиск постов"}
+                        : r.search_type_code === "people"
+                          ? locale === "en"
+                            ? "People search"
+                            : "Поиск людей"
+                          : locale === "en"
+                            ? "Post search"
+                            : "Поиск постов"}
                       {hasDraft ? ` · ${locale === "en" ? "unsaved changes" : "есть черновик"}` : null}
                     </span>
                   )}

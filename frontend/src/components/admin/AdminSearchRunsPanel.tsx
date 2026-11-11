@@ -85,17 +85,17 @@ export function AdminSearchRunsPanel({
   const [error, setError] = useState<string | null>(null);
   const [openPromptId, setOpenPromptId] = useState<string | null>(null);
 
-  const selectedSearchId = kind === "post" || kind === "job" ? searchId : "";
+  const selectedSearchId = kind === "post" || kind === "job" || kind === "people" ? searchId : "";
 
   const searchOptionsKey =
-    userId && (kind === "post" || kind === "job") ? `${userId}:${kind}` : null;
+    userId && (kind === "post" || kind === "job" || kind === "people") ? `${userId}:${kind}` : null;
   const searchOptions = searchOptionsKey ? (searchOptionsByKey[searchOptionsKey] ?? []) : [];
 
   const queryString = useMemo(() => {
     const p = new URLSearchParams();
     if (userId) p.set("user_id", userId);
-    if (kind === "post" || kind === "job") p.set("kind", kind);
-    if ((kind === "post" || kind === "job") && searchId) p.set("search_id", searchId);
+    if (kind === "post" || kind === "job" || kind === "people") p.set("kind", kind);
+    if ((kind === "post" || kind === "job" || kind === "people") && searchId) p.set("search_id", searchId);
     if (status !== "all") p.set("status", status);
     if (order === "asc") p.set("order", "asc");
     p.set("limit", "50");
@@ -127,15 +127,20 @@ export function AdminSearchRunsPanel({
     const path =
       k === "post"
         ? `/api/admin/users/${encodeURIComponent(uid)}/post-searches`
-        : `/api/admin/users/${encodeURIComponent(uid)}/job-searches`;
+        : k === "people"
+          ? `/api/admin/searches?type=people&user_id=${encodeURIComponent(uid)}&limit=200`
+          : `/api/admin/users/${encodeURIComponent(uid)}/job-searches`;
     let cancelled = false;
     void (async () => {
       try {
         const resp = await fetch(path, { cache: "no-store" });
-        const json = (await resp.json().catch(() => null)) as Array<{ id: string; title: string }> | null;
+        const json = (await resp.json().catch(() => null)) as
+          | Array<{ id: string; title: string }>
+          | { items?: Array<{ id: string; title: string }> }
+          | null;
         if (cancelled) return;
-        const next =
-          resp.ok && Array.isArray(json) ? json.map((r) => ({ id: r.id, title: r.title })) : [];
+        const list = Array.isArray(json) ? json : Array.isArray(json?.items) ? json.items : [];
+        const next = resp.ok ? list.map((r) => ({ id: r.id, title: r.title })) : [];
         setSearchOptionsByKey((prev) => ({ ...prev, [searchOptionsKey]: next }));
       } catch {
         if (!cancelled) {
@@ -201,6 +206,7 @@ export function AdminSearchRunsPanel({
             <option value="all">{t("filters.allKinds")}</option>
             <option value="post">{t("filters.posts")}</option>
             <option value="job">{t("filters.jobs")}</option>
+            <option value="people">{t("filters.people")}</option>
           </LinkedInFilterSelect>
           <LinkedInFilterSelect
             aria-label={t("filters.search")}
@@ -209,7 +215,7 @@ export function AdminSearchRunsPanel({
             disabled={!userId || kind === "all"}
             onChange={(e) => {
               const id = e.target.value;
-              if (kind === "post" || kind === "job") pushFilters({ search_id: id });
+              if (kind === "post" || kind === "job" || kind === "people") pushFilters({ search_id: id });
             }}
           >
             <option value="">{t("filters.allSearches")}</option>
@@ -260,7 +266,7 @@ export function AdminSearchRunsPanel({
       <div className="space-y-3">
         {rows.map((row) => {
           const criteria =
-            row.kind === "job"
+            row.kind === "job" || row.kind === "people"
               ? [row.search_query, row.location].filter(Boolean).join(" · ")
               : [t("criteria.limit", { count: row.limit_count }), row.account_label].filter(Boolean).join(" · ");
           const promptsOpen = openPromptId === row.id;
@@ -271,7 +277,11 @@ export function AdminSearchRunsPanel({
                   <div className="flex min-w-0 flex-1 flex-wrap items-center gap-2">
                     <span className="font-semibold">{row.search_title}</span>
                     <span className="rounded-full border border-border px-2 py-0.5 text-xs text-muted-foreground">
-                      {row.kind === "job" ? t("kind.job") : t("kind.post")}
+                      {row.kind === "job"
+                        ? t("kind.job")
+                        : row.kind === "people"
+                          ? t("kind.people")
+                          : t("kind.post")}
                     </span>
                     <span
                       className={cn(

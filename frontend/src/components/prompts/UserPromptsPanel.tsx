@@ -14,10 +14,10 @@ import {
   linkedinSelectFiltered,
 } from "@/components/ui/linkedin-filter-chip";
 import { Label } from "@/components/ui/label";
-import { DEFAULT_COMMENT_PROMPT, DEFAULT_SEARCH_PROMPT } from "@/lib/defaultPrompts";
+import { DEFAULT_COMMENT_PROMPT, DEFAULT_PEOPLE_PROMPT, DEFAULT_SEARCH_PROMPT } from "@/lib/defaultPrompts";
 import { cn } from "@/lib/utils";
 
-type PromptRole = "filter" | "search" | "comment";
+type PromptRole = "filter" | "search" | "comment" | "people";
 
 type PromptRow = {
   id: string;
@@ -44,6 +44,7 @@ const DEFAULT_FILTER_PROMPT = `Оцени вакансию и верни тол�
 function defaultBody(role: PromptRole) {
   if (role === "filter") return DEFAULT_FILTER_PROMPT;
   if (role === "comment") return DEFAULT_COMMENT_PROMPT;
+  if (role === "people") return DEFAULT_PEOPLE_PROMPT;
   return DEFAULT_SEARCH_PROMPT;
 }
 
@@ -231,6 +232,7 @@ export function UserPromptsPanel({ locale }: { locale: "ru" | "en" }) {
     if (value === "filter") return t("roles.filter");
     if (value === "search") return t("roles.search");
     if (value === "comment") return t("roles.comment");
+    if (value === "people") return t("roles.people");
     return value;
   };
 
@@ -249,6 +251,7 @@ export function UserPromptsPanel({ locale }: { locale: "ru" | "en" }) {
           <option value="filter">{t("roles.filter")}</option>
           <option value="search">{t("roles.search")}</option>
           <option value="comment">{t("roles.comment")}</option>
+          <option value="people">{t("roles.people")}</option>
         </LinkedInFilterSelect>
         <LinkedInFilterInput
           aria-label={t("fields.title")}
@@ -283,6 +286,7 @@ export function UserPromptsPanel({ locale }: { locale: "ru" | "en" }) {
                 <option value="filter">{t("roles.filter")}</option>
                 <option value="search">{t("roles.search")}</option>
                 <option value="comment">{t("roles.comment")}</option>
+                <option value="people">{t("roles.people")}</option>
               </select>
             </div>
             <div>
