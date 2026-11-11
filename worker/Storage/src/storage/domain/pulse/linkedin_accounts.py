@@ -4,8 +4,9 @@ from datetime import UTC, datetime
 from typing import Any
 
 from storage.core.response import expect_list, expect_single
+from storage.session_crypto import decrypt_json, encrypt_json
 
-from .models import LinkedInAccountCreate, LinkedInAccountRow
+from .models import LinkedInAccountRow
 
 
 def pick_linkedin_account_row(
@@ -37,7 +38,7 @@ class LinkedInAccountRepository:
             .order("created_at", desc=False)
             .execute()
         )
-        return expect_list(resp)  # type: ignore[return-value]
+        return [_open_account_row(row) for row in expect_list(resp)]  # type: ignore[return-value]
 
     def create(
         self,
@@ -48,18 +49,20 @@ class LinkedInAccountRepository:
         li_profile_url: str | None = None,
     ) -> LinkedInAccountRow:
         now = datetime.now(UTC).isoformat()
-        payload: LinkedInAccountCreate = {
+        sealed_cookies, sealed_snapshot = _seal_session(session_snapshot)
+        payload: dict[str, Any] = {
             "user_id": user_id,
-            "cookies_json": _playwright_cookies_from_snapshot(session_snapshot),
+            "cookies_json": sealed_cookies,
             "cookies_updated_at": now,
-            "session_snapshot": session_snapshot,
+            "session_snapshot": sealed_snapshot,
         }
         if label is not None:
             payload["label"] = label
         if li_profile_url is not None:
             payload["li_profile_url"] = li_profile_url
 
-        return expect_single(self._client.table("linkedin_accounts").insert(payload).execute())  # type: ignore[return-value]
+        inserted = expect_single(self._client.table("linkedin_accounts").insert(payload).execute())
+        return _open_account_row(inserted)
 
     def update_session(
         self,
@@ -68,12 +71,13 @@ class LinkedInAccountRepository:
         session_snapshot: dict[str, Any],
     ) -> LinkedInAccountRow:
         now = datetime.now(UTC).isoformat()
+        sealed_cookies, sealed_snapshot = _seal_session(session_snapshot)
         resp = (
             self._client.table("linkedin_accounts")
             .update(
                 {
-                    "session_snapshot": session_snapshot,
-                    "cookies_json": _playwright_cookies_from_snapshot(session_snapshot),
+                    "session_snapshot": sealed_snapshot,
+                    "cookies_json": sealed_cookies,
                     "cookies_updated_at": now,
                     "updated_at": now,
                 }
@@ -82,7 +86,20 @@ class LinkedInAccountRepository:
             .select("*")
             .execute()
         )
-        return expect_single(resp)  # type: ignore[return-value]
+        return _open_account_row(expect_single(resp))
+
+
+def _seal_session(snapshot: dict[str, Any]) -> tuple[str, str]:
+    cookies = _playwright_cookies_from_snapshot(snapshot)
+    return encrypt_json(cookies), encrypt_json(snapshot)
+
+
+def _open_account_row(row: dict[str, Any]) -> LinkedInAccountRow:
+    opened = dict(row)
+    opened["cookies_json"] = decrypt_json(opened.get("cookies_json"))
+    if opened.get("session_snapshot") is not None:
+        opened["session_snapshot"] = decrypt_json(opened.get("session_snapshot"))
+    return opened  # type: ignore[return-value]
 
 
 def _playwright_cookies_from_snapshot(snapshot: dict[str, Any]) -> list[dict[str, Any]]:

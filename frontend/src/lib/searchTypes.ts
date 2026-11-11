@@ -2,7 +2,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 
 export async function getSearchTypeId(
   supabase: SupabaseClient,
-  code: "jobs" | "posts",
+  code: "jobs" | "posts" | "people",
 ): Promise<string> {
   const resp = await supabase.from("search_types").select("id").eq("code", code).maybeSingle();
   const id = !resp.error && resp.data && typeof resp.data.id === "string" ? resp.data.id : "";

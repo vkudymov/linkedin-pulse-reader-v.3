@@ -4,6 +4,7 @@ import { getTranslations } from "next-intl/server";
 import { AppHeader } from "@/components/AppHeader";
 import { PostsResults } from "@/components/PostsResults";
 import { type PostFilter } from "@/components/PostFilters";
+import { LinkedInFilterLink, LinkedInFilterRow } from "@/components/ui/linkedin-filter-chip";
 import { Link } from "@/i18n/navigation";
 import { log } from "@/lib/log/logger";
 import { requireNotBlocked } from "@/lib/auth/blocked";
@@ -189,34 +190,13 @@ export default async function PostsPage({
       />
 
       <main className="mx-auto max-w-3xl px-6 py-6">
-        <div className="mb-6 flex gap-2">
-          <Link
-            href="/posts"
-            className={[
-              "rounded-full border px-4 py-2 text-sm",
-              "border-border bg-card text-foreground",
-            ].join(" ")}
-          >
-            {t("tabs.posts")}
-          </Link>
-          <Link
-            href="/jobs"
-            className={[
-              "rounded-full border px-4 py-2 text-sm",
-              "border-border/60 text-muted-foreground hover:text-foreground",
-            ].join(" ")}
-          >
-            {t("tabs.jobs")}
-          </Link>
-        </div>
-
         <div className="overflow-hidden rounded-2xl border border-border bg-card">
           <PostsResults
             header={
               <div className="space-y-4">
                 <h2 className="text-lg font-semibold tracking-tight">{t("feed.title")}</h2>
                 {postSearches.length > 0 ? (
-                  <div className="flex flex-wrap gap-2">
+                  <LinkedInFilterRow>
                     {postSearches.map((s) => {
                       const isActive = s.id === activePostSearchId;
                       const href =
@@ -224,21 +204,12 @@ export default async function PostsPage({
                           ? `/posts?post_search_id=${encodeURIComponent(s.id)}`
                           : `/posts?filter=${encodeURIComponent(filter)}&post_search_id=${encodeURIComponent(s.id)}`;
                       return (
-                        <Link
-                          key={s.id}
-                          href={href}
-                          className={[
-                            "rounded-full border px-3 py-1.5 text-sm",
-                            isActive
-                              ? "border-border bg-background text-foreground"
-                              : "border-border/60 text-muted-foreground hover:text-foreground",
-                          ].join(" ")}
-                        >
+                        <LinkedInFilterLink key={s.id} href={href} active={isActive}>
                           {s.title}
-                        </Link>
+                        </LinkedInFilterLink>
                       );
                     })}
-                  </div>
+                  </LinkedInFilterRow>
                 ) : (
                   <div className="text-sm text-muted-foreground">
                     {t("empty.noSearches")}{" "}

@@ -21,7 +21,7 @@ DEFAULT_JOB_SCAN = 25
 def resolve_run_limits(
     *,
     tariff: TariffParams | None,
-    kind: Literal["post", "job"],
+    kind: Literal["post", "job", "people"],
     request_limit: int | None = None,
 ) -> tuple[int, int, int]:
     """Return (max_scan, target_found, min_score). Tariff wins; else request/default."""
@@ -190,6 +190,57 @@ def create_job_search_run(
         location=row.get("location") if isinstance(row.get("location"), str) else None,
         linkedin_filters=filters,
         filter_prompt=filter_prompt,
+        initiated_by=initiated_by,
+        admin_actor_id=admin_actor_id,
+    )
+    return str(created["id"]), tariff
+
+
+def create_people_search_run(
+    *,
+    user_id: str,
+    people_search_id: str,
+    limit: int | None,
+    account_label: str | None,
+    initiated_by: InitiatedBy = "user",
+    admin_actor_id: str | None = None,
+) -> tuple[str, TariffParams | None]:
+    client = _get_supabase_admin_client()
+    resp = (
+        client.table("searches")
+        .select(
+            "id,title,search_query,linkedin_filters,search_tariff_id,search_types!inner(code),"
+            "people_prompt:prompts!searches_people_prompt_id_fkey(body)"
+        )
+        .eq("id", people_search_id)
+        .eq("user_id", user_id)
+        .eq("search_types.code", "people")
+        .maybe_single()
+        .execute()
+    )
+    row = getattr(resp, "data", None)
+    if not isinstance(row, dict) or not row.get("id"):
+        raise ValueError("people_search not found")
+
+    filters = row.get("linkedin_filters") if isinstance(row.get("linkedin_filters"), dict) else None
+    prompt = ""
+    pp = row.get("people_prompt")
+    if isinstance(pp, dict) and isinstance(pp.get("body"), str):
+        prompt = str(pp.get("body") or "")
+    if not prompt:
+        raise ValueError("people_search prompt not found")
+    tariff = _resolve_tariff_params(client=client, tariff_id=row.get("search_tariff_id"))
+    scan_limit, _, _ = resolve_run_limits(tariff=tariff, kind="people", request_limit=limit)
+    created = _repo().create_running(
+        user_id=user_id,
+        kind="people",
+        search_id=people_search_id,
+        search_title=str(row.get("title") or "People search"),
+        limit_count=scan_limit,
+        account_label=account_label,
+        search_query=str(row.get("search_query") or ""),
+        linkedin_filters=filters,
+        filter_prompt=prompt,
         initiated_by=initiated_by,
         admin_actor_id=admin_actor_id,
     )

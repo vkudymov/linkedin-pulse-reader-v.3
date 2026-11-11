@@ -4,6 +4,7 @@ from typing import Any
 
 from .core.client import create_supabase_client
 from .domain.jobs import JobAnalysisRepository, JobRepository, JobSearchRepository
+from .domain.people import PeopleAnalysisRepository, PeopleRepository, PeopleSearchRepository
 from .domain.pulse import (
     FeedPostRepository,
     LinkedInAccountRepository,
@@ -33,4 +34,7 @@ class PulseStorage:
         self.job_searches = JobSearchRepository(self.client)
         self.jobs = JobRepository(self.client)
         self.job_analyses = JobAnalysisRepository(self.client)
+        self.people_searches = PeopleSearchRepository(self.client)
+        self.people = PeopleRepository(self.client)
+        self.people_analyses = PeopleAnalysisRepository(self.client)
 

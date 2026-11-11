@@ -33,7 +33,10 @@ export async function GET(request: Request) {
       { count: "exact" },
     )
     .eq("user_id", data.user.id);
-  if (type === "jobs" || type === "posts") req = req.eq("search_types.code", type);
+  if (type === "jobs" || type === "posts" || type === "people") {
+    const typeId = await getSearchTypeId(supabase, type);
+    req = req.eq("search_type_id", typeId);
+  }
   if (status === "active" || status === "paused") req = req.eq("status", status);
   if (q) req = req.ilike("title", `%${q}%`);
   const resp = await req.order("created_at", { ascending: false }).range(offset, offset + limit - 1);
@@ -57,7 +60,7 @@ export async function POST(request: Request) {
     return new Response("invalid json", { status: 400 });
   }
   const body = (json && typeof json === "object" ? json : {}) as Record<string, unknown>;
-  const type = body.type === "jobs" || body.type === "posts" ? body.type : null;
+  const type = body.type === "jobs" || body.type === "posts" || body.type === "people" ? body.type : null;
   const title = typeof body.title === "string" ? body.title.trim() : "";
   if (!type || !title) return Response.json({ ok: false, error: "invalid payload" }, { status: 400 });
 
@@ -80,6 +83,16 @@ export async function POST(request: Request) {
     payload.search_query = searchQuery;
     payload.location = typeof body.location === "string" ? body.location.trim() || null : null;
     payload.filter_prompt_id = owned;
+  } else if (type === "people") {
+    const searchQuery = typeof body.search_query === "string" ? body.search_query.trim() : "";
+    const peoplePromptId = typeof body.people_prompt_id === "string" ? body.people_prompt_id.trim() : "";
+    if (!searchQuery || !peoplePromptId) {
+      return Response.json({ ok: false, error: "search_query and people_prompt_id are required" }, { status: 400 });
+    }
+    const owned = await requireOwnedPrompt(supabase, data.user.id, peoplePromptId, "people");
+    if (!owned) return Response.json({ ok: false, error: "people prompt not found" }, { status: 400 });
+    payload.search_query = searchQuery;
+    payload.people_prompt_id = owned;
   } else {
     const searchPromptId = typeof body.search_prompt_id === "string" ? body.search_prompt_id.trim() : "";
     if (!searchPromptId) return Response.json({ ok: false, error: "search_prompt_id is required" }, { status: 400 });

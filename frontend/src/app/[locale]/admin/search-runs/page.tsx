@@ -3,7 +3,6 @@ import { getTranslations } from "next-intl/server";
 
 import { AppHeader } from "@/components/AppHeader";
 import { AdminSearchRunsPanel } from "@/components/admin/AdminSearchRunsPanel";
-import { AdminSectionTabs } from "@/components/admin/AdminSectionTabs";
 import { loadAdminUserOptions } from "@/lib/admin/users";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 
@@ -35,10 +34,9 @@ export default async function AdminSearchRunsPage({
 
   return (
     <div className="min-h-screen bg-background text-foreground">
-      <AppHeader title={t("title")} subtitle={data.user.email ?? null} active="admin" isAdmin />
+      <AppHeader title={t("title")} subtitle={data.user.email ?? null} isAdmin />
 
       <main className="mx-auto max-w-3xl px-6 py-6">
-        <AdminSectionTabs active="searchRuns" />
         <AdminSearchRunsPanel locale={loc} initialUsers={userOptions} />
       </main>
     </div>

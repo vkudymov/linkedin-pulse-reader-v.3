@@ -3,7 +3,9 @@ from __future__ import annotations
 from fastapi import APIRouter, Depends, HTTPException, status
 
 from ..deps.auth import _get_supabase_admin_client, require_user_id
+from ..search_quota import SearchQuotaError, charge_post_search_quota_after_start, raise_for_quota
 from ..search_runs.helpers import start_post_search_session
+from ..search_runs.status import poll_search_run
 from .schemas import PostSearchRunResponse, PostSearchStartRequest
 from .sessions import PostSearchSessionManager
 
@@ -11,12 +13,12 @@ router = APIRouter(prefix="/v1/post-search", tags=["post-search"])
 _sessions = PostSearchSessionManager()
 
 
-def _ensure_not_blocked_and_increment_counter(*, user_id: str) -> None:
+def _ensure_not_blocked(*, user_id: str) -> None:
     client = _get_supabase_admin_client()
     try:
         prof_resp = (
             client.table("user_admin_state")
-            .select("is_blocked,post_search_run_count")
+            .select("is_blocked")
             .eq("id", user_id)
             .maybe_single()
             .execute()
@@ -29,22 +31,13 @@ def _ensure_not_blocked_and_increment_counter(*, user_id: str) -> None:
     if is_blocked:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Пользователь заблокирован.")
 
-    prev = int(row.get("post_search_run_count") or 0) if isinstance(row, dict) else 0
-    try:
-        client.table("user_admin_state").update(
-            {"post_search_run_count": prev + 1}
-        ).eq("id", user_id).execute()
-    except Exception:
-        # Best-effort counter; do not block post search.
-        return
-
 
 @router.post("/run", response_model=PostSearchRunResponse)
 def start_run(
     req: PostSearchStartRequest,
     user_id: str = Depends(require_user_id),
 ) -> PostSearchRunResponse:
-    _ensure_not_blocked_and_increment_counter(user_id=user_id)
+    _ensure_not_blocked(user_id=user_id)
     client = _get_supabase_admin_client()
     try:
         resp = (
@@ -62,14 +55,21 @@ def start_run(
     if not isinstance(row, dict) or not row.get("id"):
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Post search not found.")
 
-    sess = start_post_search_session(
-        sessions=_sessions,
-        user_id=user_id,
-        post_search_id=req.post_search_id,
-        limit=req.limit,
-        account_label=req.account_label,
-        initiated_by="user",
-    )
+    try:
+        sess = charge_post_search_quota_after_start(
+            client=client,
+            user_id=user_id,
+            start=lambda: start_post_search_session(
+                sessions=_sessions,
+                user_id=user_id,
+                post_search_id=req.post_search_id,
+                limit=req.limit,
+                account_label=req.account_label,
+                initiated_by="user",
+            ),
+        )
+    except SearchQuotaError as exc:
+        raise_for_quota(exc)
     return PostSearchRunResponse(session_id=sess.session_id, status=sess.status, message=sess.message)
 
 
@@ -78,8 +78,16 @@ def get_status(
     session_id: str,
     user_id: str = Depends(require_user_id),
 ) -> PostSearchRunResponse:
-    sess = _sessions.get(user_id=user_id, session_id=session_id)
-    if sess is None:
+    polled = poll_search_run(
+        user_id=user_id,
+        session_id=session_id,
+        executor_alive=_sessions.owns(user_id=user_id, session_id=session_id),
+    )
+    if polled is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Session not found.")
-    return PostSearchRunResponse(session_id=sess.session_id, status=sess.status, message=sess.message)
+    return PostSearchRunResponse(
+        session_id=polled["session_id"],
+        status=polled["status"],
+        message=polled["message"],
+    )
 

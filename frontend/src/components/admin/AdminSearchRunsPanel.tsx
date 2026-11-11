@@ -7,7 +7,11 @@ import { useTranslations } from "next-intl";
 
 import { useRouter } from "@/i18n/navigation";
 import { Button } from "@/components/ui/button";
-import { Label } from "@/components/ui/label";
+import {
+  LinkedInFilterRow,
+  LinkedInFilterSelect,
+  linkedinSelectFiltered,
+} from "@/components/ui/linkedin-filter-chip";
 import type { AdminUserOption } from "@/lib/admin/users";
 import { cn } from "@/lib/utils";
 
@@ -81,17 +85,17 @@ export function AdminSearchRunsPanel({
   const [error, setError] = useState<string | null>(null);
   const [openPromptId, setOpenPromptId] = useState<string | null>(null);
 
-  const selectedSearchId = kind === "post" || kind === "job" ? searchId : "";
+  const selectedSearchId = kind === "post" || kind === "job" || kind === "people" ? searchId : "";
 
   const searchOptionsKey =
-    userId && (kind === "post" || kind === "job") ? `${userId}:${kind}` : null;
+    userId && (kind === "post" || kind === "job" || kind === "people") ? `${userId}:${kind}` : null;
   const searchOptions = searchOptionsKey ? (searchOptionsByKey[searchOptionsKey] ?? []) : [];
 
   const queryString = useMemo(() => {
     const p = new URLSearchParams();
     if (userId) p.set("user_id", userId);
-    if (kind === "post" || kind === "job") p.set("kind", kind);
-    if ((kind === "post" || kind === "job") && searchId) p.set("search_id", searchId);
+    if (kind === "post" || kind === "job" || kind === "people") p.set("kind", kind);
+    if ((kind === "post" || kind === "job" || kind === "people") && searchId) p.set("search_id", searchId);
     if (status !== "all") p.set("status", status);
     if (order === "asc") p.set("order", "asc");
     p.set("limit", "50");
@@ -123,15 +127,20 @@ export function AdminSearchRunsPanel({
     const path =
       k === "post"
         ? `/api/admin/users/${encodeURIComponent(uid)}/post-searches`
-        : `/api/admin/users/${encodeURIComponent(uid)}/job-searches`;
+        : k === "people"
+          ? `/api/admin/searches?type=people&user_id=${encodeURIComponent(uid)}&limit=200`
+          : `/api/admin/users/${encodeURIComponent(uid)}/job-searches`;
     let cancelled = false;
     void (async () => {
       try {
         const resp = await fetch(path, { cache: "no-store" });
-        const json = (await resp.json().catch(() => null)) as Array<{ id: string; title: string }> | null;
+        const json = (await resp.json().catch(() => null)) as
+          | Array<{ id: string; title: string }>
+          | { items?: Array<{ id: string; title: string }> }
+          | null;
         if (cancelled) return;
-        const next =
-          resp.ok && Array.isArray(json) ? json.map((r) => ({ id: r.id, title: r.title })) : [];
+        const list = Array.isArray(json) ? json : Array.isArray(json?.items) ? json.items : [];
+        const next = resp.ok ? list.map((r) => ({ id: r.id, title: r.title })) : [];
         setSearchOptionsByKey((prev) => ({ ...prev, [searchOptionsKey]: next }));
       } catch {
         if (!cancelled) {
@@ -174,78 +183,70 @@ export function AdminSearchRunsPanel({
   return (
     <div className="space-y-6">
       <div className="rounded-2xl border border-border bg-card p-6">
-        <div className="grid gap-4 sm:grid-cols-2">
-          <div className="grid gap-2">
-            <Label>{t("filters.user")}</Label>
-            <select
-              className="h-11 rounded-full border border-border bg-secondary px-4 text-sm"
-              value={userId}
-              onChange={(e) => pushFilters({ user_id: e.target.value })}
-            >
-              <option value="">{t("filters.allUsers")}</option>
-              {users.map((u) => (
-                <option key={u.id} value={u.id}>
-                  {u.full_name || u.email || u.id}
-                </option>
-              ))}
-            </select>
-          </div>
-          <div className="grid gap-2">
-            <Label>{t("filters.kind")}</Label>
-            <select
-              className="h-11 rounded-full border border-border bg-secondary px-4 text-sm"
-              value={kind}
-              onChange={(e) => pushFilters({ kind: e.target.value })}
-            >
-              <option value="all">{t("filters.allKinds")}</option>
-              <option value="post">{t("filters.posts")}</option>
-              <option value="job">{t("filters.jobs")}</option>
-            </select>
-          </div>
-          <div className="grid gap-2">
-            <Label>{t("filters.search")}</Label>
-            <select
-              className="h-11 rounded-full border border-border bg-secondary px-4 text-sm disabled:opacity-50"
-              value={selectedSearchId}
-              disabled={!userId || kind === "all"}
-              onChange={(e) => {
-                const id = e.target.value;
-                if (kind === "post" || kind === "job") pushFilters({ search_id: id });
-              }}
-            >
-              <option value="">{t("filters.allSearches")}</option>
-              {searchOptions.map((s) => (
-                <option key={s.id} value={s.id}>
-                  {s.title}
-                </option>
-              ))}
-            </select>
-          </div>
-          <div className="grid gap-2">
-            <Label>{t("filters.status")}</Label>
-            <select
-              className="h-11 rounded-full border border-border bg-secondary px-4 text-sm"
-              value={status}
-              onChange={(e) => pushFilters({ status: e.target.value })}
-            >
-              <option value="all">{t("filters.allStatuses")}</option>
-              <option value="running">{t("status.running")}</option>
-              <option value="done">{t("status.done")}</option>
-              <option value="error">{t("status.error")}</option>
-            </select>
-          </div>
-          <div className="grid gap-2">
-            <Label>{t("filters.sort")}</Label>
-            <select
-              className="h-11 rounded-full border border-border bg-secondary px-4 text-sm"
-              value={order}
-              onChange={(e) => pushFilters({ order: e.target.value })}
-            >
-              <option value="desc">{t("filters.newest")}</option>
-              <option value="asc">{t("filters.oldest")}</option>
-            </select>
-          </div>
-        </div>
+        <LinkedInFilterRow>
+          <LinkedInFilterSelect
+            aria-label={t("filters.user")}
+            active={linkedinSelectFiltered(userId, [""])}
+            value={userId}
+            onChange={(e) => pushFilters({ user_id: e.target.value })}
+          >
+            <option value="">{t("filters.allUsers")}</option>
+            {users.map((u) => (
+              <option key={u.id} value={u.id}>
+                {u.full_name || u.email || u.id}
+              </option>
+            ))}
+          </LinkedInFilterSelect>
+          <LinkedInFilterSelect
+            aria-label={t("filters.kind")}
+            active={linkedinSelectFiltered(kind)}
+            value={kind}
+            onChange={(e) => pushFilters({ kind: e.target.value })}
+          >
+            <option value="all">{t("filters.allKinds")}</option>
+            <option value="post">{t("filters.posts")}</option>
+            <option value="job">{t("filters.jobs")}</option>
+            <option value="people">{t("filters.people")}</option>
+          </LinkedInFilterSelect>
+          <LinkedInFilterSelect
+            aria-label={t("filters.search")}
+            active={linkedinSelectFiltered(selectedSearchId, [""])}
+            value={selectedSearchId}
+            disabled={!userId || kind === "all"}
+            onChange={(e) => {
+              const id = e.target.value;
+              if (kind === "post" || kind === "job" || kind === "people") pushFilters({ search_id: id });
+            }}
+          >
+            <option value="">{t("filters.allSearches")}</option>
+            {searchOptions.map((s) => (
+              <option key={s.id} value={s.id}>
+                {s.title}
+              </option>
+            ))}
+          </LinkedInFilterSelect>
+          <LinkedInFilterSelect
+            aria-label={t("filters.status")}
+            active={linkedinSelectFiltered(status)}
+            value={status}
+            onChange={(e) => pushFilters({ status: e.target.value })}
+          >
+            <option value="all">{t("filters.allStatuses")}</option>
+            <option value="running">{t("status.running")}</option>
+            <option value="done">{t("status.done")}</option>
+            <option value="error">{t("status.error")}</option>
+            <option value="lost">{t("status.lost")}</option>
+          </LinkedInFilterSelect>
+          <LinkedInFilterSelect
+            aria-label={t("filters.sort")}
+            active={order !== "desc"}
+            value={order}
+            onChange={(e) => pushFilters({ order: e.target.value })}
+          >
+            <option value="desc">{t("filters.newest")}</option>
+            <option value="asc">{t("filters.oldest")}</option>
+          </LinkedInFilterSelect>
+        </LinkedInFilterRow>
         <div className="mt-4 flex items-center gap-2">
           <Button type="button" variant="outline" className="rounded-full" onClick={() => void loadRuns()} disabled={loading}>
             {loading ? <RefreshCw className="mr-2 size-4 animate-spin" /> : null}
@@ -265,7 +266,7 @@ export function AdminSearchRunsPanel({
       <div className="space-y-3">
         {rows.map((row) => {
           const criteria =
-            row.kind === "job"
+            row.kind === "job" || row.kind === "people"
               ? [row.search_query, row.location].filter(Boolean).join(" · ")
               : [t("criteria.limit", { count: row.limit_count }), row.account_label].filter(Boolean).join(" · ");
           const promptsOpen = openPromptId === row.id;
@@ -276,12 +277,16 @@ export function AdminSearchRunsPanel({
                   <div className="flex min-w-0 flex-1 flex-wrap items-center gap-2">
                     <span className="font-semibold">{row.search_title}</span>
                     <span className="rounded-full border border-border px-2 py-0.5 text-xs text-muted-foreground">
-                      {row.kind === "job" ? t("kind.job") : t("kind.post")}
+                      {row.kind === "job"
+                        ? t("kind.job")
+                        : row.kind === "people"
+                          ? t("kind.people")
+                          : t("kind.post")}
                     </span>
                     <span
                       className={cn(
                         "rounded-full px-2 py-0.5 text-xs",
-                        row.status === "error"
+                        row.status === "error" || row.status === "lost"
                           ? "bg-destructive/15 text-destructive"
                           : row.status === "done"
                             ? "bg-emerald-500/15 text-emerald-700 dark:text-emerald-300"
@@ -290,9 +295,13 @@ export function AdminSearchRunsPanel({
                     >
                       {row.status === "running"
                         ? t("status.running")
-                        : row.status === "error"
-                          ? t("status.error")
-                          : t("status.done")}
+                        : row.status === "done"
+                          ? t("status.done")
+                          : row.status === "lost"
+                            ? t("status.lost")
+                            : row.status === "error"
+                              ? t("status.error")
+                              : row.status}
                     </span>
                     {row.initiated_by === "admin" ? (
                       <span className="text-xs text-muted-foreground">{t("initiatedByAdmin")}</span>

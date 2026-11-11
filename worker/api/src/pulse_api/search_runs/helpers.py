@@ -4,10 +4,12 @@ from fastapi import HTTPException, status
 
 from ..post_search.sessions import PostSearchSession, PostSearchSessionManager
 from ..job_search.sessions import JobSearchSession, JobSearchSessionManager
+from ..people_search.sessions import PeopleSearchSession, PeopleSearchSessionManager
 from .service import (
     InitiatedBy,
     attach_session_id,
     create_job_search_run,
+    create_people_search_run,
     create_post_search_run,
     resolve_run_limits,
 )
@@ -87,6 +89,48 @@ def start_job_search_session(
     sess = sessions.start(
         user_id=user_id,
         job_search_id=job_search_id,
+        limit=scan,
+        min_score=min_score,
+        target_found=target_found,
+        account_label=account_label,
+        search_run_id=run_id,
+    )
+    attach_session_id(run_id=run_id, session_id=sess.session_id)
+    return sess
+
+
+def start_people_search_session(
+    *,
+    sessions: PeopleSearchSessionManager,
+    user_id: str,
+    people_search_id: str,
+    limit: int | None,
+    account_label: str | None,
+    initiated_by: InitiatedBy = "user",
+    admin_actor_id: str | None = None,
+) -> PeopleSearchSession:
+    try:
+        run_id, tariff = create_people_search_run(
+            user_id=user_id,
+            people_search_id=people_search_id,
+            limit=limit,
+            account_label=account_label,
+            initiated_by=initiated_by,
+            admin_actor_id=admin_actor_id,
+        )
+    except ValueError as e:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e)) from e
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Failed to create search run."
+        ) from e
+
+    scan, target_found, min_score = resolve_run_limits(
+        tariff=tariff, kind="people", request_limit=limit
+    )
+    sess = sessions.start(
+        user_id=user_id,
+        people_search_id=people_search_id,
         limit=scan,
         min_score=min_score,
         target_found=target_found,

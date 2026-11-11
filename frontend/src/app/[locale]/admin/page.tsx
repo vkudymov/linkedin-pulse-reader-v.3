@@ -2,7 +2,6 @@ import { redirect } from "next/navigation";
 import { getTranslations } from "next-intl/server";
 
 import { AppHeader } from "@/components/AppHeader";
-import { AdminSectionTabs } from "@/components/admin/AdminSectionTabs";
 import { AdminUsersTable } from "@/components/admin/AdminUsersTable";
 import { loadAdminUsers, type AdminUserRow } from "@/lib/admin/users";
 import { getSupabaseAccessToken } from "@/lib/admin/workerAccess";
@@ -50,12 +49,10 @@ export default async function AdminPage({
       <AppHeader
         title={t("title")}
         subtitle={data.user.email ?? null}
-        active="admin"
         isAdmin
       />
 
       <main className="mx-auto max-w-5xl px-6 py-6">
-        <AdminSectionTabs active="users" />
         <AdminUsersTable initialUsers={users} loadError={loadError} />
       </main>
     </div>

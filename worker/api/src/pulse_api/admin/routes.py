@@ -8,10 +8,13 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from ..deps.auth import require_user_id
 from ..job_search.schemas import JobSearchRunResponse, JobSearchStartRequest
 from ..job_search.sessions import JobSearchSessionManager
-from ..post_search.routes import _ensure_not_blocked_and_increment_counter  # type: ignore
+from ..people_search.schemas import PeopleSearchRunResponse, PeopleSearchStartRequest
+from ..people_search.sessions import PeopleSearchSessionManager
 from ..post_search.schemas import PostSearchRunResponse
 from ..post_search.sessions import PostSearchSessionManager
-from ..search_runs.helpers import start_job_search_session, start_post_search_session
+from ..search_quota import SearchQuotaError, charge_post_search_quota_after_start, raise_for_quota
+from ..search_runs.helpers import start_job_search_session, start_people_search_session, start_post_search_session
+from ..search_runs.status import poll_search_run
 from ..settings import get_settings
 from .schemas import (
     AdminJobSearchRow,
@@ -41,6 +44,7 @@ from .schemas import (
 router = APIRouter(prefix="/v1/admin", tags=["admin"])
 _admin_sessions = PostSearchSessionManager()
 _admin_job_sessions = JobSearchSessionManager()
+_admin_people_sessions = PeopleSearchSessionManager()
 
 
 def _get_service_client() -> Any:
@@ -95,6 +99,7 @@ def _admin_search_row_from_search(*, search_row: dict[str, Any]) -> dict[str, An
     fp = search_row.get("filter_prompt")
     sp = search_row.get("search_prompt")
     cp = search_row.get("comment_prompt")
+    pp = search_row.get("people_prompt")
     prompts_list: list[dict[str, Any]] = []
     if isinstance(fp, dict) and fp.get("id"):
         prompts_list.append(fp)
@@ -102,10 +107,13 @@ def _admin_search_row_from_search(*, search_row: dict[str, Any]) -> dict[str, An
         prompts_list.append(sp)
     if isinstance(cp, dict) and cp.get("id"):
         prompts_list.append(cp)
+    if isinstance(pp, dict) and pp.get("id"):
+        prompts_list.append(pp)
 
     filter_prompt = None
     search_prompt = None
     comment_prompt = None
+    people_prompt = None
     if search_type_code == "jobs":
         if isinstance(fp, dict) and isinstance(fp.get("body"), str):
             filter_prompt = str(fp.get("body") or "")
@@ -114,28 +122,34 @@ def _admin_search_row_from_search(*, search_row: dict[str, Any]) -> dict[str, An
             search_prompt = str(sp.get("body") or "")
         if isinstance(cp, dict) and isinstance(cp.get("body"), str):
             comment_prompt = str(cp.get("body") or "") or None
+    elif search_type_code == "people":
+        if isinstance(pp, dict) and isinstance(pp.get("body"), str):
+            people_prompt = str(pp.get("body") or "")
 
     out = dict(search_row)
     out.pop("search_type_id", None)
     out.pop("filter_prompt", None)
     out.pop("search_prompt", None)
     out.pop("comment_prompt", None)
+    out.pop("people_prompt", None)
     out["search_type_code"] = search_type_code
     out["prompts"] = prompts_list
     out["filter_prompt"] = filter_prompt
     out["search_prompt"] = search_prompt
     out["comment_prompt"] = comment_prompt
+    out["people_prompt"] = people_prompt
     return out
 
 
 _SEARCH_ROW_SELECT = (
     "id,user_id,title,status,last_run_at,search_tariff_id,email_report_enabled,email_report_format,"
     "search_query,location,linkedin_filters,account_label,created_at,updated_at,"
-    "filter_prompt_id,search_prompt_id,comment_prompt_id,"
+    "filter_prompt_id,search_prompt_id,comment_prompt_id,people_prompt_id,"
     "search_types!inner(code),"
     "filter_prompt:prompts!searches_filter_prompt_id_fkey(id,role,title,body,created_at,updated_at),"
     "search_prompt:prompts!searches_search_prompt_id_fkey(id,role,title,body,created_at,updated_at),"
-    "comment_prompt:prompts!searches_comment_prompt_id_fkey(id,role,title,body,created_at,updated_at)"
+    "comment_prompt:prompts!searches_comment_prompt_id_fkey(id,role,title,body,created_at,updated_at),"
+    "people_prompt:prompts!searches_people_prompt_id_fkey(id,role,title,body,created_at,updated_at)"
 )
 
 
@@ -550,6 +564,7 @@ _COMMENT_REQUIRED_MARKERS = [
 ]
 
 _JOB_SEARCH_REQUIRED_MARKER = "<<<JOB_TEXT>>>"
+_PEOPLE_SEARCH_REQUIRED_MARKER = "<<<PROFILE_TEXT>>>"
 
 
 def _missing_markers(value: str, markers: list[str]) -> list[str]:
@@ -596,6 +611,21 @@ def _validate_job_search_filter_prompt(v: str | None) -> str | None:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=f"filter_prompt must contain marker {_JOB_SEARCH_REQUIRED_MARKER}.",
+        )
+    return s
+
+
+def _validate_people_search_prompt(v: str | None) -> str | None:
+    if v is None:
+        return None
+    if not isinstance(v, str):
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid people_prompt.")
+    if not (s := v.strip()):
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="people_prompt must be non-empty.")
+    if _PEOPLE_SEARCH_REQUIRED_MARKER not in s:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"people_prompt must contain marker {_PEOPLE_SEARCH_REQUIRED_MARKER}.",
         )
     return s
 
@@ -936,16 +966,23 @@ def admin_start_post_search_run(
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Post search not found.")
         post_search_id = str(row.get("id"))
 
-    _ensure_not_blocked_and_increment_counter(user_id=target_user_id)
-    sess = start_post_search_session(
-        sessions=_admin_sessions,
-        user_id=target_user_id,
-        post_search_id=post_search_id,
-        limit=req.limit,
-        account_label=req.account_label,
-        initiated_by="admin",
-        admin_actor_id=admin_user_id,
-    )
+    _ensure_not_blocked(user_id=target_user_id)
+    try:
+        sess = charge_post_search_quota_after_start(
+            client=client,
+            user_id=target_user_id,
+            start=lambda: start_post_search_session(
+                sessions=_admin_sessions,
+                user_id=target_user_id,
+                post_search_id=post_search_id,
+                limit=req.limit,
+                account_label=req.account_label,
+                initiated_by="admin",
+                admin_actor_id=admin_user_id,
+            ),
+        )
+    except SearchQuotaError as exc:
+        raise_for_quota(exc)
     return PostSearchRunResponse(session_id=sess.session_id, status=sess.status, message=sess.message)
 
 
@@ -955,10 +992,18 @@ def admin_get_post_search_status(
     session_id: str,
     _: str = Depends(require_admin_user_id),
 ) -> PostSearchRunResponse:
-    sess = _admin_sessions.get(user_id=target_user_id, session_id=session_id)
-    if sess is None:
+    polled = poll_search_run(
+        user_id=target_user_id,
+        session_id=session_id,
+        executor_alive=_admin_sessions.owns(user_id=target_user_id, session_id=session_id),
+    )
+    if polled is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Session not found.")
-    return PostSearchRunResponse(session_id=sess.session_id, status=sess.status, message=sess.message)
+    return PostSearchRunResponse(
+        session_id=polled["session_id"],
+        status=polled["status"],
+        message=polled["message"],
+    )
 
 
 @router.post("/users/{target_user_id}/job-search/run", response_model=JobSearchRunResponse)
@@ -997,6 +1042,44 @@ def admin_start_job_search_run(
         admin_actor_id=admin_user_id,
     )
     return JobSearchRunResponse(session_id=sess.session_id, status=sess.status, message=sess.message)
+
+
+@router.post("/users/{target_user_id}/people-search/run", response_model=PeopleSearchRunResponse)
+def admin_start_people_search_run(
+    target_user_id: str,
+    req: PeopleSearchStartRequest,
+    admin_user_id: str = Depends(require_admin_user_id),
+) -> PeopleSearchRunResponse:
+    client = _get_service_client()
+
+    _ensure_not_blocked(user_id=target_user_id)
+
+    try:
+        resp = (
+            client.table("searches")
+            .select("id,search_type_id")
+            .eq("id", req.people_search_id)
+            .eq("user_id", target_user_id)
+            .eq("search_type_id", _search_type_id(client=client, code="people"))
+            .maybe_single()
+            .execute()
+        )
+    except Exception as e:
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Failed to load people search.") from e
+    row = getattr(resp, "data", None)
+    if not isinstance(row, dict) or not row.get("id"):
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="People search not found.")
+
+    sess = start_people_search_session(
+        sessions=_admin_people_sessions,
+        user_id=target_user_id,
+        people_search_id=req.people_search_id,
+        limit=req.limit,
+        account_label=req.account_label,
+        initiated_by="admin",
+        admin_actor_id=admin_user_id,
+    )
+    return PeopleSearchRunResponse(session_id=sess.session_id, status=sess.status, message=sess.message)
 
 
 @router.get("/users/{target_user_id}/post-searches", response_model=list[AdminPostSearchRow])
@@ -1134,8 +1217,8 @@ def list_search_runs(
 ) -> AdminSearchRunsListResponse:
     from storage.domain.pulse.search_runs import SearchRunRepository  # type: ignore[import-not-found]
 
-    kind_val = kind if kind in ("post", "job") else None
-    status_val = status if status in ("running", "done", "error") else None
+    kind_val = kind if kind in ("post", "job", "people") else None
+    status_val = status if status in ("running", "done", "error", "lost") else None
     order_val = "asc" if order == "asc" else "desc"
 
     repo = SearchRunRepository(_get_service_client())
@@ -1202,7 +1285,7 @@ def list_searches(
 ) -> AdminSearchesListResponse:
     client = _get_service_client()
 
-    type_val = type if type in ("jobs", "posts") else None
+    type_val = type if type in ("jobs", "posts", "people") else None
     status_val = status if status in ("active", "paused") else None
     order_val = "asc" if order == "asc" else "desc"
     order_by_val = order_by if order_by in ("created_at", "updated_at", "last_run_at", "title") else "created_at"
@@ -1273,7 +1356,7 @@ def update_search(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Search not found.")
     st = row.get("search_types")
     search_type_code = st.get("code") if isinstance(st, dict) else None
-    if search_type_code not in ("jobs", "posts"):
+    if search_type_code not in ("jobs", "posts", "people"):
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid search type.")
 
     payload: dict[str, Any] = {"updated_at": datetime.now(timezone.utc).isoformat()}
@@ -1308,6 +1391,19 @@ def update_search(
             payload["linkedin_filters"] = body.linkedin_filters
         if body.search_prompt is not None or body.comment_prompt is not None:
             raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Post prompts are not allowed for jobs.")
+        if body.people_prompt is not None:
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="people_prompt is people-only.")
+    elif search_type_code == "people":
+        if body.account_label is not None:
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="account_label is posts-only.")
+        if body.search_query is not None:
+            payload["search_query"] = _require_non_empty_string(body.search_query, field="search_query")
+        if body.linkedin_filters is not None:
+            payload["linkedin_filters"] = body.linkedin_filters
+        if body.filter_prompt is not None:
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="filter_prompt is jobs-only.")
+        if body.search_prompt is not None or body.comment_prompt is not None:
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Post prompts are not allowed for people.")
     else:
         # posts
         if body.search_query is not None or body.location is not None or body.linkedin_filters is not None:
@@ -1316,6 +1412,8 @@ def update_search(
             payload["account_label"] = _to_nullable_trimmed_string(body.account_label)
         if body.filter_prompt is not None:
             raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="filter_prompt is jobs-only.")
+        if body.people_prompt is not None:
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="people_prompt is people-only.")
 
     # Enforce tariff capability for email reports.
     wants_email = bool(payload.get("email_report_enabled") is True)
@@ -1334,7 +1432,7 @@ def update_search(
     try:
         current = (
             client.table("searches")
-            .select("filter_prompt_id,search_prompt_id,comment_prompt_id,title")
+            .select("filter_prompt_id,search_prompt_id,comment_prompt_id,people_prompt_id,title")
             .eq("id", search_id)
             .maybe_single()
             .execute()
@@ -1361,6 +1459,24 @@ def update_search(
                     title=str(current_row.get("title") or "Filter prompt"),
                 )
                 payload["filter_prompt_id"] = pid
+    elif search_type_code == "people":
+        if "people_prompt_id" in body.model_fields_set:
+            raw_id = _to_nullable_trimmed_string(body.people_prompt_id)
+            payload["people_prompt_id"] = (
+                _require_own_prompt(client=client, user_id=owner_id, prompt_id=raw_id, role="people") if raw_id else None
+            )
+        if body.people_prompt is not None:
+            text = _validate_people_search_prompt(body.people_prompt)
+            if text is not None:
+                pid = _update_or_create_prompt(
+                    client=client,
+                    user_id=owner_id,
+                    prompt_id=str(current_row.get("people_prompt_id") or "") or None,
+                    role="people",
+                    body=text,
+                    title=str(current_row.get("title") or "People prompt"),
+                )
+                payload["people_prompt_id"] = pid
     else:
         if "search_prompt_id" in body.model_fields_set:
             raw_id = _to_nullable_trimmed_string(body.search_prompt_id)
@@ -1464,8 +1580,8 @@ def list_prompts(
     _: str = Depends(require_admin_user_id),
 ) -> AdminPromptsListResponse:
     client = _get_service_client()
-    type_val = type if type in ("jobs", "posts") else None
-    role_val = role if role in ("filter", "search", "comment") else None
+    type_val = type if type in ("jobs", "posts", "people") else None
+    role_val = role if role in ("filter", "search", "comment", "people") else None
     order_val = "asc" if order == "asc" else "desc"
     order_by_val = order_by if order_by in ("created_at", "updated_at", "role", "title") else "updated_at"
     limit_val = max(1, min(200, int(limit)))
@@ -1480,6 +1596,8 @@ def list_prompts(
         req = req.eq("role", "filter")
     elif type_val == "posts":
         req = req.in_("role", ["search", "comment"])
+    elif type_val == "people":
+        req = req.eq("role", "people")
     if isinstance(q, str) and (qs := q.strip()):
         req = req.or_(f"title.ilike.%{qs}%,body.ilike.%{qs}%")
 
@@ -1537,7 +1655,7 @@ def update_prompt(
     if not isinstance(row, dict) or not row.get("id"):
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Prompt not found.")
     role_val = str(body.role or row.get("role") or "")
-    if role_val not in ("filter", "search", "comment"):
+    if role_val not in ("filter", "search", "comment", "people"):
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid prompt role.")
 
     patch: dict[str, Any] = {"updated_at": datetime.now(timezone.utc).isoformat()}
@@ -1555,6 +1673,8 @@ def update_prompt(
             _validate_job_search_filter_prompt(text)
         elif role_val == "search":
             _validate_prompts(search_prompt=text, comment_prompt=None)
+        elif role_val == "people":
+            _validate_people_search_prompt(text)
         elif missing := _missing_markers(text, _COMMENT_REQUIRED_MARKERS):
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
@@ -1596,10 +1716,38 @@ def admin_get_job_search_status(
     session_id: str,
     _: str = Depends(require_admin_user_id),
 ) -> JobSearchRunResponse:
-    sess = _admin_job_sessions.get(user_id=target_user_id, session_id=session_id)
-    if sess is None:
+    polled = poll_search_run(
+        user_id=target_user_id,
+        session_id=session_id,
+        executor_alive=_admin_job_sessions.owns(user_id=target_user_id, session_id=session_id),
+    )
+    if polled is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Session not found.")
-    return JobSearchRunResponse(session_id=sess.session_id, status=sess.status, message=sess.message)
+    return JobSearchRunResponse(
+        session_id=polled["session_id"],
+        status=polled["status"],  # type: ignore[arg-type]
+        message=polled["message"],
+    )
+
+
+@router.get("/users/{target_user_id}/people-search/run/{session_id}", response_model=PeopleSearchRunResponse)
+def admin_get_people_search_status(
+    target_user_id: str,
+    session_id: str,
+    _: str = Depends(require_admin_user_id),
+) -> PeopleSearchRunResponse:
+    polled = poll_search_run(
+        user_id=target_user_id,
+        session_id=session_id,
+        executor_alive=_admin_people_sessions.owns(user_id=target_user_id, session_id=session_id),
+    )
+    if polled is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Session not found.")
+    return PeopleSearchRunResponse(
+        session_id=polled["session_id"],
+        status=polled["status"],  # type: ignore[arg-type]
+        message=polled["message"],
+    )
 
 
 def _set_blocked(*, user_id: str, blocked: bool) -> None:

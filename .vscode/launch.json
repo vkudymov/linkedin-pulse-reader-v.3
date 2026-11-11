@@ -2,8 +2,26 @@
   "version": "0.2.0",
   "configurations": [
     {
+      "name": "Dev: worker API",
+      "type": "debugpy",
+      "request": "launch",
+      "program": "${workspaceFolder}/dev.py",
+      "args": ["api"],
+      "console": "integratedTerminal",
+      "cwd": "${workspaceFolder}"
+    },
+    {
+      "name": "Dev: frontend",
+      "type": "debugpy",
+      "request": "launch",
+      "program": "${workspaceFolder}/dev.py",
+      "args": ["web"],
+      "console": "integratedTerminal",
+      "cwd": "${workspaceFolder}"
+    },
+    {
       "name": "Run run_post_search.py",
-      "type": "python",
+      "type": "debugpy",
       "request": "launch",
       "program": "${workspaceFolder}/worker/run_post_search.py",
       "console": "integratedTerminal",
@@ -11,6 +29,11 @@
       "cwd": "${workspaceFolder}/worker",
       "args": []
     }
+  ],
+  "compounds": [
+    {
+      "name": "Dev: UI + API",
+      "configurations": ["Dev: worker API", "Dev: frontend"]
+    }
   ]
 }
-

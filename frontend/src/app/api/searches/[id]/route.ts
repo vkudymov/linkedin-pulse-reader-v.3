@@ -52,6 +52,15 @@ export async function PATCH(request: Request, ctx: { params: Promise<{ id: strin
       if (!owned) return Response.json({ ok: false, error: "filter prompt not found" }, { status: 400 });
       payload.filter_prompt_id = owned;
     }
+  } else if (code === "people") {
+    if (typeof body.search_query === "string") payload.search_query = body.search_query.trim();
+    if (body.people_prompt_id !== undefined) {
+      const raw = typeof body.people_prompt_id === "string" ? body.people_prompt_id.trim() : "";
+      if (!raw) return Response.json({ ok: false, error: "people_prompt_id is required" }, { status: 400 });
+      const owned = await requireOwnedPrompt(supabase, data.user.id, raw, "people");
+      if (!owned) return Response.json({ ok: false, error: "people prompt not found" }, { status: 400 });
+      payload.people_prompt_id = owned;
+    }
   } else {
     if (typeof body.account_label === "string") payload.account_label = body.account_label.trim() || null;
     if (body.search_prompt_id !== undefined) {

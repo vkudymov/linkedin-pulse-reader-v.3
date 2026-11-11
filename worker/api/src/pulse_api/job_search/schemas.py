@@ -13,6 +13,6 @@ class JobSearchStartRequest(BaseModel):
 
 class JobSearchRunResponse(BaseModel):
     session_id: str
-    status: Literal["running", "done", "error"]
+    status: Literal["running", "done", "error", "lost"]
     message: str | None = None
 

@@ -6,7 +6,7 @@ import { Label } from "@/components/ui/label";
 
 export type PromptOption = {
   id: string;
-  role: "filter" | "search" | "comment" | string;
+  role: "filter" | "search" | "comment" | "people" | string;
   title: string;
   body?: string;
   user_id?: string;

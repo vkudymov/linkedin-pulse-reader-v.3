@@ -4,11 +4,10 @@ import { getTranslations } from "next-intl/server";
 import { AppHeader } from "@/components/AppHeader";
 import { type JobAnalysisRow, type JobRow } from "@/components/jobs/JobCard";
 import { JobsResults } from "@/components/jobs/JobsResults";
-import { buttonVariants } from "@/components/ui/button";
+import { LinkedInFilterLink, LinkedInFilterRow } from "@/components/ui/linkedin-filter-chip";
 import { Link } from "@/i18n/navigation";
 import { requireNotBlocked } from "@/lib/auth/blocked";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
-import { cn } from "@/lib/utils";
 
 type Filter = "all" | "match" | "no_match";
 
@@ -120,93 +119,32 @@ export default async function JobsPage({
       />
 
       <main className="mx-auto max-w-3xl px-6 py-6">
-        <div className="mb-6 flex gap-2">
-          <Link
-            href="/posts"
-            className={[
-              "rounded-full border px-4 py-2 text-sm",
-              "border-border/60 text-muted-foreground hover:text-foreground",
-            ].join(" ")}
-          >
-            {t("tabs.posts")}
-          </Link>
-          <Link
-            href="/jobs"
-            className={[
-              "rounded-full border px-4 py-2 text-sm",
-              "border-border bg-card text-foreground",
-            ].join(" ")}
-          >
-            {t("tabs.jobs")}
-          </Link>
-        </div>
-
         {searches.length === 0 ? (
           <div className="rounded-2xl border border-border/80 bg-muted/40 px-6 py-5 text-sm text-muted-foreground">
             {t("emptySearches")}{" "}
-            <Link className="underline-offset-4 hover:underline" href="/searches?type=jobs">
+            <Link className="underline-offset-4 hover:underline" href={{ pathname: "/searches", query: { type: "jobs" } }}>
               {t("goToPrompts")}
             </Link>
           </div>
         ) : (
           <>
-            <div className="mb-6 flex flex-wrap gap-2">
+            <LinkedInFilterRow className="mb-6">
               {searches.map((s) => (
-                <Link
+                <LinkedInFilterLink
                   key={s.id as string}
                   href={`/jobs?search=${encodeURIComponent(s.id as string)}&filter=${filter}`}
-                  className={[
-                    "rounded-full border px-4 py-2 text-sm",
-                    (s.id as string) === selectedId
-                      ? "border-border bg-card text-foreground"
-                      : "border-border/60 text-muted-foreground hover:text-foreground",
-                  ].join(" ")}
+                  active={(s.id as string) === selectedId}
                 >
                   {s.title as string}
-                </Link>
+                </LinkedInFilterLink>
               ))}
-            </div>
+            </LinkedInFilterRow>
 
             <JobsResults
               rows={rows}
-              filters={
-                <div className="inline-flex flex-wrap gap-2">
-                  {(
-                    [
-                      ["all", t("filters.all"), counts.all],
-                      ["match", t("filters.match"), counts.match],
-                      ["no_match", t("filters.noMatch"), counts.noMatch],
-                    ] as const
-                  ).map(([value, label, count]) => {
-                    const active = filter === value;
-                    return (
-                      <Link
-                        key={value}
-                        href={`/jobs?search=${encodeURIComponent(selectedId as string)}&filter=${value}`}
-                        className={cn(
-                          buttonVariants({
-                            variant: active ? "default" : "outline",
-                            size: "sm",
-                          }),
-                          "h-9 gap-2 rounded-full px-4",
-                        )}
-                      >
-                        {label}
-                        <span
-                          className={cn(
-                            "inline-flex min-w-5 items-center justify-center rounded-full px-1.5 text-xs tabular-nums",
-                            active
-                              ? "bg-primary-foreground/15 text-primary-foreground"
-                              : "bg-muted text-muted-foreground",
-                          )}
-                        >
-                          {count}
-                        </span>
-                      </Link>
-                    );
-                  })}
-                </div>
-              }
+              searchId={selectedId as string}
+              filter={filter}
+              counts={counts}
             />
           </>
         )}

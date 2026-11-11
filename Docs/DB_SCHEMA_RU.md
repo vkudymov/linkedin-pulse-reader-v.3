@@ -2,6 +2,8 @@
 
 Источник правды — SQL‑миграции в `worker/supabase/migrations/*.sql`. Схема эволюционная: итоговый набор колонок зависит от того, какие миграции применены в Supabase (SQL Editor).
 
+**Связи по полям (FK):** [`DB_RELATIONS_RU.md`](./DB_RELATIONS_RU.md).
+
 ## Общая карта связей
 
 ```mermaid

@@ -1,6 +1,6 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 
-export type PromptRole = "filter" | "search" | "comment";
+export type PromptRole = "filter" | "search" | "comment" | "people";
 
 function titleFromBody(body: string, role: PromptRole, fallback?: string) {
   const first = body.split("\n", 1)[0]?.trim() || "";

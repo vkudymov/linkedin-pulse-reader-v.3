@@ -4,9 +4,26 @@
 
 - `frontend/` — Next.js UI (регистрация/вход, просмотр найденных постов)
 - `worker/` — Python worker (сбор постов, запись в Supabase, анализ через LLM)
-- `packages/` — три библиотеки поиска: `linkedin-search-core`, `linkedin-search-jobs`, `linkedin-pulse-search-posts` (код в `packages/linkedin-search-posts`; см. `packages/README.md`)
+- `packages/` — библиотеки поиска: `linkedin-search-core`, `linkedin-search-jobs`, `linkedin-pulse-search-posts` (код в `packages/linkedin-search-posts`), `linkedin-search-people` (см. `packages/README.md`)
 
 ## Быстрый старт
+
+### UI + worker API (два терминала, логи раздельно)
+
+Из корня репозитория:
+
+```bash
+# терминал 1
+python dev.py api
+
+# терминал 2
+python dev.py web
+```
+
+- API: `http://127.0.0.1:8000`
+- UI: `http://localhost:3000` (логин — только здесь, не на :8000)
+
+Остановка: `Ctrl+C` в каждом терминале.
 
 ### 1) Frontend
 
@@ -21,7 +38,7 @@ npm run dev
 
 ```bash
 cd worker
-python3 -m pip install -e ../packages/linkedin-search-core -e ../packages/linkedin-search-jobs -e ../packages/linkedin-search-posts -e LinkedInClient -e PostAnalyzer -e Storage -e api -e SearchReportMailer
+python3 -m pip install -e ../packages/linkedin-search-core -e ../packages/linkedin-search-jobs -e ../packages/linkedin-search-posts -e ../packages/linkedin-search-people -e LinkedInClient -e PostAnalyzer -e Storage -e JobSearch -e PeopleSearch -e api -e SearchReportMailer
 python run_post_search.py --limit 10
 ```
 

@@ -24,7 +24,7 @@ export function SearchRunButton({
   disabled,
   onDone,
 }: {
-  kind: "posts" | "jobs";
+  kind: "posts" | "jobs" | "people";
   searchId: string;
   userId?: string;
   disabled?: boolean;
@@ -36,7 +36,7 @@ export function SearchRunButton({
   const [status, setStatus] = useState<string | null>(null);
 
   const isAdmin = Boolean(userId);
-  const idleLabel = kind === "jobs" ? t("runJobs") : t("runPosts");
+  const idleLabel = kind === "jobs" ? t("runJobs") : kind === "people" ? t("runPeople") : t("runPosts");
   const pendingLabel = t("running");
 
   async function start() {
@@ -47,12 +47,20 @@ export function SearchRunButton({
       const runUrl = isAdmin
         ? kind === "jobs"
           ? `/api/admin/users/${encodeURIComponent(userId!)}/job-search/run`
-          : `/api/admin/users/${encodeURIComponent(userId!)}/post-search/run`
+          : kind === "people"
+            ? `/api/admin/users/${encodeURIComponent(userId!)}/people-search/run`
+            : `/api/admin/users/${encodeURIComponent(userId!)}/post-search/run`
         : kind === "jobs"
           ? "/api/job-search/run"
-          : "/api/post-search/run";
+          : kind === "people"
+            ? "/api/people-search/run"
+            : "/api/post-search/run";
       const body =
-        kind === "jobs" ? { job_search_id: searchId } : { post_search_id: searchId };
+        kind === "jobs"
+          ? { job_search_id: searchId }
+          : kind === "people"
+            ? { people_search_id: searchId }
+            : { post_search_id: searchId };
       const runResp = await fetch(runUrl, {
         method: "POST",
         headers: { "content-type": "application/json" },
@@ -61,17 +69,24 @@ export function SearchRunButton({
       });
       const runJson = (await runResp.json().catch(() => null)) as RunResponse | null;
       if (!runResp.ok || !runJson?.session_id) {
-        throw new Error(runJson?.message || t(kind === "jobs" ? "errors.startJobs" : "errors.startPosts"));
+        throw new Error(
+          runJson?.message ||
+            t(kind === "jobs" ? "errors.startJobs" : kind === "people" ? "errors.startPeople" : "errors.startPosts"),
+        );
       }
       setStatus(runJson.status ?? "running");
 
       const statusUrl = isAdmin
         ? kind === "jobs"
           ? `/api/admin/users/${encodeURIComponent(userId!)}/job-search/run/${encodeURIComponent(runJson.session_id)}`
-          : `/api/admin/users/${encodeURIComponent(userId!)}/post-search/run/${encodeURIComponent(runJson.session_id)}`
+          : kind === "people"
+            ? `/api/admin/users/${encodeURIComponent(userId!)}/people-search/run/${encodeURIComponent(runJson.session_id)}`
+            : `/api/admin/users/${encodeURIComponent(userId!)}/post-search/run/${encodeURIComponent(runJson.session_id)}`
         : kind === "jobs"
           ? `/api/job-search/run/${encodeURIComponent(runJson.session_id)}`
-          : `/api/post-search/run/${encodeURIComponent(runJson.session_id)}`;
+          : kind === "people"
+            ? `/api/people-search/run/${encodeURIComponent(runJson.session_id)}`
+            : `/api/post-search/run/${encodeURIComponent(runJson.session_id)}`;
 
       for (let attempt = 0; attempt < 600; attempt += 1) {
         await sleep(1000);
@@ -83,13 +98,19 @@ export function SearchRunButton({
           onDone?.();
           return;
         }
-        if (stJson.status === "error") {
-          throw new Error(stJson.message || t(kind === "jobs" ? "errors.runJobs" : "errors.runPosts"));
+        if (stJson.status === "error" || stJson.status === "lost") {
+          throw new Error(
+            stJson.message || t(kind === "jobs" ? "errors.runJobs" : kind === "people" ? "errors.runPeople" : "errors.runPosts"),
+          );
         }
       }
       throw new Error(t("errors.timeout"));
     } catch (e: unknown) {
-      setError(e instanceof Error ? e.message : t(kind === "jobs" ? "errors.startJobs" : "errors.startPosts"));
+      setError(
+        e instanceof Error
+          ? e.message
+          : t(kind === "jobs" ? "errors.startJobs" : kind === "people" ? "errors.startPeople" : "errors.startPosts"),
+      );
     } finally {
       setPending(false);
     }

@@ -11,6 +11,12 @@ import { EmailReportFields } from "@/components/searches/EmailReportFields";
 import { PromptPicker, type PromptOption } from "@/components/searches/PromptPicker";
 import { SearchRunButton } from "@/components/searches/SearchRunButton";
 import { Button } from "@/components/ui/button";
+import {
+  LinkedInFilterInput,
+  LinkedInFilterRow,
+  LinkedInFilterSelect,
+  linkedinSelectFiltered,
+} from "@/components/ui/linkedin-filter-chip";
 import { Label } from "@/components/ui/label";
 import type { AdminUserOption } from "@/lib/admin/users";
 import { isSearchTariffInfo, pickSearchTariff, type SearchTariffInfo } from "@/lib/searchTariffs";
@@ -42,9 +48,11 @@ type SearchRow = {
   filter_prompt_id: string | null;
   search_prompt_id: string | null;
   comment_prompt_id: string | null;
+  people_prompt_id: string | null;
   filter_prompt: string | null;
   search_prompt: string | null;
   comment_prompt: string | null;
+  people_prompt: string | null;
   prompts: PromptRow[];
   user_full_name: string | null;
   created_at: string | null;
@@ -211,63 +219,52 @@ export function AdminSearchesPanel({
 
   return (
     <div className="space-y-4">
-      <div className="flex flex-wrap items-end gap-3">
-        <div className="min-w-[220px]">
-          <Label>{locale === "en" ? "User" : "Пользователь"}</Label>
-          <select
-            className="mt-1 w-full rounded-md border border-border bg-background px-3 py-2 text-sm"
-            value={userId || "all"}
-            onChange={(e) => pushFilters({ user_id: e.target.value === "all" ? "" : e.target.value })}
-          >
-            <option value="all">{locale === "en" ? "All users" : "Все пользователи"}</option>
-            {users.map((u) => (
-              <option key={u.id} value={u.id}>
-                {(u.full_name || u.email || u.id).slice(0, 80)}
-              </option>
-            ))}
-          </select>
-        </div>
-
-        <div className="min-w-[160px]">
-          <Label>{locale === "en" ? "Type" : "Тип"}</Label>
-          <select
-            className="mt-1 w-full rounded-md border border-border bg-background px-3 py-2 text-sm"
-            value={type}
-            onChange={(e) => pushFilters({ type: e.target.value })}
-          >
-            <option value="all">{locale === "en" ? "All" : "Все"}</option>
-            <option value="jobs">{locale === "en" ? "Jobs" : "Вакансии"}</option>
-            <option value="posts">{locale === "en" ? "Posts" : "Посты"}</option>
-          </select>
-        </div>
-
-        <div className="min-w-[160px]">
-          <Label>{locale === "en" ? "Status" : "Статус"}</Label>
-          <select
-            className="mt-1 w-full rounded-md border border-border bg-background px-3 py-2 text-sm"
-            value={status}
-            onChange={(e) => pushFilters({ status: e.target.value })}
-          >
-            <option value="all">{locale === "en" ? "All" : "Все"}</option>
-            <option value="active">{locale === "en" ? "Active" : "Активен"}</option>
-            <option value="paused">{locale === "en" ? "Paused" : "Пауза"}</option>
-          </select>
-        </div>
-
-        <div className="min-w-[220px] flex-1">
-          <Label>{locale === "en" ? "Title contains" : "Title содержит"}</Label>
-          <input
-            className="mt-1 w-full rounded-md border border-border bg-background px-3 py-2 text-sm"
-            value={q}
-            onChange={(e) => pushFilters({ q: e.target.value })}
-            placeholder={locale === "en" ? "Text..." : "Текст..."}
-          />
-        </div>
-
-        <Button variant="outline" onClick={load} disabled={loading}>
+      <LinkedInFilterRow>
+        <LinkedInFilterSelect
+          aria-label={locale === "en" ? "User" : "Пользователь"}
+          active={linkedinSelectFiltered(userId || "", [""])}
+          value={userId || "all"}
+          onChange={(e) => pushFilters({ user_id: e.target.value === "all" ? "" : e.target.value })}
+        >
+          <option value="all">{locale === "en" ? "All users" : "Все пользователи"}</option>
+          {users.map((u) => (
+            <option key={u.id} value={u.id}>
+              {(u.full_name || u.email || u.id).slice(0, 80)}
+            </option>
+          ))}
+        </LinkedInFilterSelect>
+        <LinkedInFilterSelect
+          aria-label={locale === "en" ? "Type" : "Тип"}
+          active={linkedinSelectFiltered(type)}
+          value={type}
+          onChange={(e) => pushFilters({ type: e.target.value })}
+        >
+          <option value="all">{locale === "en" ? "All" : "Все"}</option>
+          <option value="jobs">{locale === "en" ? "Jobs" : "Вакансии"}</option>
+          <option value="posts">{locale === "en" ? "Posts" : "Посты"}</option>
+          <option value="people">{locale === "en" ? "People" : "Люди"}</option>
+        </LinkedInFilterSelect>
+        <LinkedInFilterSelect
+          aria-label={locale === "en" ? "Status" : "Статус"}
+          active={linkedinSelectFiltered(status)}
+          value={status}
+          onChange={(e) => pushFilters({ status: e.target.value })}
+        >
+          <option value="all">{locale === "en" ? "All" : "Все"}</option>
+          <option value="active">{locale === "en" ? "Active" : "Активен"}</option>
+          <option value="paused">{locale === "en" ? "Paused" : "Пауза"}</option>
+        </LinkedInFilterSelect>
+        <LinkedInFilterInput
+          aria-label={locale === "en" ? "Title contains" : "Title содержит"}
+          className="min-w-[10rem] flex-1 sm:max-w-xs"
+          value={q}
+          onChange={(e) => pushFilters({ q: e.target.value })}
+          placeholder={locale === "en" ? "Text..." : "Текст..."}
+        />
+        <Button variant="outline" className="h-8 rounded-full px-4 text-sm font-semibold" onClick={load} disabled={loading}>
           {t("actions.refresh")}
         </Button>
-      </div>
+      </LinkedInFilterRow>
 
       {error ? <div className="rounded-md border border-destructive/40 bg-destructive/5 p-3 text-sm">{error}</div> : null}
 
@@ -295,9 +292,13 @@ export function AdminSearchesPanel({
                       ? locale === "en"
                         ? "Jobs"
                         : "Вакансии"
-                      : locale === "en"
-                        ? "Posts"
-                        : "Посты"}{" "}
+                      : r.search_type_code === "people"
+                        ? locale === "en"
+                          ? "People"
+                          : "Люди"
+                        : locale === "en"
+                          ? "Posts"
+                          : "Посты"}{" "}
                     · {r.id}
                   </div>
                   <div className="mt-1 font-medium">{r.title}</div>
@@ -307,13 +308,13 @@ export function AdminSearchesPanel({
                   </div>
                   <SearchTariffSummary
                     tariff={tariff}
-                    kind={r.search_type_code === "jobs" ? "job" : "post"}
+                    kind={r.search_type_code === "jobs" ? "job" : r.search_type_code === "people" ? "people" : "post"}
                     className="mt-2"
                   />
                 </div>
                 <div className="flex flex-wrap items-start justify-end gap-2">
                   <SearchRunButton
-                    kind={r.search_type_code === "jobs" ? "jobs" : "posts"}
+                    kind={r.search_type_code === "jobs" ? "jobs" : r.search_type_code === "people" ? "people" : "posts"}
                     searchId={r.id}
                     userId={r.user_id}
                     disabled={saving}
@@ -375,7 +376,7 @@ export function AdminSearchesPanel({
                   onFormatChange={(format) => onDraft(r.id, { email_report_format: format })}
                 />
 
-                {r.search_type_code === "jobs" ? (
+                {r.search_type_code === "jobs" || r.search_type_code === "people" ? (
                   <>
                     <div>
                       <Label>{locale === "en" ? "Search query" : "Search query"}</Label>
@@ -385,25 +386,41 @@ export function AdminSearchesPanel({
                         onChange={(e) => onDraft(r.id, { search_query: e.target.value })}
                       />
                     </div>
-                    <div>
-                      <Label>{locale === "en" ? "Location" : "Локация"}</Label>
-                      <input
-                        className="mt-1 w-full rounded-md border border-border bg-background px-3 py-2 text-sm"
-                        value={((draft.location ?? r.location) || "") as string}
-                        onChange={(e) => onDraft(r.id, { location: e.target.value || null })}
+                    {r.search_type_code === "jobs" ? (
+                      <div>
+                        <Label>{locale === "en" ? "Location" : "Локация"}</Label>
+                        <input
+                          className="mt-1 w-full rounded-md border border-border bg-background px-3 py-2 text-sm"
+                          value={((draft.location ?? r.location) || "") as string}
+                          onChange={(e) => onDraft(r.id, { location: e.target.value || null })}
+                        />
+                      </div>
+                    ) : null}
+                    {r.search_type_code === "jobs" ? (
+                      <PromptPicker
+                        label={locale === "en" ? "Filter prompt" : "Промпт фильтра"}
+                        value={((draft.filter_prompt_id ?? r.filter_prompt_id) || "") as string}
+                        options={(promptsByUserId[r.user_id] || []).filter((p) => p.role === "filter")}
+                        fallbackBody={r.filter_prompt}
+                        emptyLabel={locale === "en" ? "Not selected" : "Не выбран"}
+                        loading={Boolean(promptsLoadingByUserId[r.user_id])}
+                        editLabel={locale === "en" ? "Open in Prompts" : "Открыть в Промптах"}
+                        editHref={{ pathname: "/admin/prompts", query: { user_id: r.user_id } }}
+                        onChange={(id) => onDraft(r.id, { filter_prompt_id: id || null })}
                       />
-                    </div>
-                    <PromptPicker
-                      label={locale === "en" ? "Filter prompt" : "Промпт фильтра"}
-                      value={((draft.filter_prompt_id ?? r.filter_prompt_id) || "") as string}
-                      options={(promptsByUserId[r.user_id] || []).filter((p) => p.role === "filter")}
-                      fallbackBody={r.filter_prompt}
-                      emptyLabel={locale === "en" ? "Not selected" : "Не выбран"}
-                      loading={Boolean(promptsLoadingByUserId[r.user_id])}
-                      editLabel={locale === "en" ? "Open in Prompts" : "Открыть в Промптах"}
-                      editHref={{ pathname: "/admin/prompts", query: { user_id: r.user_id } }}
-                      onChange={(id) => onDraft(r.id, { filter_prompt_id: id || null })}
-                    />
+                    ) : (
+                      <PromptPicker
+                        label={locale === "en" ? "People prompt" : "Промпт людей"}
+                        value={((draft.people_prompt_id ?? r.people_prompt_id) || "") as string}
+                        options={(promptsByUserId[r.user_id] || []).filter((p) => p.role === "people")}
+                        fallbackBody={r.people_prompt}
+                        emptyLabel={locale === "en" ? "Not selected" : "Не выбран"}
+                        loading={Boolean(promptsLoadingByUserId[r.user_id])}
+                        editLabel={locale === "en" ? "Open in Prompts" : "Открыть в Промптах"}
+                        editHref={{ pathname: "/admin/prompts", query: { user_id: r.user_id } }}
+                        onChange={(id) => onDraft(r.id, { people_prompt_id: id || null })}
+                      />
+                    )}
                     <div className="md:col-span-2">
                       <Label>{locale === "en" ? "LinkedIn filters (JSON)" : "LinkedIn filters (JSON)"}</Label>
                       <textarea
@@ -470,9 +487,13 @@ export function AdminSearchesPanel({
                         ? locale === "en"
                           ? "Job search"
                           : "Поиск вакансий"
-                        : locale === "en"
-                          ? "Post search"
-                          : "Поиск постов"}
+                        : r.search_type_code === "people"
+                          ? locale === "en"
+                            ? "People search"
+                            : "Поиск людей"
+                          : locale === "en"
+                            ? "Post search"
+                            : "Поиск постов"}
                       {hasDraft ? ` · ${locale === "en" ? "unsaved changes" : "есть черновик"}` : null}
                     </span>
                   )}

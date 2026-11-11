@@ -1,8 +1,9 @@
 export const LINKED_PROMPT_SELECT =
-  "filter_prompt_id,search_prompt_id,comment_prompt_id," +
+  "filter_prompt_id,search_prompt_id,comment_prompt_id,people_prompt_id," +
   "filter_prompt:prompts!searches_filter_prompt_id_fkey(id,role,title,body)," +
   "search_prompt:prompts!searches_search_prompt_id_fkey(id,role,title,body)," +
-  "comment_prompt:prompts!searches_comment_prompt_id_fkey(id,role,title,body)";
+  "comment_prompt:prompts!searches_comment_prompt_id_fkey(id,role,title,body)," +
+  "people_prompt:prompts!searches_people_prompt_id_fkey(id,role,title,body)";
 
 function promptBody(value: unknown): string {
   if (value && typeof value === "object" && typeof (value as { body?: unknown }).body === "string") {
@@ -17,5 +18,7 @@ export function attachLinkedPrompts(row: Record<string, unknown>): Record<string
   out.search_prompt = promptBody(row.search_prompt);
   const comment = promptBody(row.comment_prompt);
   out.comment_prompt = comment || null;
+  const people = promptBody(row.people_prompt);
+  out.people_prompt = people || null;
   return out;
 }

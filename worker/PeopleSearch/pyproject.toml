@@ -1,0 +1,24 @@
+[build-system]
+requires = ["hatchling>=1.21.0"]
+build-backend = "hatchling.build"
+
+[project]
+name = "people-search"
+version = "0.1.0"
+description = "Portable people-search domain module (collector/analyzer/repository ports)."
+requires-python = ">=3.11"
+license = { text = "Proprietary" }
+authors = [{ name = "PeopleSearch" }]
+dependencies = []
+
+[project.optional-dependencies]
+dev = [
+  "pytest>=8.0.0",
+]
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/people_search"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["src"]

@@ -11,14 +11,22 @@ import { EmailReportFields } from "@/components/searches/EmailReportFields";
 import { PromptPicker, type PromptOption } from "@/components/searches/PromptPicker";
 import { SearchRunButton } from "@/components/searches/SearchRunButton";
 import { Button } from "@/components/ui/button";
+import {
+  LinkedInFilterInput,
+  LinkedInFilterRow,
+  LinkedInFilterSelect,
+  linkedinSelectFiltered,
+} from "@/components/ui/linkedin-filter-chip";
 import { Label } from "@/components/ui/label";
 import type { SearchTariffInfo } from "@/lib/searchTariffs";
 import { cn } from "@/lib/utils";
 
+type SearchTypeCode = "jobs" | "posts" | "people";
+
 type SearchRow = {
   id: string;
   user_id: string;
-  search_type_code: "jobs" | "posts" | string;
+  search_type_code: SearchTypeCode | string;
   title: string;
   status: string;
   last_run_at: string | null;
@@ -28,9 +36,11 @@ type SearchRow = {
   filter_prompt_id: string | null;
   search_prompt_id: string | null;
   comment_prompt_id: string | null;
+  people_prompt_id: string | null;
   filter_prompt: string | null;
   search_prompt: string | null;
   comment_prompt: string | null;
+  people_prompt: string | null;
   email_report_enabled?: boolean;
   email_report_format?: string | null;
   search_tariff_id?: string | null;
@@ -43,7 +53,7 @@ type ListResponse = { items: SearchRow[]; total: number; limit: number; offset: 
 type PromptsResponse = { items: PromptOption[] };
 
 type CreateDraft = {
-  type: "jobs" | "posts";
+  type: SearchTypeCode;
   title: string;
   status: "active" | "paused";
   search_query: string;
@@ -52,10 +62,11 @@ type CreateDraft = {
   filter_prompt_id: string;
   search_prompt_id: string;
   comment_prompt_id: string;
+  people_prompt_id: string;
 };
 
 const EMPTY_CREATE: CreateDraft = {
-  type: "posts",
+  type: "jobs",
   title: "",
   status: "active",
   search_query: "",
@@ -64,7 +75,23 @@ const EMPTY_CREATE: CreateDraft = {
   filter_prompt_id: "",
   search_prompt_id: "",
   comment_prompt_id: "",
+  people_prompt_id: "",
 };
+
+function asSearchType(value: string): SearchTypeCode {
+  if (value === "jobs" || value === "people") return value;
+  return "posts";
+}
+
+function runKind(code: string): "jobs" | "posts" | "people" {
+  return asSearchType(code);
+}
+
+function tariffKind(code: string): "job" | "post" | "people" {
+  if (code === "jobs") return "job";
+  if (code === "people") return "people";
+  return "post";
+}
 
 function fmtDt(value: string | null, locale: "ru" | "en") {
   if (!value) return "—";
@@ -83,10 +110,35 @@ export function UserSearchesPanel({ locale }: { locale: "ru" | "en" }) {
   const router = useRouter();
   const searchParams = useSearchParams();
 
-  const type = searchParams.get("type") || "all";
-  const status = searchParams.get("status") || "all";
-  const q = searchParams.get("q") || "";
-  const offset = Number(searchParams.get("offset") || "0") || 0;
+  const paramsType = searchParams.get("type") || "all";
+  const paramsStatus = searchParams.get("status") || "all";
+  const paramsQ = searchParams.get("q") || "";
+  const paramsOffset = Number(searchParams.get("offset") || "0") || 0;
+
+  type FiltersSnapshot = { type: string; status: string; q: string; offset: number };
+  const [optimisticFilters, setOptimisticFilters] = useState<FiltersSnapshot | null>(null);
+
+  useEffect(() => {
+    setOptimisticFilters(null);
+  }, [paramsType, paramsStatus, paramsQ, paramsOffset]);
+
+  useEffect(() => {
+    if (optimisticFilters !== null) return;
+    if (paramsType !== "all") return;
+    const fromUrl = new URLSearchParams(window.location.search).get("type");
+    if (fromUrl !== "jobs" && fromUrl !== "people" && fromUrl !== "posts") return;
+    setOptimisticFilters({
+      type: fromUrl,
+      status: paramsStatus,
+      q: paramsQ,
+      offset: paramsOffset,
+    });
+  }, [optimisticFilters, paramsType, paramsStatus, paramsQ, paramsOffset]);
+
+  const type = optimisticFilters?.type ?? paramsType;
+  const status = optimisticFilters?.status ?? paramsStatus;
+  const q = optimisticFilters?.q ?? paramsQ;
+  const offset = optimisticFilters?.offset ?? paramsOffset;
 
   const [rows, setRows] = useState<SearchRow[]>([]);
   const [prompts, setPrompts] = useState<PromptOption[]>([]);
@@ -96,9 +148,12 @@ export function UserSearchesPanel({ locale }: { locale: "ru" | "en" }) {
   const [savingById, setSavingById] = useState<Record<string, boolean>>({});
   const [draftById, setDraftById] = useState<Record<string, Partial<SearchRow>>>({});
   const [expandedById, setExpandedById] = useState<Record<string, boolean>>({});
-  const [createOpen, setCreateOpen] = useState(false);
+  const [createOpen, setCreateOpen] = useState(true);
   const [creating, setCreating] = useState(false);
-  const [createDraft, setCreateDraft] = useState<CreateDraft>(EMPTY_CREATE);
+  const [createDraft, setCreateDraft] = useState<CreateDraft>(() => ({
+    ...EMPTY_CREATE,
+    type: type === "people" || type === "jobs" || type === "posts" ? type : "jobs",
+  }));
 
   const queryString = useMemo(() => {
     const p = new URLSearchParams();
@@ -112,18 +167,29 @@ export function UserSearchesPanel({ locale }: { locale: "ru" | "en" }) {
 
   const pushFilters = useCallback(
     (patch: Record<string, string>) => {
-      const p = new URLSearchParams(searchParams.toString());
-      for (const [k, v] of Object.entries(patch)) {
-        if (!v || v === "all") p.delete(k);
-        else p.set(k, v);
-      }
-      if (patch.type !== undefined) p.delete("offset");
-      if (patch.status !== undefined) p.delete("offset");
-      if (patch.q !== undefined) p.delete("offset");
+      const nextType = patch.type !== undefined ? patch.type : type;
+      const nextStatus = patch.status !== undefined ? patch.status : status;
+      const nextQ = patch.q !== undefined ? patch.q : q;
+      const filtersChanged = patch.type !== undefined || patch.status !== undefined || patch.q !== undefined;
+      const nextOffset =
+        patch.offset !== undefined ? Number(patch.offset) || 0 : filtersChanged ? 0 : offset;
+
+      setOptimisticFilters({
+        type: nextType,
+        status: nextStatus,
+        q: nextQ,
+        offset: nextOffset,
+      });
+
+      const p = new URLSearchParams();
+      if (nextType !== "all") p.set("type", nextType);
+      if (nextStatus !== "all") p.set("status", nextStatus);
+      if (nextQ) p.set("q", nextQ);
+      if (nextOffset > 0) p.set("offset", String(nextOffset));
       const query = Object.fromEntries(p.entries());
       router.replace({ pathname: "/searches", query });
     },
-    [router, searchParams],
+    [router, type, status, q, offset],
   );
 
   const loadPrompts = useCallback(async () => {
@@ -163,11 +229,23 @@ export function UserSearchesPanel({ locale }: { locale: "ru" | "en" }) {
     return () => window.clearTimeout(handle);
   }, [load]);
 
+  useEffect(() => {
+    if (type === "jobs" || type === "people" || type === "posts") {
+      setCreateDraft((d) => (d.type === type ? d : { ...d, type }));
+    }
+  }, [type]);
+
+  const visibleRows = useMemo(() => {
+    if (type === "all") return rows;
+    return rows.filter((r) => asSearchType(r.search_type_code) === type);
+  }, [rows, type]);
+
   const promptsByRole = useMemo(() => {
     const filter = prompts.filter((p) => p.role === "filter");
     const search = prompts.filter((p) => p.role === "search");
     const comment = prompts.filter((p) => p.role === "comment");
-    return { filter, search, comment };
+    const people = prompts.filter((p) => p.role === "people");
+    return { filter, search, comment, people };
   }, [prompts]);
 
   const onDraft = (id: string, patch: Partial<SearchRow>) => {
@@ -215,6 +293,9 @@ export function UserSearchesPanel({ locale }: { locale: "ru" | "en" }) {
         payload.search_query = createDraft.search_query.trim();
         payload.location = createDraft.location.trim();
         payload.filter_prompt_id = createDraft.filter_prompt_id;
+      } else if (createDraft.type === "people") {
+        payload.search_query = createDraft.search_query.trim();
+        payload.people_prompt_id = createDraft.people_prompt_id;
       } else {
         payload.search_prompt_id = createDraft.search_prompt_id;
         payload.comment_prompt_id = createDraft.comment_prompt_id || null;
@@ -270,71 +351,81 @@ export function UserSearchesPanel({ locale }: { locale: "ru" | "en" }) {
     createDraft.title.trim().length > 0 &&
     (createDraft.type === "jobs"
       ? createDraft.search_query.trim().length > 0 && Boolean(createDraft.filter_prompt_id)
-      : Boolean(createDraft.search_prompt_id));
+      : createDraft.type === "people"
+        ? createDraft.search_query.trim().length > 0 && Boolean(createDraft.people_prompt_id)
+        : Boolean(createDraft.search_prompt_id));
 
   return (
     <div className="space-y-4">
-      <div className="flex flex-wrap items-end gap-3">
-        <div className="min-w-[160px]">
-          <Label>{t("fields.type")}</Label>
-          <select
-            className="mt-1 w-full rounded-md border border-border bg-background px-3 py-2 text-sm"
-            value={type}
-            onChange={(e) => pushFilters({ type: e.target.value })}
-          >
-            <option value="all">{locale === "en" ? "All" : "Все"}</option>
-            <option value="jobs">{t("types.jobs")}</option>
-            <option value="posts">{t("types.posts")}</option>
-          </select>
-        </div>
-
-        <div className="min-w-[160px]">
-          <Label>{t("fields.status")}</Label>
-          <select
-            className="mt-1 w-full rounded-md border border-border bg-background px-3 py-2 text-sm"
-            value={status}
-            onChange={(e) => pushFilters({ status: e.target.value })}
-          >
-            <option value="all">{locale === "en" ? "All" : "Все"}</option>
-            <option value="active">{locale === "en" ? "Active" : "Активен"}</option>
-            <option value="paused">{locale === "en" ? "Paused" : "Пауза"}</option>
-          </select>
-        </div>
-
-        <div className="min-w-[220px] flex-1">
-          <Label>{t("fields.title")}</Label>
-          <input
-            className="mt-1 w-full rounded-md border border-border bg-background px-3 py-2 text-sm"
-            value={q}
-            onChange={(e) => pushFilters({ q: e.target.value })}
-            placeholder={locale === "en" ? "Text..." : "Текст..."}
-          />
-        </div>
-
-        <Button variant="outline" onClick={load} disabled={loading}>
+      <LinkedInFilterRow>
+        <LinkedInFilterSelect
+          aria-label={t("fields.type")}
+          active={linkedinSelectFiltered(type)}
+          value={type}
+          onChange={(e) => {
+            const next = e.target.value;
+            pushFilters({ type: next });
+            if (next === "jobs" || next === "people" || next === "posts") {
+              setCreateDraft((d) => ({ ...d, type: next }));
+            }
+          }}
+        >
+          <option value="all">{locale === "en" ? "All" : "Все"}</option>
+          <option value="jobs">{t("types.jobs")}</option>
+          <option value="people">{t("types.people")}</option>
+          <option value="posts">{t("types.posts")}</option>
+        </LinkedInFilterSelect>
+        <LinkedInFilterSelect
+          aria-label={t("fields.status")}
+          active={linkedinSelectFiltered(status)}
+          value={status}
+          onChange={(e) => pushFilters({ status: e.target.value })}
+        >
+          <option value="all">{locale === "en" ? "All" : "Все"}</option>
+          <option value="active">{locale === "en" ? "Active" : "Активен"}</option>
+          <option value="paused">{locale === "en" ? "Paused" : "Пауза"}</option>
+        </LinkedInFilterSelect>
+        <LinkedInFilterInput
+          aria-label={t("fields.title")}
+          className="min-w-[10rem] flex-1 sm:max-w-xs"
+          value={q}
+          onChange={(e) => pushFilters({ q: e.target.value })}
+          placeholder={locale === "en" ? "Text..." : "Текст..."}
+        />
+        <Button variant="outline" className="h-8 rounded-full px-4 text-sm font-semibold" onClick={load} disabled={loading}>
           {t("actions.refresh")}
         </Button>
-        <Button type="button" onClick={() => setCreateOpen((v) => !v)}>
+        <Button type="button" className="h-8 rounded-full px-4 text-sm font-semibold" onClick={() => setCreateOpen((v) => !v)}>
           {t("createTitle")}
         </Button>
-      </div>
+      </LinkedInFilterRow>
 
       {createOpen ? (
         <div className="rounded-lg border border-border bg-card p-4">
           <div className="mb-3 font-medium">{t("createTitle")}</div>
           <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
-            <div>
+            <div className="md:col-span-2">
               <Label>{t("fields.type")}</Label>
-              <select
-                className="mt-1 w-full rounded-md border border-border bg-background px-3 py-2 text-sm"
-                value={createDraft.type}
-                onChange={(e) =>
-                  setCreateDraft((d) => ({ ...d, type: e.target.value === "jobs" ? "jobs" : "posts" }))
-                }
-              >
-                <option value="posts">{t("types.posts")}</option>
-                <option value="jobs">{t("types.jobs")}</option>
-              </select>
+              <div className="mt-1 grid grid-cols-3 gap-2">
+                {(["jobs", "people", "posts"] as const).map((code) => (
+                  <button
+                    key={code}
+                    type="button"
+                    className={cn(
+                      "rounded-md border px-3 py-2 text-sm font-medium",
+                      createDraft.type === code
+                        ? "border-foreground bg-muted text-foreground"
+                        : "border-border bg-background text-muted-foreground hover:text-foreground",
+                    )}
+                    onClick={() => {
+                      setCreateDraft((d) => ({ ...d, type: code }));
+                      pushFilters({ type: code });
+                    }}
+                  >
+                    {t(`types.${code}`)}
+                  </button>
+                ))}
+              </div>
             </div>
             <div>
               <Label>{t("fields.title")}</Label>
@@ -374,6 +465,32 @@ export function UserSearchesPanel({ locale }: { locale: "ru" | "en" }) {
                   <div className="md:col-span-2 text-xs text-muted-foreground">
                     <Link href="/prompts" className="underline underline-offset-4">
                       {locale === "en" ? "Create a filter prompt first." : "Сначала создай промпт фильтра."}
+                    </Link>
+                  </div>
+                ) : null}
+              </>
+            ) : createDraft.type === "people" ? (
+              <>
+                <div>
+                  <Label>{t("fields.searchQuery")}</Label>
+                  <input
+                    className="mt-1 w-full rounded-md border border-border bg-background px-3 py-2 text-sm"
+                    value={createDraft.search_query}
+                    onChange={(e) => setCreateDraft((d) => ({ ...d, search_query: e.target.value }))}
+                  />
+                </div>
+                <PromptPicker
+                  label={t("fields.peoplePrompt")}
+                  value={createDraft.people_prompt_id}
+                  options={promptsByRole.people}
+                  emptyLabel={t("fields.noPrompt")}
+                  editLabel={t("actions.editPrompt")}
+                  onChange={(id) => setCreateDraft((d) => ({ ...d, people_prompt_id: id }))}
+                />
+                {promptsByRole.people.length === 0 ? (
+                  <div className="md:col-span-2 text-xs text-muted-foreground">
+                    <Link href="/prompts" className="underline underline-offset-4">
+                      {locale === "en" ? "Create a people prompt first." : "Сначала создай промпт людей."}
                     </Link>
                   </div>
                 ) : null}
@@ -423,19 +540,21 @@ export function UserSearchesPanel({ locale }: { locale: "ru" | "en" }) {
       ) : null}
 
       {error ? <div className="rounded-md border border-destructive/40 bg-destructive/5 p-3 text-sm">{error}</div> : null}
-      {rows.length === 0 && !loading ? <div className="text-sm text-muted-foreground">{t("empty")}</div> : null}
+      {visibleRows.length === 0 && !loading ? <div className="text-sm text-muted-foreground">{t("empty")}</div> : null}
 
       <div className="text-xs text-muted-foreground">
-        {locale === "en" ? `Total: ${total}` : `Всего: ${total}`}
+        {locale === "en"
+          ? `Total: ${type === "all" ? total : visibleRows.length}`
+          : `Всего: ${type === "all" ? total : visibleRows.length}`}
       </div>
 
       <div className="space-y-3">
-        {rows.map((r) => {
+        {visibleRows.map((r) => {
           const draft = draftById[r.id] || {};
           const saving = Boolean(savingById[r.id]);
           const hasDraft = Object.keys(draft).length > 0;
           const expanded = expandedById[r.id] === true;
-          const typeLabel = r.search_type_code === "jobs" ? t("types.jobs") : t("types.posts");
+          const typeLabel = t(`types.${asSearchType(r.search_type_code)}`);
           return (
             <div key={r.id} className="rounded-lg border border-border bg-card p-4">
               <div className="flex flex-wrap items-center justify-between gap-2">
@@ -450,13 +569,13 @@ export function UserSearchesPanel({ locale }: { locale: "ru" | "en" }) {
                   </div>
                   <SearchTariffSummary
                     tariff={r.search_tariff ?? null}
-                    kind={r.search_type_code === "jobs" ? "job" : "post"}
+                    kind={tariffKind(r.search_type_code)}
                     className="mt-2"
                   />
                 </div>
                 <div className="flex flex-wrap items-start justify-end gap-2">
                   <SearchRunButton
-                    kind={r.search_type_code === "jobs" ? "jobs" : "posts"}
+                    kind={runKind(r.search_type_code)}
                     searchId={r.id}
                     disabled={saving}
                     onDone={() => void load()}
@@ -490,12 +609,14 @@ export function UserSearchesPanel({ locale }: { locale: "ru" | "en" }) {
                       <option value="paused">{locale === "en" ? "Paused" : "Пауза"}</option>
                     </select>
                   </div>
-                  <EmailReportFields
-                    enabled={Boolean(draft.email_report_enabled ?? r.email_report_enabled)}
-                    format={String(draft.email_report_format ?? r.email_report_format ?? "none")}
-                    onEnabledChange={(enabled) => onDraft(r.id, { email_report_enabled: enabled })}
-                    onFormatChange={(format) => onDraft(r.id, { email_report_format: format })}
-                  />
+                  {r.search_type_code === "people" ? null : (
+                    <EmailReportFields
+                      enabled={Boolean(draft.email_report_enabled ?? r.email_report_enabled)}
+                      format={String(draft.email_report_format ?? r.email_report_format ?? "none")}
+                      onEnabledChange={(enabled) => onDraft(r.id, { email_report_enabled: enabled })}
+                      onFormatChange={(format) => onDraft(r.id, { email_report_format: format })}
+                    />
+                  )}
 
                   {r.search_type_code === "jobs" ? (
                     <>
@@ -523,6 +644,26 @@ export function UserSearchesPanel({ locale }: { locale: "ru" | "en" }) {
                         emptyLabel={t("fields.noPrompt")}
                         editLabel={t("actions.editPrompt")}
                         onChange={(id) => onDraft(r.id, { filter_prompt_id: id })}
+                      />
+                    </>
+                  ) : r.search_type_code === "people" ? (
+                    <>
+                      <div>
+                        <Label>{t("fields.searchQuery")}</Label>
+                        <input
+                          className="mt-1 w-full rounded-md border border-border bg-background px-3 py-2 text-sm"
+                          value={((draft.search_query ?? r.search_query) || "") as string}
+                          onChange={(e) => onDraft(r.id, { search_query: e.target.value })}
+                        />
+                      </div>
+                      <PromptPicker
+                        label={t("fields.peoplePrompt")}
+                        value={((draft.people_prompt_id ?? r.people_prompt_id) || "") as string}
+                        options={promptsByRole.people}
+                        fallbackBody={r.people_prompt}
+                        emptyLabel={t("fields.noPrompt")}
+                        editLabel={t("actions.editPrompt")}
+                        onChange={(id) => onDraft(r.id, { people_prompt_id: id })}
                       />
                     </>
                   ) : (
