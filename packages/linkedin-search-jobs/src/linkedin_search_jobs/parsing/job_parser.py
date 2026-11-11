@@ -4,6 +4,7 @@ from __future__ import annotations
 Jobs DOM -> domain parsing (best-effort).
 """
 
+import json
 import re
 from contextlib import suppress
 from dataclasses import dataclass
@@ -67,6 +68,46 @@ _LIST_CARD_SELECTOR = (
     "li.scaffold-layout__list-item:has(a[href*='/jobs/view/']), "
     "div.job-card-container"
 )
+_DESC_SELECTORS = (
+    "div.jobs-description-content__text",
+    "div.jobs-description-content__text--stretch",
+    "div.jobs-description__content",
+    "div.jobs-box__html-content",
+    "article.jobs-description__container",
+    "div.jobs-description",
+    "div#job-details",
+    ".jobs-search__job-details .jobs-description",
+    ".scaffold-layout__detail .jobs-description",
+    ".job-view-layout .jobs-description",
+)
+_DETAIL_PANE_SELECTOR = (
+    ".scaffold-layout__detail, "
+    ".jobs-search__job-details, "
+    ".jobs-search__job-details-container, "
+    ".job-view-layout"
+)
+_DESC_READY_SELECTOR = ", ".join(_DESC_SELECTORS)
+# LinkedIn /jobs/search-results/ (AI search) uses hashed class names.
+# Details live in a sibling column of the job-card list — not jobs-description*.
+_FIND_SEMANTIC_PANE_JS = """() => {
+  const card = document.querySelector(
+    "div[role='button'][componentkey^='job-card'], div[componentkey^='job-card']"
+  );
+  if (!card) return null;
+  let el = card;
+  for (let i = 0; i < 14 && el; i++) {
+    const parent = el.parentElement;
+    if (!parent) break;
+    for (const sib of parent.children) {
+      if (sib === el) continue;
+      if (sib.querySelector("[componentkey^='job-card']")) continue;
+      const t = (sib.innerText || "").trim();
+      if (t.length > 180) return sib;
+    }
+    el = parent;
+  }
+  return null;
+}"""
 
 
 @dataclass(frozen=True, slots=True)
@@ -142,19 +183,9 @@ class JobParser:
                 if not job_id and not url:
                     continue
 
-                # Semantic cards are already selected in _select_semantic_card.
                 if not using_semantic:
-                    try:
+                    with suppress(Exception):
                         card.click(timeout=2_000)
-                        page.wait_for_selector(
-                            "div.jobs-description-content__text, "
-                            "div.jobs-description__content, "
-                            "div#job-details, "
-                            ".job-details-jobs-unified-top-card__company-name",
-                            timeout=2_500,
-                        )
-                    except Exception:
-                        pass
 
                 title = _clean_job_title(
                     _first_text(
@@ -176,6 +207,8 @@ class JobParser:
                 company = _first_text(
                     page.locator(".job-details-jobs-unified-top-card__company-name"),
                     page.locator(".jobs-unified-top-card__company-name"),
+                    page.locator(".job-details-jobs-unified-top-card__company-name a"),
+                    page.locator(f"{_DETAIL_PANE_SELECTOR} a[href*='/company/']"),
                     card.locator(".artdeco-entity-lockup__subtitle"),
                     card.locator(".job-card-container__primary-description"),
                     card.locator("[data-view-name='job-card-company-name']"),
@@ -184,6 +217,7 @@ class JobParser:
                 )
                 if not company:
                     company = doc_company
+                _wait_for_job_details(page, title=title)
                 company_url = _first_href(
                     page.locator(".job-details-jobs-unified-top-card__company-name a"),
                     page.locator("a.job-details-jobs-unified-top-card__company-name"),
@@ -195,19 +229,19 @@ class JobParser:
                     page.locator(
                         ".job-details-jobs-unified-top-card__primary-description-container"
                     ),
+                    page.locator(
+                        ".job-details-jobs-unified-top-card__tertiary-description-container"
+                    ),
                     page.locator(".job-details-jobs-unified-top-card__bullet"),
                     page.locator("span.jobs-unified-top-card__bullet"),
+                    page.locator(f"{_DETAIL_PANE_SELECTOR} span.tvm__text"),
                     card.locator("li.job-card-container__metadata-item"),
                     card.locator(".job-card-container__metadata-wrapper"),
                     card.locator(".artdeco-entity-lockup__caption"),
                     card.locator("li.job-card-container__metadata-item"),
                 )
 
-                description = _first_text(
-                    page.locator("div.jobs-description-content__text"),
-                    page.locator("div.jobs-description__content"),
-                    page.locator("div#job-details"),
-                )
+                description = _extract_description(page)
                 posted_at = _first_text(
                     page.locator("span.jobs-unified-top-card__posted-date"),
                     page.locator("span.jobs-unified-top-card__bullet"),
@@ -243,15 +277,11 @@ class JobParser:
                 )
                 if job_id:
                     seen_ids.add(job_id)
-                try:
-                    page.keyboard.press("Escape")
-                except Exception:
-                    pass
                 if "/jobs/view/" in (page.url or ""):
-                    try:
+                    with suppress(Exception):
+                        page.keyboard.press("Escape")
+                    with suppress(Exception):
                         page.go_back(wait_until="domcontentloaded")
-                    except Exception:
-                        pass
             except Exception:
                 # Isolate failures per job card.
                 continue
@@ -283,15 +313,89 @@ def _select_semantic_card(page: Page, card: Locator) -> str | None:
                 arg=before or "",
                 timeout=2_500,
             )
-        with suppress(Exception):
-            page.wait_for_selector(
-                "div.jobs-description-content__text, "
-                "div.jobs-description__content, "
-                "div#job-details, "
-                ".job-details-jobs-unified-top-card__company-name",
-                timeout=2_500,
-            )
     return _job_id_from_page_url(page.url) or from_key or before
+
+
+def _expand_job_description(page: Page) -> None:
+    for sel in (
+        "button.jobs-description__footer-button",
+        "button.inline-show-more-text__button",
+        ".jobs-description__see-more button",
+        f"{_DETAIL_PANE_SELECTOR} button[aria-expanded='false']",
+    ):
+        with suppress(Exception):
+            btn = page.locator(sel).first
+            if btn.count() > 0:
+                btn.click(timeout=800)
+                return
+    with suppress(Exception):
+        page.evaluate(
+            f"""() => {{
+              const findPane = {_FIND_SEMANTIC_PANE_JS};
+              const pane = findPane();
+              if (!pane) return false;
+              const btn = [...pane.querySelectorAll('button')].find((b) => {{
+                const label = `${{b.innerText || ''}} ${{b.getAttribute('aria-label') || ''}}`;
+                return /ещё|see more|show more|see full|show all/i.test(label)
+                  || b.getAttribute('aria-expanded') === 'false';
+              }});
+              if (btn) {{ btn.click(); return true; }}
+              return false;
+            }}"""
+        )
+
+
+def _wait_for_job_details(page: Page, *, title: str | None = None) -> None:
+    _expand_job_description(page)
+    needle = (title or "").strip()[:24]
+    with suppress(Exception):
+        page.wait_for_function(
+            f"""(needle) => {{
+                const findPane = {_FIND_SEMANTIC_PANE_JS};
+                const classic = {json.dumps(list(_DESC_SELECTORS))};
+                for (const sel of classic) {{
+                    const el = document.querySelector(sel);
+                    const t = el && (el.innerText || '').trim();
+                    if (t && t.length > 40) return true;
+                }}
+                const pane = findPane();
+                if (!pane) return false;
+                const t = (pane.innerText || '').trim();
+                if (t.length < 180) return false;
+                if (needle && !t.toLowerCase().includes(String(needle).toLowerCase())) return false;
+                return true;
+            }}""",
+            arg=needle,
+            timeout=4_000,
+        )
+    _expand_job_description(page)
+
+
+def _semantic_pane_text(page: Page) -> str | None:
+    with suppress(Exception):
+        text = page.evaluate(
+            f"""() => {{
+              const findPane = {_FIND_SEMANTIC_PANE_JS};
+              const pane = findPane();
+              return pane ? (pane.innerText || '').trim() : '';
+            }}"""
+        )
+        if isinstance(text, str) and text.strip():
+            return text.strip()
+    return None
+
+
+def _extract_description(page: Page) -> str | None:
+    text = _first_text(*(page.locator(sel) for sel in _DESC_SELECTORS))
+    fallback = _first_text(page.locator(_DETAIL_PANE_SELECTOR))
+    semantic = _semantic_pane_text(page)
+    if text and len(text.strip()) > 40:
+        return text.strip()
+    if fallback and len(fallback.strip()) > 160:
+        return fallback.strip()
+    if semantic and len(semantic) > 180:
+        return semantic
+    return text.strip() if text else None
 
 
 def _clean_job_title(text: str | None) -> str | None:

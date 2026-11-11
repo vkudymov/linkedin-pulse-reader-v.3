@@ -122,7 +122,7 @@ export default async function JobsPage({
         {searches.length === 0 ? (
           <div className="rounded-2xl border border-border/80 bg-muted/40 px-6 py-5 text-sm text-muted-foreground">
             {t("emptySearches")}{" "}
-            <Link className="underline-offset-4 hover:underline" href="/searches?type=jobs">
+            <Link className="underline-offset-4 hover:underline" href={{ pathname: "/searches", query: { type: "jobs" } }}>
               {t("goToPrompts")}
             </Link>
           </div>
@@ -142,26 +142,9 @@ export default async function JobsPage({
 
             <JobsResults
               rows={rows}
-              filters={
-                <LinkedInFilterRow>
-                  {(
-                    [
-                      ["all", t("filters.all"), counts.all],
-                      ["match", t("filters.match"), counts.match],
-                      ["no_match", t("filters.noMatch"), counts.noMatch],
-                    ] as const
-                  ).map(([value, label, count]) => (
-                    <LinkedInFilterLink
-                      key={value}
-                      href={`/jobs?search=${encodeURIComponent(selectedId as string)}&filter=${value}`}
-                      active={filter === value}
-                      count={count}
-                    >
-                      {label}
-                    </LinkedInFilterLink>
-                  ))}
-                </LinkedInFilterRow>
-              }
+              searchId={selectedId as string}
+              filter={filter}
+              counts={counts}
             />
           </>
         )}

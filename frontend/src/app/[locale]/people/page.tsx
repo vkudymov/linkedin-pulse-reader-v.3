@@ -104,7 +104,7 @@ export default async function PeoplePage({
         {searches.length === 0 ? (
           <div className="rounded-2xl border border-border/80 bg-muted/40 px-6 py-5 text-sm text-muted-foreground">
             {t("emptySearches")}{" "}
-            <Link className="underline-offset-4 hover:underline" href="/searches?type=people">
+            <Link className="underline-offset-4 hover:underline" href={{ pathname: "/searches", query: { type: "people" } }}>
               {t("goToSearches")}
             </Link>
           </div>

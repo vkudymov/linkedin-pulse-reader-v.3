@@ -1,9 +1,7 @@
 from __future__ import annotations
 
-import json
 import os
 import sys
-import time
 import traceback
 import uuid
 from concurrent.futures import Future, ThreadPoolExecutor
@@ -13,28 +11,6 @@ from threading import Lock
 from typing import Any, Literal
 
 from ..search_runs.client_message import client_failure_message
-
-# #region agent log
-_DEBUG_LOG = Path("/Users/vladimirkudymov/Work/linkedin-pulse-reader-v.3/.cursor/debug-8b59cb.log")
-
-
-def _agent_log(*, hypothesis_id: str, location: str, message: str, data: dict[str, Any]) -> None:
-    try:
-        payload = {
-            "sessionId": "8b59cb",
-            "hypothesisId": hypothesis_id,
-            "location": location,
-            "message": message,
-            "data": data,
-            "timestamp": int(time.time() * 1000),
-        }
-        with _DEBUG_LOG.open("a", encoding="utf-8") as fh:
-            fh.write(json.dumps(payload, ensure_ascii=False) + "\n")
-    except Exception:
-        pass
-
-
-# #endregion
 
 RunStatus = Literal["running", "done", "error"]
 LLM_CONNECT_FAILED_EXIT_CODE = 2
@@ -162,37 +138,6 @@ class PeopleSearchSessionManager:
 
             import subprocess  # noqa: PLC0415
 
-            people_src = worker_root / "PeopleSearch" / "src"
-            people_pkg = worker_root.parent / "packages" / "linkedin-search-people" / "src"
-            # #region agent log
-            probe = subprocess.run(
-                [
-                    sys.executable,
-                    "-c",
-                    "import importlib.util as u; print(u.find_spec('people_search') is not None); print(u.find_spec('linkedin_search_people') is not None); print(u.find_spec('job_search') is not None)",
-                ],
-                env=env,
-                stdout=subprocess.PIPE,
-                stderr=subprocess.STDOUT,
-                text=True,
-            )
-            _agent_log(
-                hypothesis_id="A",
-                location="people_search/sessions.py:_run",
-                message="pre-run import probe",
-                data={
-                    "executable": sys.executable,
-                    "cwd": str(worker_root),
-                    "script": str(script),
-                    "pythonpath": env.get("PYTHONPATH", ""),
-                    "people_src_exists": people_src.is_dir(),
-                    "people_pkg_exists": people_pkg.is_dir(),
-                    "probe_out": (probe.stdout or "").strip()[:400],
-                    "probe_code": probe.returncode,
-                },
-            )
-            # #endregion
-
             proc = subprocess.run(
                 argv,
                 cwd=str(worker_root),
@@ -205,19 +150,6 @@ class PeopleSearchSessionManager:
             if output:
                 print(output)
             code = proc.returncode
-            # #region agent log
-            _agent_log(
-                hypothesis_id="B",
-                location="people_search/sessions.py:_run",
-                message="subprocess finished",
-                data={
-                    "code": code,
-                    "output_head": output[:800],
-                    "has_people_search_modulenotfound": "No module named 'people_search'" in output,
-                    "has_linkedin_people_modulenotfound": "No module named 'linkedin_search_people'" in output,
-                },
-            )
-            # #endregion
             if code == 0:
                 self._update(session_id, status="done", message="People search completed.")
             else:

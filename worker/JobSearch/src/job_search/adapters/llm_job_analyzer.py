@@ -7,8 +7,18 @@ from job_search.analysis import JobMatchResult, parse_job_match_json
 from job_search.domain import Job, JobSearchSpec
 
 DEFAULT_MATCH_SYSTEM_PROMPT = (
-    "You are a strict JSON generator. "
-    "Return ONLY valid JSON (no markdown, no commentary)."
+    "You score a LinkedIn job against the user's criteria. "
+    "Return ONLY one JSON object with exactly these keys: "
+    "match (boolean), score (integer 0-100), reason (non-empty string), "
+    "matched_requirements (array of strings), missing_requirements (array of strings), "
+    "red_flags (array of strings). "
+    "Do not emit a job posting, vacancy, title, company, or description object."
+)
+
+_SCHEMA_REMINDER = (
+    "Required output schema:\n"
+    '{"match":false,"score":0,"reason":"...","matched_requirements":[],'
+    '"missing_requirements":[],"red_flags":[]}'
 )
 
 
@@ -50,7 +60,7 @@ def analyze_template(
     if marker not in tmpl:
         raise ValueError(f"filter_prompt must contain marker {marker}")
 
-    user_prompt = tmpl.replace(marker, body_text)
+    user_prompt = f"{_SCHEMA_REMINDER}\n\n{tmpl.replace(marker, body_text)}"
     raw = complete(system=system_prompt, user=user_prompt)
     return parse_job_match_json(extract_llm_json(raw))
 

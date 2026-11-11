@@ -110,10 +110,35 @@ export function UserSearchesPanel({ locale }: { locale: "ru" | "en" }) {
   const router = useRouter();
   const searchParams = useSearchParams();
 
-  const type = searchParams.get("type") || "all";
-  const status = searchParams.get("status") || "all";
-  const q = searchParams.get("q") || "";
-  const offset = Number(searchParams.get("offset") || "0") || 0;
+  const paramsType = searchParams.get("type") || "all";
+  const paramsStatus = searchParams.get("status") || "all";
+  const paramsQ = searchParams.get("q") || "";
+  const paramsOffset = Number(searchParams.get("offset") || "0") || 0;
+
+  type FiltersSnapshot = { type: string; status: string; q: string; offset: number };
+  const [optimisticFilters, setOptimisticFilters] = useState<FiltersSnapshot | null>(null);
+
+  useEffect(() => {
+    setOptimisticFilters(null);
+  }, [paramsType, paramsStatus, paramsQ, paramsOffset]);
+
+  useEffect(() => {
+    if (optimisticFilters !== null) return;
+    if (paramsType !== "all") return;
+    const fromUrl = new URLSearchParams(window.location.search).get("type");
+    if (fromUrl !== "jobs" && fromUrl !== "people" && fromUrl !== "posts") return;
+    setOptimisticFilters({
+      type: fromUrl,
+      status: paramsStatus,
+      q: paramsQ,
+      offset: paramsOffset,
+    });
+  }, [optimisticFilters, paramsType, paramsStatus, paramsQ, paramsOffset]);
+
+  const type = optimisticFilters?.type ?? paramsType;
+  const status = optimisticFilters?.status ?? paramsStatus;
+  const q = optimisticFilters?.q ?? paramsQ;
+  const offset = optimisticFilters?.offset ?? paramsOffset;
 
   const [rows, setRows] = useState<SearchRow[]>([]);
   const [prompts, setPrompts] = useState<PromptOption[]>([]);
@@ -142,18 +167,29 @@ export function UserSearchesPanel({ locale }: { locale: "ru" | "en" }) {
 
   const pushFilters = useCallback(
     (patch: Record<string, string>) => {
-      const p = new URLSearchParams(searchParams.toString());
-      for (const [k, v] of Object.entries(patch)) {
-        if (!v || v === "all") p.delete(k);
-        else p.set(k, v);
-      }
-      if (patch.type !== undefined) p.delete("offset");
-      if (patch.status !== undefined) p.delete("offset");
-      if (patch.q !== undefined) p.delete("offset");
+      const nextType = patch.type !== undefined ? patch.type : type;
+      const nextStatus = patch.status !== undefined ? patch.status : status;
+      const nextQ = patch.q !== undefined ? patch.q : q;
+      const filtersChanged = patch.type !== undefined || patch.status !== undefined || patch.q !== undefined;
+      const nextOffset =
+        patch.offset !== undefined ? Number(patch.offset) || 0 : filtersChanged ? 0 : offset;
+
+      setOptimisticFilters({
+        type: nextType,
+        status: nextStatus,
+        q: nextQ,
+        offset: nextOffset,
+      });
+
+      const p = new URLSearchParams();
+      if (nextType !== "all") p.set("type", nextType);
+      if (nextStatus !== "all") p.set("status", nextStatus);
+      if (nextQ) p.set("q", nextQ);
+      if (nextOffset > 0) p.set("offset", String(nextOffset));
       const query = Object.fromEntries(p.entries());
       router.replace({ pathname: "/searches", query });
     },
-    [router, searchParams],
+    [router, type, status, q, offset],
   );
 
   const loadPrompts = useCallback(async () => {

@@ -11,8 +11,12 @@ from job_search.domain import Job, JobSearchSpec
 @dataclass
 class FakeLLM:
     reply: str
+    last_system: str | None = None
+    last_user: str = ""
 
-    def complete(self, *, system: str | None, user: str) -> str:  # noqa: ARG002
+    def complete(self, *, system: str | None, user: str) -> str:
+        self.last_system = system
+        self.last_user = user
         return self.reply
 
 
@@ -33,6 +37,9 @@ def test_llm_job_analyzer_replaces_marker_and_parses() -> None:
     r = LlmJobAnalyzer(llm_client=llm).analyze(spec=spec, job=job)
     assert r.match is True
     assert r.score == 87
+    assert "match" in (llm.last_system or "")
+    assert "Required output schema" in llm.last_user
+    assert "Python" in llm.last_user
 
 
 def test_llm_job_analyzer_requires_marker() -> None:

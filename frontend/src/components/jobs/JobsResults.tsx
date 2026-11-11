@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState, type ReactNode } from "react";
+import { useMemo, useState } from "react";
 import { useTranslations } from "next-intl";
 
 import { JobCard, type JobAnalysisRow } from "@/components/jobs/JobCard";
@@ -9,6 +9,7 @@ import {
   type ListSortDir,
   type ListSortField,
 } from "@/components/ListSearchSortBar";
+import { LinkedInFilterLink, LinkedInFilterRow } from "@/components/ui/linkedin-filter-chip";
 import { parseJobPostedAtMs } from "@/lib/parseJobPostedAt";
 
 function timestampMs(value: string | null | undefined): number {
@@ -40,10 +41,14 @@ function matchesQuery(row: JobAnalysisRow, query: string): boolean {
 
 export function JobsResults({
   rows,
-  filters,
+  searchId,
+  filter,
+  counts,
 }: {
   rows: JobAnalysisRow[];
-  filters: ReactNode;
+  searchId: string;
+  filter: "all" | "match" | "no_match";
+  counts: { all: number; match: number; noMatch: number };
 }) {
   const t = useTranslations("jobs.page");
   const [query, setQuery] = useState("");
@@ -65,7 +70,24 @@ export function JobsResults({
   return (
     <>
       <div className="mb-6 space-y-3">
-        {filters}
+        <LinkedInFilterRow>
+          {(
+            [
+              ["all", t("filters.all"), counts.all],
+              ["match", t("filters.match"), counts.match],
+              ["no_match", t("filters.noMatch"), counts.noMatch],
+            ] as const
+          ).map(([value, label, count]) => (
+            <LinkedInFilterLink
+              key={value}
+              href={`/jobs?search=${encodeURIComponent(searchId)}&filter=${value}`}
+              active={filter === value}
+              count={count}
+            >
+              {label}
+            </LinkedInFilterLink>
+          ))}
+        </LinkedInFilterRow>
         {rows.length > 0 ? (
           <ListSearchSortBar
             query={query}
