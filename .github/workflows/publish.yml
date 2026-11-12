@@ -1,0 +1,82 @@
+name: Publish packages to PyPI
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - "packages/**"
+      - ".github/workflows/publish.yml"
+
+permissions:
+  id-token: write
+  contents: read
+
+concurrency:
+  group: pypi-publish
+  cancel-in-progress: true
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install tools
+        run: python -m pip install --upgrade pip build twine pytest
+
+      - name: Install packages
+        run: |
+          python -m pip install ./packages/linkedin-search-core
+          python -m pip install ./packages/linkedin-search-jobs
+          python -m pip install ./packages/linkedin-search-posts
+          python -m pip install ./packages/linkedin-search-people
+
+      - name: Tests
+        run: |
+          python -m pytest packages/linkedin-search-core/tests
+          python -m pytest packages/linkedin-search-jobs/tests
+          python -m pytest packages/linkedin-search-posts/tests
+          python -m pytest packages/linkedin-search-people/tests
+
+      - name: Build
+        run: |
+          python -m build packages/linkedin-search-core
+          python -m build packages/linkedin-search-jobs
+          python -m build packages/linkedin-search-posts
+          python -m build packages/linkedin-search-people
+
+      - name: Twine check
+        run: |
+          python -m twine check packages/linkedin-search-core/dist/*
+          python -m twine check packages/linkedin-search-jobs/dist/*
+          python -m twine check packages/linkedin-search-posts/dist/*
+          python -m twine check packages/linkedin-search-people/dist/*
+
+      - name: Publish linkedin-search-core
+        uses: pypa/gh-action-pypi-publish@release/v1
+        with:
+          packages-dir: packages/linkedin-search-core/dist/
+          skip-existing: true
+
+      - name: Publish linkedin-search-jobs
+        uses: pypa/gh-action-pypi-publish@release/v1
+        with:
+          packages-dir: packages/linkedin-search-jobs/dist/
+          skip-existing: true
+
+      - name: Publish linkedin-pulse-search-posts
+        uses: pypa/gh-action-pypi-publish@release/v1
+        with:
+          packages-dir: packages/linkedin-search-posts/dist/
+          skip-existing: true
+
+      - name: Publish lpr-search-people
+        uses: pypa/gh-action-pypi-publish@release/v1
+        with:
+          packages-dir: packages/linkedin-search-people/dist/
+          skip-existing: true

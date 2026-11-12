@@ -3,8 +3,8 @@ requires = ["hatchling>=1.21.0"]
 build-backend = "hatchling.build"
 
 [project]
-name = "linkedin-search-people"
-version = "0.1.0"
+name = "lpr-search-people"
+version = "0.1.1"
 description = "LinkedIn people search built on linkedin-search-core."
 readme = "README.md"
 requires-python = ">=3.11"
